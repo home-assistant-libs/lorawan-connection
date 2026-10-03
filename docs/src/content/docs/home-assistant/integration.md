@@ -3,9 +3,8 @@ title: Integration structure
 description: Forward provider events to a library collection and observe its models from entities.
 ---
 
-:::note[Proposed HA API]
-These examples use the proposed `lorawan` provider API, which is not yet part of
-Home Assistant. Device-library imports refer to the examples in this documentation.
+:::note[Proposal]
+This is a proposal and is not part of Home Assistant yet.
 :::
 
 Connect a device collection to the provider. Read its model state from entities.
