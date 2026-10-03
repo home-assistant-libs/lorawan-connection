@@ -3,7 +3,7 @@ title: Collections and models
 description: Model lifecycle belongs to the collection; decoding belongs to each device.
 ---
 
-Define each model with `Device[StateT]`, then declare the supported classes on your
+Define each model with `Device`, then declare the supported classes on your
 collection. The base collection builds the catalog lookup and creates models:
 
 ```python
@@ -50,15 +50,17 @@ retires all models and clears collection listeners.
 
 ## Model state
 
-The `Device[StateT]` base stores `descriptor` and typed `state`. Initialize it with
-`super().__init__(descriptor, state=initial_state)`. Implement `handle_event(event)`
-to decode data, commit state, and call `self.notify()` when consumers need an update.
+The `Device` base stores identity and listeners. Initialize it with
+`super().__init__(descriptor)`. Each vendor model defines its data: individual
+attributes, channel collections, nested objects, or a state dataclass.
+Implement `handle_event(event)` to decode data and call `self.notify()` after an update.
+One event can update any number of attributes.
 
 ```python
-stop = device.add_update_listener(lambda: print(device.state))
+stop = device.add_update_listener(lambda: print(device.temperature, device.humidity))
 ```
 
-Listeners take no arguments. Registration does not replay state; read `device.state`
+Listeners take no arguments. Registration does not replay state; read model attributes
 for initial values. `notify()` calls listeners even if state is unchanged, so the
 model decides whether a repeated reading needs notification. Commit a complete update
 before notifying. The base `close()` clears listeners and prevents further notifications.

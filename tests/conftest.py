@@ -26,12 +26,12 @@ def inventory(
     )
 
 
-class DeviceModel(Device[None]):
+class DeviceModel(Device):
     vendor_id = 744
     catalog_model_id = "model"
 
     def __init__(self, descriptor: DeviceDescriptor) -> None:
-        super().__init__(descriptor, state=None)
+        super().__init__(descriptor)
         self.events: list[DeviceEvent] = []
         self.close_count = 0
 

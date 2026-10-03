@@ -10,7 +10,7 @@ from dataclasses import asdict, is_dataclass
 from datetime import UTC, date, datetime
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from . import Device, DeviceCollection, DeviceEventData, EventType
 from .callbacks import Unsubscribe
@@ -96,8 +96,19 @@ def _json_default(value: object) -> object:
     return str(value)
 
 
-async def _watch(args: argparse.Namespace, models: Sequence[type[Device[Any]]]) -> None:
-    collection = DeviceCollection[Device[Any]](models, network_id=args.server)
+def _model_data(device: Device) -> dict[str, object]:
+    """Read public model attributes and properties for diagnostic output."""
+    return {
+        name: value
+        for name in dir(device)
+        if not name.startswith("_")
+        and name not in {"descriptor", "vendor_id", "catalog_model_id", "closed"}
+        and not callable(value := getattr(device, name))
+    }
+
+
+async def _watch(args: argparse.Namespace, models: Sequence[type[Device]]) -> None:
+    collection = DeviceCollection[Device](models, network_id=args.server)
     subscriptions: dict[str, Unsubscribe] = {}
     finished: asyncio.Future[Exception] = asyncio.get_running_loop().create_future()
 
@@ -105,7 +116,7 @@ async def _watch(args: argparse.Namespace, models: Sequence[type[Device[Any]]]) 
         if not finished.done():
             finished.set_result(error)
 
-    def output(kind: str, device: Device[Any], state: object = None) -> None:
+    def output(kind: str, device: Device, state: object = None) -> None:
         descriptor = device.descriptor
         if args.json:
             line = json.dumps(
@@ -126,13 +137,13 @@ async def _watch(args: argparse.Namespace, models: Sequence[type[Device[Any]]]) 
             )
         print(line, flush=True)
 
-    def added(device: Device[Any]) -> None:
-        output("added", device, device.state)
+    def added(device: Device) -> None:
+        output("added", device, _model_data(device))
         subscriptions[device.descriptor.dev_eui] = device.add_update_listener(
-            lambda: output("state", device, device.state)
+            lambda: output("state", device, _model_data(device))
         )
 
-    def removed(device: Device[Any]) -> None:
+    def removed(device: Device) -> None:
         subscriptions.pop(device.descriptor.dev_eui)()
         output("removed", device)
 
@@ -168,7 +179,7 @@ async def _watch(args: argparse.Namespace, models: Sequence[type[Device[Any]]]) 
             await connection.close()
 
 
-def run(models: Sequence[type[Device[Any]]], argv: Sequence[str] | None = None) -> None:
+def run(models: Sequence[type[Device]], argv: Sequence[str] | None = None) -> None:
     """Discover supported devices and print state until interrupted or disconnected."""
     parser = argparse.ArgumentParser(
         description="Discover devices and watch their state."

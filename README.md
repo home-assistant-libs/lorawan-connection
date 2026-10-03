@@ -15,15 +15,17 @@ observe model state. The caller owns the network connection.
 from lorawan_connection import Device, DeviceCollection, DeviceDescriptor, DeviceEvent
 
 
-class Sensor(Device[float | None]):
+class Sensor(Device):
     vendor_id = 123
     catalog_model_id = "known-model"
 
     def __init__(self, descriptor: DeviceDescriptor) -> None:
-        super().__init__(descriptor, state=None)
+        super().__init__(descriptor)
+        self.temperature: float | None = None
+        self.humidity: float | None = None
 
     def handle_event(self, event: DeviceEvent) -> None:
-        # Decode an event, assign self.state, then call self.notify().
+        # Decode an event, update model attributes, then call self.notify().
         pass
 
 
@@ -38,8 +40,9 @@ stop = sensors.subscribe_device_added(lambda device: print(device.descriptor.nam
 
 The collection builds its catalog lookup from `DEVICES`. You can also pass classes
 at construction: `DeviceCollection([Sensor], network_id="my-network")`.
-The `Device` base supplies typed state, `add_update_listener()`, `notify()`, and cleanup.
-Listeners take no arguments and read the model's state after a complete update.
+The `Device` base supplies identity, `add_update_listener()`, `notify()`, and cleanup.
+Models define their own attributes, including multiple measurements or channels.
+Listeners take no arguments and read model attributes after a complete update.
 
 ## Install
 
@@ -54,7 +57,7 @@ replays a SenseCAP S2101 capture and prints 21.4 °C and 31.4% humidity.
 
 - Read-only event and payload `Protocol`s. Generated payloads can pass by reference.
 - Immutable descriptors and fixture dataclasses for every supported event payload.
-- A typed `Device` base with synchronous update listeners and explicit notifications.
+- A `Device` base with synchronous update listeners and explicit notifications.
 - A generic `DeviceCollection` with inventory replay, model replacement, and retirement.
 - Synchronous callback helpers with independent, idempotent unsubscribe functions.
 - Typed exports (`py.typed`), a tested SenseCAP example, and Astro/Starlight documentation.
@@ -79,7 +82,8 @@ run(Sensors.DEVICES)
 ```
 
 The helper discovers supported devices and prints their state. Models supply catalog
-identity, state, and update listeners through the shared `Device` base.
+identity and update listeners through the shared `Device` base. The CLI reads public
+model attributes and properties.
 Use `--list` for inventory or `--json` for machine-readable output.
 
 ```sh
@@ -93,14 +97,21 @@ and [ChirpStack backend](https://home-assistant-libs.github.io/lorawan-connectio
 ## Migrating from 0.2
 
 Rename model `product_id` to `catalog_model_id`. Replace state callbacks with
-`add_update_listener(callback)`; callbacks take no arguments and read `device.state`.
-Models can inherit `Device[StateT]`, initialize it with `super().__init__(descriptor,
-state=initial_state)`, and call `self.notify()` after updating state.
+`add_update_listener(callback)`; callbacks take no arguments and read model attributes.
+Models inherit `Device`, initialize it with `super().__init__(descriptor)`,
+and call `self.notify()` after updating their data.
 Declare `DEVICES` on the collection to replace manual lookup dictionaries.
 
-Models now inherit `Device[StateT]`. Pass the network ID by keyword when constructing
+Models now inherit `Device`. Pass the network ID by keyword when constructing
 a collection: `Sensors(network_id="my-network")`. Existing `_create_device()`
 overrides remain available for custom matching.
+
+## Migrating from 0.3
+
+Inherit `Device` without a state type parameter. Call `super().__init__(descriptor)`
+without `state=`. Define your model's data as attributes or properties. An existing
+state object can remain a vendor-defined attribute, but the base does not require it.
+The CLI's JSON `state` field now contains the model's public attributes and properties.
 
 ## Home Assistant
 

@@ -47,5 +47,5 @@ declared: DeviceCollection[S2101] = SenseCapDeviceCollection(network_id="network
 
 
 def observe(model: S2101) -> None:
-    model.add_update_listener(lambda: print(model.state.temperature))
+    model.add_update_listener(lambda: print(model.temperature))
     model.close()

@@ -168,7 +168,7 @@ class SenseCapTemperature(SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        return self.device.state.temperature
+        return self.device.temperature
 
     @property
     def available(self) -> bool:

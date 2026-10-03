@@ -11,7 +11,11 @@ def main() -> None:
 
     def device_added(device: S2101) -> None:
         print(f"Device: {device.descriptor.name}")
-        device.add_update_listener(lambda: print(f"State: {device.state}"))
+        device.add_update_listener(
+            lambda: print(
+                f"temperature={device.temperature}, humidity={device.humidity}"
+            )
+        )
 
     devices.subscribe_device_added(device_added)
     descriptor = DeviceDescriptor(
@@ -42,8 +46,8 @@ def main() -> None:
             )
         )
         device = devices.devices[descriptor.dev_eui]
-        assert device.state.temperature == 21.4
-        assert device.state.humidity == 31.4
+        assert device.temperature == 21.4
+        assert device.humidity == 31.4
     finally:
         devices.close()
 

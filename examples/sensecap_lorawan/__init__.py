@@ -1,6 +1,5 @@
 """SenseCAP models consuming transport-independent LoRaWAN events."""
 
-from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import ClassVar, cast, override
 
@@ -14,14 +13,6 @@ from lorawan_connection import (
 )
 
 VENDOR_ID = 0x02E8
-
-
-@dataclass(frozen=True, slots=True)
-class S2101State:
-    """Measurements are absent until observed, and merge independently."""
-
-    temperature: float | None = None
-    humidity: float | None = None
 
 
 def decode_s2101(data: bytes) -> dict[str, float]:
@@ -50,15 +41,17 @@ def decode_s2101(data: bytes) -> dict[str, float]:
     return result
 
 
-class S2101(Device[S2101State]):
-    """S2101 model with typed state and state subscriptions."""
+class S2101(Device):
+    """S2101 measurements and update notifications."""
 
     vendor_id: ClassVar[int] = VENDOR_ID
     catalog_model_id: ClassVar[str] = "fc455aa2-01cf-492b-9359-a5d8c9a0e1b3"
 
     def __init__(self, descriptor: DeviceDescriptor) -> None:
         """Initialize an unobserved model."""
-        super().__init__(descriptor, state=S2101State())
+        super().__init__(descriptor)
+        self.temperature: float | None = None
+        self.humidity: float | None = None
         self._updated: dict[str, datetime] = {}
 
     @override
@@ -81,9 +74,12 @@ class S2101(Device[S2101State]):
         if not values:
             return
         self._updated.update(dict.fromkeys(values, event.received_at))
-        state = replace(self.state, **values)
-        if state != self.state:
-            self.state = state
+        changed = False
+        for key, value in values.items():
+            if getattr(self, key) != value:
+                setattr(self, key, value)
+                changed = True
+        if changed:
             self.notify()
 
 

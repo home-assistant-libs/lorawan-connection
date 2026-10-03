@@ -351,3 +351,19 @@ async def test_file_read_runs_off_event_loop(
         await connect_from_args(parsed)
     assert len(threads) == 1
     assert threads[0] != loop_thread
+
+
+def test_cli_reports_vendor_attributes_and_properties() -> None:
+    from lorawan_connection.cli_helper import _model_data
+
+    class MultiChannel(S2101):
+        @property
+        def channels(self) -> dict[int, dict[str, float]]:
+            return {1: {"temperature": 20.0, "humidity": 40.0}}
+
+    model = MultiChannel(DESCRIPTOR)
+    assert _model_data(model) == {
+        "temperature": None,
+        "humidity": None,
+        "channels": {1: {"temperature": 20.0, "humidity": 40.0}},
+    }

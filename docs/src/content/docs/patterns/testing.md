@@ -44,8 +44,8 @@ def test_s2101():
         )
     )
     model = devices.devices[descriptor.dev_eui]
-    assert model.state.temperature == 21.4
-    assert model.state.humidity == 31.4
+    assert model.temperature == 21.4
+    assert model.humidity == 31.4
     devices.close()
 ```
 

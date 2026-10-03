@@ -20,17 +20,18 @@ models. It subscribes to each model's state and prints updates. The model owns d
 
 ## Model contract
 
-Models inheriting `Device[StateT]` provide the listener API. Each model supplies:
+Models inheriting `Device` provide the listener API. Each model supplies:
 
 - `vendor_id` and `catalog_model_id` identify its catalog model.
 - Its constructor accepts a `DeviceDescriptor`.
 - `descriptor`, `handle_event(event)`, and `close()` provide the usual device lifecycle.
-- `state` returns its current state.
 - `add_update_listener(callback)` reports updates and returns an unsubscribe function.
 
-Callbacks take no arguments; the helper reads `device.state` when notified. It also
-reads state when a device is added. The shared collection rejects duplicate catalog
-identities. The tested SenseCAP example inherits this behavior from `Device`.
+Callbacks take no arguments. On addition and notification, the helper reads public
+model attributes and properties. It excludes methods, private attributes, and the
+base's identity and lifecycle fields. Keep internal bookkeeping in private attributes;
+public properties should return current data without I/O.
+The shared collection rejects duplicate catalog identities.
 
 ## Run it
 
@@ -60,9 +61,9 @@ Remove `--list` to print live state changes. Add `--json` for one JSON object pe
 ```
 
 Output types are `added`, `state`, and `removed`. Only supported models appear.
-Dataclass state becomes a JSON object. Bytes become hex strings, dates use ISO format,
-and enums use their values. Other custom objects use their string representation.
-Use dataclasses or JSON-compatible state if consumers need individual fields.
+The JSON `state` field contains the model's public data. Dataclass values become JSON
+objects. Bytes become hex strings, dates use ISO format, and enums use their values.
+Other custom objects use their string representation.
 
 `--list` reads inventory once and opens no event streams. Live mode stops on a
 connection failure with exit code 1. Ctrl+C closes models and the connection.

@@ -93,8 +93,8 @@ def test_zero_copy_payload_and_partial_state(generated: bool) -> None:
     )
     assert event.data is payload
     collection.handle_event(event)
-    assert device.state.temperature == 21.4
-    assert device.state.humidity == 31.4
+    assert device.temperature == 21.4
+    assert device.humidity == 31.4
     listener.assert_called_once()
     collection.handle_event(event)
     listener.assert_called_once()
@@ -102,10 +102,10 @@ def test_zero_copy_payload_and_partial_state(generated: bool) -> None:
     collection.handle_event(
         replace(event, received_at=NOW + timedelta(seconds=1), data=partial)
     )
-    assert device.state.temperature == -10
-    assert device.state.humidity == 31.4
+    assert device.temperature == -10
+    assert device.humidity == 31.4
     collection.handle_event(event)
-    assert device.state.temperature == -10
+    assert device.temperature == -10
     stop()
     collection.close()
 
@@ -137,7 +137,7 @@ def test_zero_unknown_fields_and_port() -> None:
             data=UplinkData(PAYLOAD, 2),
         )
     )
-    assert collection.devices[DESCRIPTOR.dev_eui].state.temperature is None
+    assert collection.devices[DESCRIPTOR.dev_eui].temperature is None
 
 
 def test_unknown_device_network_and_vendor() -> None:
@@ -186,8 +186,8 @@ def test_same_millisecond_partial_updates() -> None:
         replace(event, data=UplinkData(bytes.fromhex("010110000000000000")))
     )
     device = collection.devices[DESCRIPTOR.dev_eui]
-    assert device.state.temperature == 0
-    assert device.state.humidity == 31.4
+    assert device.temperature == 0
+    assert device.humidity == 31.4
     collection.close()
 
 
@@ -199,10 +199,10 @@ def test_invalid_and_older_frames_preserve_model_state() -> None:
     )
     collection.handle_event(event)
     device = collection.devices[DESCRIPTOR.dev_eui]
-    original = device.state
+    original = (device.temperature, device.humidity)
     collection.handle_event(replace(event, data=UplinkData(b"invalid")))
     collection.handle_event(replace(event, received_at=NOW - timedelta(seconds=1)))
-    assert device.state is original
+    assert (device.temperature, device.humidity) == original
 
 
 def test_temperature_range_and_unknown_channel() -> None:

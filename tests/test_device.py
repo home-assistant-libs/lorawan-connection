@@ -10,12 +10,14 @@ from lorawan_connection import Device, DeviceCollection, DeviceDescriptor, Devic
 from .conftest import DESCRIPTOR, inventory
 
 
-class Sensor(Device[int]):
+class Sensor(Device):
     vendor_id = 744
     catalog_model_id = "model"
 
     def __init__(self, descriptor: DeviceDescriptor) -> None:
-        super().__init__(descriptor, state=0)
+        super().__init__(descriptor)
+        self.temperature = 0
+        self.channels: dict[int, float] = {}
 
     def handle_event(self, event: DeviceEvent) -> None:
         pass
@@ -31,15 +33,17 @@ class Sensors(DeviceCollection[Sensor]):
 
 def test_state_and_notifications_are_separate() -> None:
     device = Sensor(DESCRIPTOR)
-    seen: list[int] = []
-    device.add_update_listener(lambda: seen.append(device.state))
+    seen: list[tuple[int, dict[int, float]]] = []
+    device.add_update_listener(
+        lambda: seen.append((device.temperature, device.channels.copy()))
+    )
     assert seen == []
-    device.state = 1
-    device.state = 2
+    device.temperature = 2
+    device.channels[1] = 31.4
     assert seen == []
     device.notify()
     device.notify()
-    assert seen == [2, 2]
+    assert seen == [(2, {1: 31.4}), (2, {1: 31.4})]
 
 
 def test_independent_duplicate_subscriptions() -> None:

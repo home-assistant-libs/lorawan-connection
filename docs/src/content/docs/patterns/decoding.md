@@ -46,8 +46,8 @@ cannot overwrite a newer measurement. Equal timestamps are accepted, because two
 partial readings can share a receipt timestamp.
 
 A newer temperature-only event leaves humidity unchanged. A zero is a measurement;
-it is never treated as missing. The model notifies state listeners only when its
-frozen state dataclass changes.
+it is never treated as missing. The model updates its `temperature` and `humidity` attributes,
+then notifies listeners once if either value changed.
 
 These rules belong to the model. The shared collection does not impose timestamp
 ordering, deduplication, or device-specific stale-data rules.
@@ -55,7 +55,7 @@ ordering, deduplication, or device-specific stale-data rules.
 ## Adding another model
 
 Collect its catalog identity, firmware-specific wire format, and captured frames.
-Implement a decoder and typed state. Test malformed data, sentinel values, partial
+Implement a decoder and model attributes. Test malformed data, sentinel values, partial
 updates, and every event type that model uses. Then add the model class
 to the collection’s `DEVICES`; its class attributes supply the catalog identity.
 

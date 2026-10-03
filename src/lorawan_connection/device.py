@@ -1,4 +1,4 @@
-"""Device identity, typed state, and synchronous update notifications."""
+"""Device identity and synchronous update notifications."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -8,15 +8,14 @@ from .callbacks import Unsubscribe, notify, subscribe
 from .events import DeviceDescriptor, DeviceEvent
 
 
-class Device[StateT](ABC):
-    """Own model state and listeners; subclasses interpret incoming events."""
+class Device(ABC):
+    """Own identity and listeners; subclasses define data and interpret events."""
 
     vendor_id: ClassVar[int]
     catalog_model_id: ClassVar[str]
 
-    def __init__(self, descriptor: DeviceDescriptor, *, state: StateT) -> None:
+    def __init__(self, descriptor: DeviceDescriptor) -> None:
         self.descriptor = descriptor
-        self.state = state
         self._listeners: list[Callable[[None], None]] = []
         self._closed = False
 
@@ -26,7 +25,7 @@ class Device[StateT](ABC):
         return self._closed
 
     def add_update_listener(self, listener: Callable[[], None]) -> Unsubscribe:
-        """Listen for notify calls; read state directly for initial values."""
+        """Listen for notify calls; read model attributes for initial values."""
         if self._closed:
             raise RuntimeError("Device is closed")
         return subscribe(self._listeners, lambda _: listener())

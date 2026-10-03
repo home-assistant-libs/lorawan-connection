@@ -2,7 +2,6 @@
 
 import logging
 from collections.abc import Callable, Sequence
-from typing import Any, cast
 
 from .callbacks import Unsubscribe, notify, subscribe
 from .device import Device
@@ -11,7 +10,7 @@ from .events import DeviceDescriptor, DeviceEvent, EventType
 _LOGGER = logging.getLogger(__name__)
 
 
-class DeviceCollection[DeviceT: Device[Any]]:
+class DeviceCollection[DeviceT: Device]:
     """Create vendor models from inventory, then route their live events."""
 
     DEVICES: Sequence[type[DeviceT]] = ()
@@ -45,8 +44,7 @@ class DeviceCollection[DeviceT: Device[Any]]:
         model = self._models.get((descriptor.vendor_id, descriptor.catalog_model_id))
         if model is None:
             return None
-        # Model constructors supply their own initial state to Device.__init__.
-        return cast(Callable[[DeviceDescriptor], DeviceT], model)(descriptor)
+        return model(descriptor)
 
     def subscribe_device_added(
         self, callback: Callable[[DeviceT], None]

@@ -3,19 +3,20 @@ title: Collection reference
 description: Collection lifecycle, callback order, and cleanup behavior.
 ---
 
-## Device[StateT]
+## Device
 
 An abstract model base. Declare class attributes `vendor_id: int` and
 `catalog_model_id: str`, then implement `handle_event(event)`.
 
-`Device(descriptor, *, state)` initializes `descriptor`, typed `state`, and listeners.
-A model constructor accepts a descriptor and supplies its initial state to `super()`.
+`Device(descriptor)` initializes `descriptor` and listeners. Model constructors
+accept a descriptor and call `super().__init__(descriptor)`. The model defines its
+own data attributes; the base imposes no measurement schema or state container.
 The collection replaces `descriptor` on metadata updates.
 
 ### add_update_listener(listener) → Unsubscribe
 
 Register a synchronous `Callable[[], None]`. No initial callback is sent. Read
-`device.state` directly for initial values. Each registration is independent;
+model attributes directly for initial values. Each registration is independent;
 its unsubscribe function is idempotent. Registration after close raises `RuntimeError`.
 
 ### notify() → None

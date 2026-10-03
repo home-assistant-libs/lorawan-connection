@@ -31,7 +31,7 @@ The collection recognizes vendor `744` (`0x02E8`) and S2101 model
 ChirpStack catalog in the POC. The server profile UUID is a separate field.
 
 Only reviewed models qualify. A custom profile called “S2101” does not establish
-that identity. Subclass `Device[StateT]` and declare `vendor_id` and `catalog_model_id`
+that identity. Subclass `Device` and declare `vendor_id` and `catalog_model_id`
 on each model. Add the class to the collection's `DEVICES` tuple. The collection builds
 the lookup automatically; a custom `_create_device()` is only needed for special rules.
 Do not infer a model from payload length or a user-supplied device name.
