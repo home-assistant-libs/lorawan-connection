@@ -3,8 +3,8 @@ title: Provider and discovery
 description: What the HA LoRaWAN provider owns and what vendor integrations consume.
 ---
 
-This page documents the [Core POC implementation](https://github.com/balloobbot/core/tree/lorawan-poc/homeassistant/components/lorawan).
-Its API is a starting point for HA development, not a released upstream hook.
+This page describes the proposed HA LoRaWAN provider API. It is not yet part of
+Home Assistant.
 
 ## Provider ownership
 
@@ -66,14 +66,13 @@ open. Remove the disconnect listener when unloading the consumer too.
 
 ## Catalog discovery
 
-The POC maps vendor `744` to the `sensecap` integration and creates one discovery
-flow per provider. Its vendor table is provisional. A future HA discovery mechanism
-must let integrations register the vendor IDs they represent. The POC does not
-add a manifest field to upstream HA.
+Vendor `744` identifies Seeed and can select the `sensecap` integration. Discovery
+creates one config flow per vendor integration and provider. The HA registration
+mechanism for vendor IDs still needs to be defined.
 
 ChirpStack needs an imported global catalog profile for reliable automatic model
 identification in the tested version. The `device_id` protobuf field exists, but
-creating a custom tenant profile ignored it in the POC. Copying a profile or naming
+creating a custom tenant profile ignored it in testing. Copying a profile or naming
 it after a model is not enough. Custom devices need catalog registration before
 they qualify for automatic discovery.
 
@@ -87,7 +86,7 @@ The tested SenseCAP path is:
 
 ## ChirpStack findings
 
-The POC tested ChirpStack 4.19.2 with Python bindings 4.19.0:
+The backend was tested against ChirpStack 4.19.2 with Python bindings 4.19.0:
 
 - A valid tenant-scoped key can receive `UNAUTHENTICATED` from `Tenant.List`.
   Onboarding falls back to a tenant UUID and validates access through tenant/application APIs.
@@ -95,7 +94,7 @@ The POC tested ChirpStack 4.19.2 with Python bindings 4.19.0:
   The helper polls the complete device list and diffs descriptors.
 - Per-device internal log streams return JSON bodies. The helper parses each body
   once into a generated payload, then wraps it without copying the payload.
-- Those streams replay retained entries. The POC filters old entries using stream
+- Those streams replay retained entries. The backend filters old entries using stream
   IDs and connection time; this depends on clock alignment and enabled retention.
 - Unknown-device activity triggers device-list refresh before delivery. Incomplete
   refreshes preserve the existing device list; bounded buffering limits pending activity.

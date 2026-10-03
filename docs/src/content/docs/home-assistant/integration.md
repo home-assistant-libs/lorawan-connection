@@ -3,13 +3,9 @@ title: Integration structure
 description: Forward provider events to a library collection and observe its models from entities.
 ---
 
-:::note[Current HA status]
-The LoRaWAN provider and SenseCAP integration exist on the
-[Core POC branch](https://github.com/balloobbot/core/tree/lorawan-poc).
-The provider subscription shown here is not yet an upstream Home Assistant API.
-The branch installs the shared library from PyPI and vendors the device libraries.
-The examples below use standalone device-library package names.
-Discovery registration still needs an agreed HA hook.
+:::note[Proposed HA API]
+These examples use the proposed `lorawan` provider API, which is not yet part of
+Home Assistant. Device-library imports refer to the examples in this documentation.
 :::
 
 Connect a device collection to the provider. Read its model state from entities.
@@ -35,8 +31,8 @@ for current limitations and the subscription signature.
 
 ## Config-entry setup
 
-The following setup pattern matches the POC. The `sensecap_lorawan` import refers
-to a vendor library, represented by the tested example in this repository.
+The `sensecap_lorawan` import refers to the
+[example device library](/lorawan-connection/getting-started/quickstart/#example-library).
 
 ```python
 from homeassistant.components import lorawan
@@ -114,7 +110,7 @@ The removal listener runs after the model closes. The entity becomes unavailable
 while its removal task runs. If removal arrives before entity setup finishes,
 the `device.closed` check removes the entity without registering listeners.
 
-The POC removes active entities but preserves registry records. This protects user
+This example removes active entities but preserves registry records. This protects user
 customizations if a device returns. Permanent registry cleanup and manual exclusion
 need an agreed policy before upstream inclusion.
 
@@ -190,28 +186,103 @@ collection. Assert discovery confirmation, initial model replay, entity state,
 later additions, removal, unload, and reload after disconnect.
 
 Decoder tests belong to the vendor library. The HA suite tests entity mapping and
-lifecycle without a real network server. The POC's real ChirpStack test remains a
-separate external test.
+lifecycle without a real network server. Keep tests against a real ChirpStack server separate from the HA test suite.
 
 ## Writable devices
 
-In the vendor integration's `async_setup_entry`, obtain the provider connection as
-shown above and pass it to the Dragino collection:
+Use the config-entry setup above with `DraginoDevices` and `Platform.SWITCH`.
+The [Dragino device library](/lorawan-connection/modelling/overview/) supplies the
+model and command methods. This `switch.py` creates one entity per relay:
 
 ```python
-from dragino_lorawan import DraginoDevices
+from asyncio import timeout
+from typing import Any
 
-models = DraginoDevices(connection)
+from dragino_lorawan import DraginoDevices, LT22222
+from lorawan_connection import DownlinkError
+
+from homeassistant.components.switch import SwitchEntity
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry[DraginoDevices],
+    async_add_entities: AddConfigEntryEntitiesCallback,
+) -> None:
+    @callback
+    def added(device: LT22222) -> None:
+        async_add_entities(DraginoRelay(device, channel) for channel in (1, 2))
+
+    entry.async_on_unload(entry.runtime_data.subscribe_device_added(added))
+
+
+class DraginoRelay(SwitchEntity):
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(self, device: LT22222, channel: int) -> None:
+        self.device = device
+        self.channel = channel
+        descriptor = device.descriptor
+        identity = f"{descriptor.network_id}:{descriptor.dev_eui}"
+        self._attr_unique_id = f"{identity}:relay_{channel}"
+        self._attr_name = f"Relay {channel}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={("dragino", identity)},
+            name=descriptor.name,
+            manufacturer="Dragino",
+            model="LT-22222-L",
+        )
+
+    @property
+    def is_on(self) -> bool | None:
+        return self.device.relays[self.channel]
+
+    @property
+    def available(self) -> bool:
+        return not self.device.closed
+
+    async def async_added_to_hass(self) -> None:
+        if self.device.closed:
+            self.hass.async_create_task(self.async_remove(force_remove=True))
+            return
+        self.async_on_remove(self.device.add_update_listener(self.async_write_ha_state))
+        self.async_on_remove(
+            self.device.add_remove_listener(self._async_device_removed)
+        )
+
+    @callback
+    def _async_device_removed(self) -> None:
+        self.async_write_ha_state()
+        self.hass.async_create_task(self.async_remove(force_remove=True))
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        await self._async_set_relay(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        await self._async_set_relay(False)
+
+    async def _async_set_relay(self, on: bool) -> None:
+        try:
+            async with timeout(30):
+                await self.device.async_set_relay(self.channel, on)
+        except TimeoutError as error:
+            raise HomeAssistantError(
+                "Timed out waiting for device acknowledgement"
+            ) from error
+        except DownlinkError as error:
+            raise HomeAssistantError(str(error)) from error
 ```
 
-Its switch entities call `await device.async_set_relay(channel, on)` inside
-`asyncio.timeout(30)`. The library encodes the command and waits for its device ACK.
-Entities read `device.relays[channel]` and observe the same update listener used
-by sensor models. Device reports update relay state. Convert `DownlinkError` and
-`TimeoutError` to a `HomeAssistantError` so a failed command reaches the caller.
+The model encodes the command and waits for its device acknowledgement. The entity
+bounds that wait with a 30-second timeout and reports failures as `HomeAssistantError`.
+Its state comes from `device.relays`, which changes when the device reports new values.
+Command completion does not set the switch state optimistically.
 
-See the [confirmed-command POC branch](https://github.com/balloobbot/core/tree/lorawan-confirmed-commands)
-for the implementation.
-
-Keep switches visible when the configured key is read-only. Fail the requested
-write with a permission error; do not reject setup or mark the whole network offline.
+Keep switches visible with a read-only API key. Attempted writes report a permission
+error without rejecting setup or marking the whole network offline.

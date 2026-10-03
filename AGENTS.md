@@ -2,6 +2,9 @@
 
 ## Documentation
 
+- Include usable example code in the docs. Never link readers to a POC branch
+  for implementation details.
+
 - Name subscription cleanup callbacks `unsubscribe` in examples, with a suffix
   when several subscriptions need distinct names.
 - Keep the general documentation framework-neutral. Home Assistant details belong

@@ -180,8 +180,8 @@ the callback takes no arguments. Replace manual event forwarding with
 ## Home Assistant
 
 The [Home Assistant guide](https://home-assistant-libs.github.io/lorawan-connection/home-assistant/integration/) covers provider subscriptions, discovery, config-entry
-lifecycle, and entities that observe library models. The provider API described
-there exists on the linked Core POC branch; it is not yet an upstream HA API.
+lifecycle, and entities that observe library models. The proposed provider API
+is not yet part of Home Assistant.
 
 ## Development
 
