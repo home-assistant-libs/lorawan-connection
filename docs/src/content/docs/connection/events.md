@@ -1,79 +1,133 @@
 ---
-title: Ownership and event delivery
-description: How providers deliver descriptors and live events to device libraries.
+title: Understanding events
+description: What LoRaWAN events contain and how they reach device models.
 ---
 
-The application owns the network connection and forwards events to the vendor
-library. Keep endpoints and credentials in the application.
+An event describes a change or activity for one LoRaWAN device. A sensor sending
+a temperature reading produces an uplink event. Adding that sensor to the server's
+inventory produces an inventory event.
 
-One collection contains the device models for a logical network. It can span
-several server applications.
+`lorawan-connection` gives these events a common Python interface. Device libraries
+use them to discover supported devices, decode readings, and update their models.
 
-## Inventory before activity
+## Which events are there?
 
-A provider sends an `ADDED` event with a descriptor for each existing device when
-a consumer subscribes. The consumer can create models before the first uplink.
-Later, the same feed carries inventory changes and live activity.
+Inventory events describe which devices are available and their metadata:
 
 | Event | Meaning |
 | --- | --- |
-| `ADDED` | This device is in the subscribed inventory. |
-| `UPDATED` | Its current descriptor replaces the previous descriptor. |
-| `REMOVED` | This device has left the subscribed inventory. |
-| Other event types | Activity for a device already in the inventory. |
+| `ADDED` | A device is in the subscribed inventory. This also reports existing devices when a subscription starts. |
+| `UPDATED` | A device's metadata changed, such as its name or assigned profile. |
+| `REMOVED` | A device left the subscribed inventory. |
 
-Collections ignore activity for an unknown device. A provider that discovers an
-unknown device through activity first refreshes inventory. It sends the descriptor
-before forwarding that activity. It does not guess a model from bytes.
+Activity events describe messages and reports for those devices:
 
-The provider only reports removals after a complete successful inventory refresh.
-A failed page or partial response must not make devices disappear.
+| Event | Meaning |
+| --- | --- |
+| `UPLINK` | The device sent application bytes, such as encoded sensor readings. |
+| `JOIN` | The device joined the LoRaWAN network. |
+| `STATUS` | A device status report, including battery information and radio link margin. |
+| `ACK` | The outcome of waiting for a device to acknowledge a confirmed downlink. Check `acknowledged` for the result. |
+| `TX_ACK` | A gateway acknowledgement for a downlink transmission. This does not confirm device receipt. |
+| `LOG` | A backend log message associated with the device. |
+| `LOCATION` | A location update for the device. |
 
-## Identity and model selection
+A model handles the events it understands. For example, the S2101 model decodes
+`UPLINK` events into temperature and humidity. Another model might also read battery
+information from `STATUS`. Sending a command is a separate operation; see
+[commands and relays](/lorawan-connection/patterns/commands/) for downlinks.
 
-Use `(network_id, dev_eui)` as device identity. `network_id` is a stable identifier
-owned by the application. Changing credentials or reconnecting does not change it.
-Descriptors normalize the DevEUI to 16 lowercase hexadecimal characters.
+## What is inside an event?
 
-`profile_id` identifies the server profile. Use `catalog_model_id` and `vendor_id`
-to select a supported model. A profile name alone cannot establish model identity.
+Every event identifies its network and device, gives its `EventType`, and includes
+a timezone-aware `received_at` timestamp. The device identifier is its DevEUI.
+The network identifier distinguishes one logical network from another.
 
-## Borrowed payloads
+An `ADDED` or `UPDATED` event also carries a `DeviceDescriptor`. This describes the
+device's name, server application, profile, and catalog identity. The collection
+uses the catalog identity to choose a device class.
 
-`DeviceEvent` and payload types are read-only `Protocol`s. A backend can supply its
-own objects when their fields and meanings match the contract.
+An activity event carries its payload in `data`. For an uplink, that payload
+contains raw application bytes and an FPort. The FPort is the application port;
+the device library decides how to interpret it and the bytes.
 
-A generated ChirpStack uplink satisfies `Uplink`. It does not satisfy the complete
-`DeviceEvent`: the shared envelope also needs a network ID, event kind, and Python
-timestamp. Wrap the payload in `DeviceEventData`; the payload object is not copied.
+Here is an uplink event built without a server:
 
 ```python
-from lorawan_connection import DeviceEventData, EventType
+from datetime import UTC, datetime
 
-# message is an existing generated UplinkEvent from the provider.
+from lorawan_connection import DeviceEventData, EventType, UplinkData
+
 event = DeviceEventData(
-    network_id=network_id,
-    dev_eui=message.device_info.dev_eui,
+    network_id="home",
+    dev_eui="0201010101010101",
     type=EventType.UPLINK,
-    received_at=received_at,
-    data=message,
+    received_at=datetime.now(UTC),
+    data=UplinkData(
+        data=bytes.fromhex("01011098530000010210A87A0000AF51"),
+        f_port=1,
+    ),
 )
-assert event.data is message
 ```
 
-Protocols do not freeze generated messages. Providers and consumers must not mutate
-a payload after delivery while a consumer can still hold it. Use `EventType` to
-select the payload contract. Overlapping fields cannot identify an event type.
+`DeviceEventData` holds the common event fields. `UplinkData` holds the uplink
+payload. These dataclasses are useful for tests and capture replays. The
+[event reference](/lorawan-connection/connection/reference/) lists the fields and
+payload types for every event.
 
-## Live delivery and connection loss
+## How events reach a device
 
-The package does not promise historical replay, durable delivery, or recovery of
-missed events. `received_at` is a timezone-aware receipt timestamp. It is not a
-deduplication key; two updates can have the same timestamp.
+A connection backend reads the network server and delivers these events to a
+callback. The included [ChirpStack backend](/lorawan-connection/connection/chirpstack/)
+provides this feed. A program using a device library connects the feed to its
+collection's `handle_event(event)` method.
 
-Connection loss belongs to the provider subscription. It is not a `REMOVED` event
-for every device. The application closes the old collection when its subscription
-ends. A new subscription supplies inventory to a new collection.
+The subscription first delivers existing devices as `ADDED` events. For each
+supported device, the collection creates a model and calls its device-added
+listeners. Those listeners can subscribe to the model before its first reading
+arrives.
 
-Callbacks run synchronously on the caller's thread or event loop. Do not block,
-perform network I/O, or pass an async callback. The package is not thread-safe.
+Later activity goes to the existing model. An uplink can update several attributes,
+then the model calls `notify()` so listeners can read the new values. Inventory
+changes arrive through the same feed; `REMOVED` closes and removes the model.
+The [quickstart](/lorawan-connection/getting-started/quickstart/) shows this sequence
+with a descriptor and a captured uplink.
+
+The descriptor must arrive before activity for an unknown device. If the backend
+first learns about a device through activity, it refreshes inventory before
+forwarding that activity. Collections ignore activity for devices they have not
+created. A backend only reports removals after a complete successful inventory
+refresh; an incomplete read must not make devices disappear.
+
+## Who manages the connection?
+
+The program using the device library owns the connection, credentials, and
+reconnection. It creates a collection for each logical network and forwards events
+to it. One collection can span several ChirpStack applications; those are server
+inventory groups, separate from the program running the library.
+
+Choose a stable `network_id` and retain it across reconnects and credential changes.
+The pair `(network_id, dev_eui)` identifies a device. Descriptors normalize the
+DevEUI to 16 lowercase hexadecimal characters.
+
+Connection loss is reported through the subscription's disconnect callback. It
+does not mean the devices were removed. Close the old collection when the
+subscription ends. A new connection and subscription supply inventory to a new
+collection. Events missed during the disconnect are not recovered.
+
+Event callbacks and model listeners run synchronously on the caller's thread or
+event loop. Keep network I/O in async connection and command methods. Pass regular
+functions as callbacks, and use the collection on one thread.
+
+## Using backend payloads directly
+
+`DeviceEvent` and its payload types are read-only Python `Protocol`s: they describe
+the attributes an object must provide. A backend can use existing objects with
+matching fields and meanings instead of copying their data into fixture classes.
+
+For example, the ChirpStack backend wraps a generated uplink message in
+`DeviceEventData` and stores the message itself in `data`. Device libraries see the
+same `Uplink` interface as they do with `UplinkData` in tests.
+
+Select the payload type using `EventType`. Treat delivered payloads as read-only;
+Python protocols do not prevent a generated message from being mutated.

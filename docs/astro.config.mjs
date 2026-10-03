@@ -34,7 +34,7 @@ export default defineConfig({
           { label: "Quickstart", slug: "getting-started/quickstart" },
         ] },
         { label: "Events and connections", items: [
-          { label: "Ownership and event delivery", slug: "connection/events" },
+          { label: "Understanding events", slug: "connection/events" },
           { label: "ChirpStack backend", slug: "connection/chirpstack" },
           { label: "Event reference", slug: "connection/reference" },
         ] },
