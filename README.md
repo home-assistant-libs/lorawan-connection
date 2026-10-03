@@ -4,7 +4,8 @@
 [Building a device library](https://home-assistant-libs.github.io/lorawan-connection/patterns/library/)
 
 Backend-neutral LoRaWAN events and device collections for Python 3.12+.
-No runtime dependencies.
+The base package has no runtime dependencies. Install the optional ChirpStack backend
+to connect to a server.
 
 Feed inventory and live events into a vendor `DeviceCollection`. It creates
 supported models and reports them through device-added callbacks. Consumers then
@@ -59,7 +60,7 @@ pip install lorawan-connection
 The [quickstart](https://home-assistant-libs.github.io/lorawan-connection/getting-started/quickstart/)
 replays a SenseCAP S2101 capture and prints 21.4 °C and 31.4% humidity.
 
-## What ships in 0.1
+## Included
 
 - Read-only event and payload `Protocol`s. Generated payloads can pass by reference.
 - Immutable descriptors and fixture dataclasses for every supported event payload.
@@ -67,13 +68,36 @@ replays a SenseCAP S2101 capture and prints 21.4 °C and 31.4% humidity.
 - Synchronous callback helpers with independent, idempotent unsubscribe functions.
 - Typed exports (`py.typed`), a tested SenseCAP example, and Astro/Starlight documentation.
 
-The application supplies the network connection. This package handles events and
-collections; provisioning, QR parsing, and vendor decoders belong in separate libraries.
+The optional `lorawan_connection.chirpstack` backend supplies inventory and live events.
+The application owns its connection lifecycle; provisioning, QR parsing, and vendor decoders belong in separate libraries.
 The SenseCAP implementation under `examples/` illustrates a separate device library.
 
 Events are live notifications. The package does not persist history, reconnect a
 transport, or request replay after a gap. Providers report inventory before activity.
 Collections select models from catalog identity, never from names or payload guesses.
+
+## Device-library CLI
+
+Pass the library's supported model classes to the shared helper:
+
+```python
+from lorawan_connection.cli_helper import run
+from my_sensors import SUPPORTED_MODELS
+
+run(SUPPORTED_MODELS)
+```
+
+The helper discovers supported devices and prints their state. Models supply catalog
+identity, a `state` property, and `subscribe(callback)` alongside their event lifecycle.
+Use `--list` for inventory or `--json` for machine-readable output.
+
+```sh
+pip install "lorawan-connection[chirpstack]"
+python -m my_sensors --server https://chirpstack.example.com:443 --api-key-file /path/to/key
+```
+
+See the [CLI guide](https://home-assistant-libs.github.io/lorawan-connection/patterns/cli/)
+and [ChirpStack backend](https://home-assistant-libs.github.io/lorawan-connection/connection/chirpstack/).
 
 ## Home Assistant
 
@@ -96,7 +120,7 @@ npm run build
 ```
 
 CI tests Python 3.12, 3.13, and 3.14. Compatibility tests check the payload contracts
-against `chirpstack-api==4.19.0`. This is a development dependency only.
+against `chirpstack-api==4.19.0`. The optional backend uses the same bindings.
 The documentation build validates internal links and produces `llms.txt`.
 
 The repository follows the packaging, documentation, and release approach of

@@ -9,7 +9,7 @@ merging any returned values.
 
 The shared package supplies event contracts, collection lifecycle, and callback
 helpers. Byte layouts, units, sentinels, checksums, and valid ports belong to the
-vendor library. Version 0.1 has no generic binary-parser or QR-parser API.
+vendor library. The library has no generic binary-parser or QR-parser API.
 Use Python's `int.from_bytes` and `struct` when they fit the wire format.
 
 ## SenseCAP S2101 example

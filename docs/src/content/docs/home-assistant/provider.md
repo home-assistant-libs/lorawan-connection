@@ -10,8 +10,8 @@ Its API is a starting point for HA development, not a released upstream hook.
 
 The HA `lorawan` integration owns the external ChirpStack connection, authentication,
 selected tenant and applications, catalog inventory, and vendor subscriptions.
-Its `chirpstack.py` helper combines inventory polling with per-device event streams.
-These helpers are not a separate dependency of `lorawan-connection`.
+It uses the optional `lorawan_connection.chirpstack` backend, which combines
+inventory polling with per-device event streams.
 
 The initial HA scope assumes devices are provisioned in ChirpStack. Both read-only
 and full keys can consume inventory and events. Future provisioning checks write
@@ -51,8 +51,8 @@ the shared connection.
 
 The POC maps vendor `744` to the `sensecap` integration and creates one discovery
 flow per provider. Its vendor table is provisional. A future HA discovery mechanism
-must let integrations register the vendor IDs they represent. Version 0.1 does not
-invent a manifest field or register one in upstream HA.
+must let integrations register the vendor IDs they represent. The POC does not
+add a manifest field to upstream HA.
 
 ChirpStack needs an imported global catalog profile for reliable automatic model
 identification in the tested version. The `device_id` protobuf field exists, but

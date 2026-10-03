@@ -99,7 +99,7 @@ Fixture: `TxAckData(gateway_id, downlink_id)`.
 
 `description: str`, `level: int`, and `code: int` describe a backend log message.
 Fixture: `LogData(description, level, code)`. Numeric level and code values retain
-the backend's enums. Version 0.1 does not define a cross-backend enum mapping.
+the backend's enums. The library does not define a cross-backend enum mapping.
 
 ### Location and Coordinates
 

@@ -18,7 +18,7 @@ models and decodes their data.
 Use one vendor config entry per provider network. That entry owns one collection
 for all supported devices on that network. Store it in `entry.runtime_data`.
 A later add-device or provisioning flow can use this entry; its UX is not defined
-by version 0.1 of the library.
+by the Python library.
 
 ## Dependencies and discovery
 

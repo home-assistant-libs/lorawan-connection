@@ -23,7 +23,7 @@ jobs:
       - name: Ruff lint
         run: uvx ruff check .
       - name: mypy
-        run: uv run mypy
+        run: uv run --group compatibility mypy
 
   test:
     runs-on: ubuntu-latest

@@ -19,13 +19,16 @@ classifiers = [
 ]
 dependencies = []
 
+[project.optional-dependencies]
+chirpstack = ["chirpstack-api==4.19.0"]
+
 [project.urls]
 Homepage = "https://github.com/home-assistant-libs/lorawan-connection"
 Documentation = "https://home-assistant-libs.github.io/lorawan-connection/"
 Issues = "https://github.com/home-assistant-libs/lorawan-connection/issues"
 
 [dependency-groups]
-dev = ["mypy>=1.19", "pytest>=8", "pytest-cov>=6", "ruff>=0.11"]
+dev = ["mypy>=1.19", "pytest>=8", "pytest-asyncio>=1", "pytest-cov>=6", "ruff>=0.11", "types-protobuf", "types-grpcio"]
 compatibility = ["chirpstack-api==4.19.0"]
 
 [tool.hatch.build.targets.wheel]
@@ -35,6 +38,7 @@ packages = ["src/lorawan_connection"]
 include = ["src", "tests", "examples", "script", "README.md", "RELEASING.md", "LICENSE", "pyproject.toml"]
 
 [tool.pytest.ini_options]
+asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["examples"]
 
@@ -57,3 +61,7 @@ src = ["src", "examples"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B"]
+
+[[tool.mypy.overrides]]
+module = ["chirpstack_api.*"]
+ignore_missing_imports = true
