@@ -114,16 +114,3 @@ collection. Events missed during the disconnect are not recovered.
 Event callbacks and model listeners run synchronously on the caller's thread or
 event loop. Keep network I/O in async connection and command methods. Pass regular
 functions as callbacks, and use the collection on one thread.
-
-## Using backend payloads directly
-
-`DeviceEvent` and its payload types are read-only Python `Protocol`s: they describe
-the attributes an object must provide. A backend can use existing objects with
-matching fields and meanings instead of copying their data into fixture classes.
-
-For example, the ChirpStack backend wraps a generated uplink message in
-`DeviceEventData` and stores the message itself in `data`. Device libraries see the
-same `Uplink` interface as they do with `UplinkData` in tests.
-
-Select the payload type using `EventType`. Treat delivered payloads as read-only;
-Python protocols do not prevent a generated message from being mutated.
