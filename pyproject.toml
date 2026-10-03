@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lorawan-connection"
+version = "0.0.0"
+description = "Backend-neutral LoRaWAN events and device collections for Python."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [{ name = "home-assistant-libs" }]
+keywords = ["lorawan", "iot", "home-assistant"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: System :: Hardware",
+    "Typing :: Typed",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/home-assistant-libs/lorawan-connection"
+Documentation = "https://home-assistant-libs.github.io/lorawan-connection/"
+Issues = "https://github.com/home-assistant-libs/lorawan-connection/issues"
+
+[dependency-groups]
+dev = ["mypy>=1.19", "pytest>=8", "pytest-cov>=6", "ruff>=0.11"]
+compatibility = ["chirpstack-api==4.19.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lorawan_connection"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "examples", "script", "README.md", "RELEASING.md", "LICENSE", "pyproject.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["examples"]
+
+[tool.coverage.run]
+source = ["lorawan_connection", "sensecap_lorawan"]
+branch = true
+
+[tool.coverage.report]
+exclude_also = ["^\\s*\\.\\.\\.$", "raise NotImplementedError"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src", "examples", "tests/typing"]
+strict = true
+mypy_path = "examples"
+
+[tool.ruff]
+target-version = "py312"
+src = ["src", "examples"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]

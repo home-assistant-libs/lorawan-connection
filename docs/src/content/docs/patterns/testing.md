@@ -1,0 +1,88 @@
+---
+title: Testing
+description: Test device libraries using fixture events and real generated payloads.
+---
+
+Test a device library without Home Assistant or a server. Feed inventory and
+activity fixtures into its collection, then inspect model state and callbacks.
+
+```python
+from datetime import UTC, datetime
+
+from lorawan_connection import DeviceDescriptor, DeviceEventData, EventType, UplinkData
+from sensecap_lorawan import S2101_MODEL_ID, VENDOR_ID, SenseCapDeviceCollection
+
+
+def test_s2101():
+    devices = SenseCapDeviceCollection("network")
+    now = datetime.now(UTC)
+    descriptor = DeviceDescriptor(
+        "network",
+        "0201010101010101",
+        "Greenhouse",
+        "application",
+        "profile",
+        catalog_model_id=S2101_MODEL_ID,
+        vendor_id=VENDOR_ID,
+    )
+    devices.handle_event(
+        DeviceEventData(
+            "network",
+            descriptor.dev_eui,
+            EventType.ADDED,
+            now,
+            descriptor,
+        )
+    )
+    devices.handle_event(
+        DeviceEventData(
+            "network",
+            descriptor.dev_eui,
+            EventType.UPLINK,
+            now,
+            data=UplinkData(bytes.fromhex("01011098530000010210A87A0000AF51")),
+        )
+    )
+    model = devices.devices[descriptor.dev_eui]
+    assert model.state.temperature == 21.4
+    assert model.state.humidity == 31.4
+    devices.close()
+```
+
+This repository adds `examples/` to pytest's path so that the example library is
+importable. In your library repository, import your installed development package.
+
+## Event sequences to cover
+
+Test inventory before any telemetry, repeated inventory, metadata changes, catalog
+identity changes, and removal. Subscribe after models exist to check initial replay.
+Test a second network with the same DevEUI to verify isolation.
+
+For decoders, cover zero, negative values, unknown channels, unsupported ports,
+partial measurements, malformed lengths, and vendor error sentinels. Assert that
+invalid frames leave existing state unchanged.
+
+For listeners, test unsubscribe and close. Repeated cleanup should be harmless.
+A listener exception must not prevent other consumers from receiving updates.
+
+## Generated payload compatibility
+
+`DeviceEventData` can wrap a generated message directly. The wrapper must retain
+object identity. Test the same model behavior with fixtures and generated payloads
+when adding a backend. Matching attribute names alone do not prove matching units
+or optional-field semantics.
+
+The optional `compatibility` dependency group pins `chirpstack-api==4.19.0` for
+these checks. It does not become a runtime dependency or an install extra.
+Tests cover uplinks, joins, status flags, acknowledgements, logs, and locations.
+In particular, an unavailable battery reading differs from a valid zero.
+
+```sh
+uv sync --group compatibility
+uv run pytest --cov --cov-report=term-missing
+uv run mypy
+```
+
+Static conformance checks for fixture dataclasses live in `tests/typing/`.
+The documentation embeds the standalone example source, and CI executes it.
+The real-server POC test remains outside this package's unit suite.

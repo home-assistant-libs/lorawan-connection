@@ -1,0 +1,65 @@
+---
+title: lorawan-connection
+description: Backend-neutral LoRaWAN events and device collections for Python.
+template: splash
+hero:
+  tagline: Build a device library that consumes LoRaWAN events and exposes typed Python state.
+  actions:
+    - text: Get started
+      link: /lorawan-connection/getting-started/quickstart/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/home-assistant-libs/lorawan-connection
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
+
+`lorawan-connection` defines the events a network provider sends to a device
+library. It has no runtime dependencies.
+
+Feed events into a vendor collection and listen for new device models. Each model
+decodes its events and exposes state for your application to read.
+
+```text
+Provider: inventory + live events
+    → Vendor collection: catalog matching and model lifecycle
+        → Device model: decoding and typed state
+            → Consumer: application logic or Home Assistant entities
+```
+
+<CardGrid>
+  <Card title="Shared events" icon="document">
+    Read-only Protocols let compatible generated payloads pass by reference.
+    Dataclass fixtures let you test the same code without a server.
+  </Card>
+  <Card title="Device collections" icon="puzzle">
+    Subclass DeviceCollection to select supported models. Inventory events create,
+    update, and retire models. All activity reaches the appropriate device.
+  </Card>
+</CardGrid>
+
+## Two author guides
+
+<CardGrid>
+  <LinkCard title="Building a library"
+    description="Match catalog identities, decode payloads, merge partial state, and test your models."
+    href="/lorawan-connection/patterns/library/" />
+  <LinkCard title="Home Assistant"
+    description="Subscribe to the provider and turn library models into entities."
+    href="/lorawan-connection/home-assistant/integration/" />
+</CardGrid>
+
+The [quickstart](/lorawan-connection/getting-started/quickstart/) replays a SenseCAP
+S2101 capture. It creates temperature and humidity state without a network server.
+
+## Release scope
+
+Version 0.1 contains event contracts, fixture payloads, collections, and callback
+helpers. The SenseCAP implementation is a tested example of a separate library.
+ChirpStack connections, QR onboarding, BLE provisioning, and downlink commands are
+outside this package's first release.
+
+The Home Assistant guide describes the working Core POC. Its provider API is not
+yet part of upstream Home Assistant.

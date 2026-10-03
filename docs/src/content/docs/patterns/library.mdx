@@ -1,0 +1,54 @@
+---
+title: The device library
+description: Build a vendor collection and typed device models without Home Assistant.
+---
+
+import { Code } from "@astrojs/starlight/components";
+import library from "../../../../../examples/sensecap_lorawan/__init__.py?raw";
+
+Build the collection, decoder, and device models in a Python library. Keep server
+credentials and Home Assistant imports in the consuming application.
+
+Start with this structure as the library grows:
+
+```text
+sensecap_lorawan/
+  collection.py     # supported catalog identities and model factory
+  device.py         # shared state subscriptions and lifecycle
+  models/           # typed models and state
+  decoders/         # byte-level vendor formats
+examples/           # standalone capture replay
+tests/              # decoder and event-sequence tests
+```
+
+The S2101 example below fits in one file. It lives under `examples/` and is excluded
+from the `lorawan_connection` wheel.
+
+## Select models by catalog identity
+
+The collection recognizes vendor `744` (`0x02E8`) and S2101 model
+`fc455aa2-01cf-492b-9359-a5d8c9a0e1b3`. These are the identities tested with the
+ChirpStack catalog in the POC. The server profile UUID is a separate field.
+
+Only reviewed models qualify. A custom profile called “S2101” does not establish
+that identity. Expand the factory when you add another tested model. Do not infer
+a model from payload length or a user-supplied device name.
+
+## Keep event interpretation in the model
+
+The application forwards every event. The S2101 model accepts uplinks on its
+supported port, decodes the bytes, and merges state. It ignores other events.
+A model that supports battery status can consume `STATUS` in the same method.
+
+The application listens for new models and then subscribes to model state. It does
+not decode payloads or create models itself. Model `close()` releases listeners.
+
+<Code code={library} lang="python" title="examples/sensecap_lorawan/__init__.py" />
+
+See [decoding and state](/lorawan-connection/patterns/decoding/) for why the decoder
+handles frames this way. See [testing](/lorawan-connection/patterns/testing/) for
+fixture events and generated-message compatibility.
+
+When you build a Home Assistant integration, keep it in a separate package or
+repository from this library. Follow the [integration guide](/lorawan-connection/home-assistant/integration/)
+to connect these models to entities.
