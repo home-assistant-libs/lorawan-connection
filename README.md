@@ -15,6 +15,9 @@ from lorawan_connection import DeviceCollection, DeviceDescriptor, DeviceEvent
 
 
 class Sensor:
+    vendor_id = 123
+    product_id = "known-model"
+
     def __init__(self, descriptor: DeviceDescriptor) -> None:
         self.descriptor = descriptor
 
@@ -27,8 +30,9 @@ class Sensor:
         pass
 
 
+SUPPORTED_MODELS = [Sensor]
 DEVICE_MODELS: dict[tuple[int | None, str], type[Sensor]] = {
-    (123, "known-model"): Sensor,
+    (model.vendor_id, model.product_id): model for model in SUPPORTED_MODELS
 }
 
 

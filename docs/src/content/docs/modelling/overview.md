@@ -5,14 +5,17 @@ description: Model lifecycle belongs to the collection; decoding belongs to each
 
 Subclass `DeviceCollection[YourDevice]` and implement `_create_device(descriptor)`.
 Return a model for a supported catalog identity, or `None` for an unsupported one.
+Models declare `vendor_id` and `product_id` as class attributes. `product_id` matches
+the descriptor's `catalog_model_id`. Build the lookup from a list of supported classes:
 
 ```python
 from lorawan_connection import DeviceCollection, DeviceDescriptor
 from .models import S2101
 
 
+SUPPORTED_MODELS = [S2101]
 DEVICE_MODELS: dict[tuple[int | None, str], type[S2101]] = {
-    (0x02E8, "fc455aa2-01cf-492b-9359-a5d8c9a0e1b3"): S2101,
+    (model.vendor_id, model.product_id): model for model in SUPPORTED_MODELS
 }
 
 

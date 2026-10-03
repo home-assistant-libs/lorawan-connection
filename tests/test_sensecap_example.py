@@ -13,7 +13,7 @@ from lorawan_connection import (
     UplinkData,
 )
 from sensecap_lorawan import (
-    S2101_MODEL_ID,
+    S2101,
     SenseCapDeviceCollection,
     decode_s2101,
 )
@@ -25,8 +25,8 @@ DESCRIPTOR = DeviceDescriptor(
     "Greenhouse",
     "application",
     "profile",
-    S2101_MODEL_ID,
-    744,
+    S2101.product_id,
+    S2101.vendor_id,
 )
 PAYLOAD = bytes.fromhex("01011098530000010210A87A0000AF51")
 

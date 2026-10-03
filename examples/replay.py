@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 
 from lorawan_connection import DeviceDescriptor, DeviceEventData, EventType, UplinkData
-from sensecap_lorawan import S2101, S2101_MODEL_ID, VENDOR_ID, SenseCapDeviceCollection
+from sensecap_lorawan import S2101, SenseCapDeviceCollection
 
 
 def main() -> None:
@@ -20,8 +20,8 @@ def main() -> None:
         name="Greenhouse",
         application_id="sensors",
         profile_id="s2101-profile",
-        catalog_model_id=S2101_MODEL_ID,
-        vendor_id=VENDOR_ID,
+        catalog_model_id=S2101.product_id,
+        vendor_id=S2101.vendor_id,
         manufacturer="Seeed Studio",
         model="SenseCAP S2101",
     )

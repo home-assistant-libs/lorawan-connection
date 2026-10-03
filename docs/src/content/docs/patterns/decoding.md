@@ -56,8 +56,8 @@ ordering, deduplication, or device-specific stale-data rules.
 
 Collect its catalog identity, firmware-specific wire format, and captured frames.
 Implement a decoder and typed state. Test malformed data, sentinel values, partial
-updates, and every event type that model uses. Then register its reviewed identity
-in the collection factory.
+updates, and every event type that model uses. Then add the model class
+to `SUPPORTED_MODELS`; its class attributes supply the catalog identity.
 
 Keep all FPort interpretation here. The provider forwards events for every port;
 an entity should never need to know the device's FPort.

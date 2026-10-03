@@ -10,7 +10,7 @@ activity fixtures into its collection, then inspect model state and callbacks.
 from datetime import UTC, datetime
 
 from lorawan_connection import DeviceDescriptor, DeviceEventData, EventType, UplinkData
-from sensecap_lorawan import S2101_MODEL_ID, VENDOR_ID, SenseCapDeviceCollection
+from sensecap_lorawan import S2101, SenseCapDeviceCollection
 
 
 def test_s2101():
@@ -22,8 +22,8 @@ def test_s2101():
         "Greenhouse",
         "application",
         "profile",
-        catalog_model_id=S2101_MODEL_ID,
-        vendor_id=VENDOR_ID,
+        catalog_model_id=S2101.product_id,
+        vendor_id=S2101.vendor_id,
     )
     devices.handle_event(
         DeviceEventData(
