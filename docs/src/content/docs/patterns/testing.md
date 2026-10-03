@@ -3,22 +3,27 @@ title: Testing
 description: Test device libraries using fixture events and real generated payloads.
 ---
 
-Test a device library with local event fixtures. Feed inventory and
-activity fixtures into its collection, then inspect model state and callbacks.
+Use a pytest fixture to create a collection and feed it an S2101 device descriptor.
+Each test receives a fresh collection with the device already added.
 
 ```python
+from collections.abc import Iterator
 from datetime import UTC, datetime
+
+import pytest
 
 from lorawan_connection import DeviceDescriptor, DeviceEventData, EventType, UplinkData
 from sensecap_lorawan import S2101, SenseCapDeviceCollection
 
+DEV_EUI = "0201010101010101"
 
-def test_s2101():
+
+@pytest.fixture
+def devices() -> Iterator[SenseCapDeviceCollection]:
     devices = SenseCapDeviceCollection(network_id="network")
-    now = datetime.now(UTC)
     descriptor = DeviceDescriptor(
         "network",
-        "0201010101010101",
+        DEV_EUI,
         "Greenhouse",
         "application",
         "profile",
@@ -30,23 +35,27 @@ def test_s2101():
             "network",
             descriptor.dev_eui,
             EventType.ADDED,
-            now,
+            datetime.now(UTC),
             descriptor,
         )
     )
+    yield devices
+    devices.close()
+
+
+def test_s2101(devices: SenseCapDeviceCollection) -> None:
     devices.handle_event(
         DeviceEventData(
             "network",
-            descriptor.dev_eui,
+            DEV_EUI,
             EventType.UPLINK,
-            now,
+            datetime.now(UTC),
             data=UplinkData(bytes.fromhex("01011098530000010210A87A0000AF51")),
         )
     )
-    model = devices.devices[descriptor.dev_eui]
+    model = devices.devices[DEV_EUI]
     assert model.temperature == 21.4
     assert model.humidity == 31.4
-    devices.close()
 ```
 
 This repository adds `examples/` to pytest's path so that the example library is
