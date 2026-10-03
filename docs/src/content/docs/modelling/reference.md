@@ -28,8 +28,6 @@ without stopping other listeners. Closed devices ignore notifications.
 
 ### async_send_downlink(*, data, f_port, wait_for_ack=True, expires_at=None) → None
 
-ACK waiting is not yet released on PyPI.
-
 Queue application bytes for this model's DevEUI using its collection's sender.
 By default, request a confirmed downlink and complete after a positive device ACK.
 Returns `None` on success. The collection correlates ACKs before forwarding them to the

@@ -228,8 +228,8 @@ Entities read `device.relays[channel]` and observe the same update listener used
 by sensor models. Device reports update relay state. Convert `DownlinkError` and
 `TimeoutError` to a `HomeAssistantError` so a failed command reaches the caller.
 
-ACK waiting uses the unreleased library changes on the
-[confirmed-command POC branch](https://github.com/balloobbot/core/tree/lorawan-confirmed-commands).
+See the [confirmed-command POC branch](https://github.com/balloobbot/core/tree/lorawan-confirmed-commands)
+for the implementation.
 
 Keep switches visible when the configured key is read-only. Fail the requested
 write with a permission error; do not reject setup or mark the whole network offline.

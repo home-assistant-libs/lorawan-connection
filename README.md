@@ -75,8 +75,6 @@ Collections select models from catalog identity, never from names or payload gue
 
 ## Sending commands
 
-ACK waiting is available on `main` and is not yet released on PyPI.
-
 Pass an async `send_downlink` callback to the collection. Device models encode their
 commands and call `async_send_downlink(data=..., f_port=...)`. The method requests a
 confirmed downlink and completes after its device ACK. It returns `None` on success.
@@ -137,7 +135,7 @@ without `state=`. Define your model's data as attributes or properties. An exist
 state object can remain a vendor-defined attribute, but the base does not require it.
 The CLI's JSON `state` field now contains the model's public attributes and properties.
 
-## Migrating from 0.6 (unreleased)
+## Migrating from 0.6
 
 `ChirpStackConnection` accepts `tenant_id=None` by default to discover applications
 across all accessible tenants. Pass connection options after `endpoint` and
