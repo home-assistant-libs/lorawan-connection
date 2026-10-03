@@ -1,13 +1,15 @@
 """Replay an S2101 capture without a network server."""
 
 from datetime import UTC, datetime
+from unittest.mock import Mock
 
 from lorawan_connection import DeviceDescriptor, DeviceEventData, EventType, UplinkData
 from sensecap_lorawan import S2101, SenseCapDeviceCollection
 
 
 def main() -> None:
-    devices = SenseCapDeviceCollection(network_id="home")
+    connection = Mock(network_id="home")
+    devices = SenseCapDeviceCollection(connection)
 
     def device_added(device: S2101) -> None:
         print(f"Device: {device.descriptor.name}")

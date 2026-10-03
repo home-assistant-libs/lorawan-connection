@@ -12,7 +12,14 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from . import Device, DeviceCollection, DeviceDescriptor, DeviceEventData, EventType
+from . import (
+    Connection,
+    Device,
+    DeviceCollection,
+    DeviceDescriptor,
+    DeviceEventData,
+    EventType,
+)
 from .callbacks import Unsubscribe
 
 if TYPE_CHECKING:
@@ -109,8 +116,8 @@ def _model_data(device: Device) -> dict[str, object]:
 class _CLICollection(DeviceCollection[Device]):
     """Report unmapped devices from vendors represented by the supplied models."""
 
-    def __init__(self, models: Sequence[type[Device]], *, network_id: str) -> None:
-        super().__init__(models, network_id=network_id)
+    def __init__(self, connection: Connection, models: Sequence[type[Device]]) -> None:
+        super().__init__(connection, models)
         self._vendor_ids = {model.vendor_id for model in models}
         self._warned: set[str] = set()
 
@@ -133,7 +140,8 @@ class _CLICollection(DeviceCollection[Device]):
 
 
 async def _watch(args: argparse.Namespace, models: Sequence[type[Device]]) -> None:
-    collection = _CLICollection(models, network_id=args.server)
+    connection = await connect_from_args(args)
+    collection = None
     subscriptions: dict[str, Unsubscribe] = {}
     finished: asyncio.Future[Exception] = asyncio.get_running_loop().create_future()
 
@@ -172,11 +180,10 @@ async def _watch(args: argparse.Namespace, models: Sequence[type[Device]]) -> No
         subscriptions.pop(device.descriptor.dev_eui)()
         output("removed", device)
 
-    collection.subscribe_device_added(added)
-    stop_removed = collection.subscribe_device_removed(removed)
-    connection = None
     try:
-        connection = await connect_from_args(args)
+        collection = _CLICollection(connection, models)
+        collection.subscribe_device_added(added)
+        unsubscribe_removed = collection.subscribe_device_removed(removed)
         if args.list:
             for descriptor in await connection.inventory():
                 collection.handle_event(
@@ -196,12 +203,12 @@ async def _watch(args: argparse.Namespace, models: Sequence[type[Device]]) -> No
             stop()
         raise error
     finally:
-        stop_removed()
         for stop_model in subscriptions.values():
             stop_model()
-        collection.close()
-        if connection is not None:
-            await connection.close()
+        if collection is not None:
+            unsubscribe_removed()
+            collection.close()
+        await connection.close()
 
 
 def run(models: Sequence[type[Device]], argv: Sequence[str] | None = None) -> None:

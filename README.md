@@ -11,6 +11,8 @@ A vendor `DeviceCollection` creates supported models and routes incoming events
 to them automatically. Applications use device-added callbacks to observe those
 models and subscribe to their state updates.
 
+With a connection already created, declare and use the models your library supports:
+
 ```python
 from lorawan_connection import Device, DeviceCollection, DeviceDescriptor, DeviceEvent
 
@@ -33,14 +35,16 @@ class Sensors(DeviceCollection[Sensor]):
     DEVICES = (Sensor,)
 
 
-sensors = Sensors(network_id="my-network")
+sensors = Sensors(connection)
 unsubscribe = sensors.subscribe_device_added(
     lambda device: print(device.descriptor.name)
 )
 ```
 
 The collection builds its catalog lookup from `DEVICES`. You can also pass classes
-at construction: `DeviceCollection([Sensor], network_id="my-network")`.
+at construction: `DeviceCollection(connection, [Sensor])`.
+The collection takes the network ID and downlink sender from the connection.
+The application owns event subscription and connection cleanup.
 The `Device` base supplies identity, `add_update_listener()`, `notify()`, and cleanup.
 Models define their own attributes, including multiple measurements or channels.
 Listeners take no arguments and read model attributes after a complete update.
@@ -75,7 +79,7 @@ Collections select models from catalog identity, never from names or payload gue
 
 ## Sending commands
 
-Pass an async `send_downlink` callback to the collection. Device models encode their
+Pass the connection to the collection. Device models encode their
 commands and call `async_send_downlink(data=..., f_port=...)`. The method requests a
 confirmed downlink and completes after its device ACK. It returns `None` on success.
 Use `wait_for_ack=False` to send an unconfirmed command and return after enqueueing.
@@ -124,8 +128,8 @@ Models inherit `Device`, initialize it with `super().__init__(descriptor)`,
 and call `self.notify()` after updating their data.
 Declare `DEVICES` on the collection to replace manual lookup dictionaries.
 
-Models now inherit `Device`. Pass the network ID by keyword when constructing
-a collection: `Sensors(network_id="my-network")`. Existing `_create_device()`
+Models now inherit `Device`. Pass the connection when constructing
+a collection: `Sensors(connection)`. Existing `_create_device()`
 overrides remain available for custom matching.
 
 ## Migrating from 0.3
@@ -136,6 +140,11 @@ state object can remain a vendor-defined attribute, but the base does not requir
 The CLI's JSON `state` field now contains the model's public attributes and properties.
 
 ## Migrating from 0.6
+
+Construct collections with `Sensors(connection)` or `DeviceCollection(connection, models)`.
+The connection replaces the separate `network_id` and `send_downlink` arguments.
+It implements the backend-neutral `Connection` protocol: a `network_id` property
+and an async `async_send_downlink(downlink)` method. ChirpStack supplies both.
 
 `ChirpStackConnection` accepts `tenant_id=None` by default to discover applications
 across all accessible tenants. Pass connection options after `endpoint` and

@@ -3,7 +3,7 @@
 import asyncio
 from collections.abc import Iterator
 from dataclasses import replace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from chirpstack_api import integration
@@ -28,7 +28,7 @@ def sender() -> AsyncMock:
 @pytest.fixture
 def devices(sender: AsyncMock) -> Iterator[DeviceCollection[DeviceModel]]:
     collection = DeviceCollection(
-        [DeviceModel], network_id="network", send_downlink=sender
+        Mock(network_id="network", async_send_downlink=sender), [DeviceModel]
     )
     collection.handle_event(inventory())
     yield collection

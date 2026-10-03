@@ -130,26 +130,24 @@ models in `DEVICES`. The base collection uses each class's `vendor_id` and
 `catalog_model_id` to select a model for an incoming descriptor.
 
 This function creates the collection and registers the `device_added` callback
-from above. It accepts an async sender from the connection:
+from above. It accepts a connection:
 
 ```python
 from dragino_lorawan import DraginoDevices
-from lorawan_connection import DeviceCollection, SendDownlink
+from lorawan_connection import Connection, DeviceCollection
 
 
-def create_collection(
-    network_id: str, send_downlink: SendDownlink
-) -> DeviceCollection[LT22222]:
-    collection = DraginoDevices(network_id=network_id, send_downlink=send_downlink)
+def create_collection(connection: Connection) -> DeviceCollection[LT22222]:
+    collection = DraginoDevices(connection)
     collection.subscribe_device_added(device_added)
     return collection
 ```
 
 In the [ChirpStack connection example](/lorawan-connection/connection/chirpstack/),
 replace the SenseCAP collection and its device-added callback with these definitions.
-Create it with `create_collection(connection.network_id, connection.async_send_downlink)`
-and keep the connection's event subscription and cleanup. The collection attaches
-the sender before announcing each device.
+Create it with `create_collection(connection)` and keep the connection's event
+subscription and cleanup. The collection takes its network ID and downlink sender
+from the connection. It attaches the sender before announcing each device.
 
 You can also construct a collection directly from model classes. Inside
 `create_collection`, the equivalent construction is:
@@ -157,10 +155,12 @@ You can also construct a collection directly from model classes. Inside
 ```python
 from lorawan_connection import DeviceCollection
 
-collection = DeviceCollection(
-    [LT22222], network_id=network_id, send_downlink=send_downlink
-)
+collection = DeviceCollection(connection, [LT22222])
 ```
+
+`Connection` is a protocol shared by backends and test doubles. Creating or closing
+a collection does not open, subscribe to, or close the connection. Several
+collections can share the same connection.
 
 ## Device lifecycle
 

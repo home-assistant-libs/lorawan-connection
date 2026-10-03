@@ -32,6 +32,8 @@ The first event supplies catalog identity. The collection selects and creates th
 model, then calls `device_added`. The next event carries the captured uplink.
 The model decodes it and notifies its state listener.
 
+The replay supplies a mock connection with a network ID, so it needs no server.
+
 <Code code={replay} lang="python" title="replay.py" />
 
 The example closes the collection when finished. A real application also removes

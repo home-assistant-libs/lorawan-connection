@@ -53,6 +53,12 @@ marks itself unavailable before invoking it. A new subscription raises
 The returned cleanup function unsubscribes only this consumer; it does not close
 the shared connection.
 
+Vendor integrations obtain the collection's connection with
+`lorawan.get_connection(hass, provider_entry_id)`. It implements the shared
+`Connection` protocol and raises `ConnectionUnavailable` if the provider is not
+connected. Pass it to the library collection; the provider owns its lifecycle.
+Vendor event delivery still uses `async_subscribe()` above.
+
 ## Catalog discovery
 
 The POC maps vendor `744` to the `sensecap` integration and creates one discovery

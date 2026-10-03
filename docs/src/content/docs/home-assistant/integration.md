@@ -53,9 +53,11 @@ PLATFORMS = [Platform.SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: SenseCapConfigEntry) -> bool:
-    devices = entry.runtime_data = SenseCapDeviceCollection(
-        network_id=entry.data["network_id"]
-    )
+    try:
+        connection = lorawan.get_connection(hass, entry.data["provider_entry_id"])
+    except ConnectionUnavailable as error:
+        raise ConfigEntryNotReady("LoRaWAN provider is not connected") from error
+    devices = entry.runtime_data = SenseCapDeviceCollection(connection)
 
     @callback
     def disconnected() -> None:
@@ -204,22 +206,13 @@ separate external test.
 
 ## Writable devices
 
-In the vendor integration's `async_setup_entry`, create a Dragino collection with
-a sender bound to its provider config entry. This excerpt uses the `hass` and
-`entry` parameters from that function:
+In the vendor integration's `async_setup_entry`, obtain the provider connection as
+shown above and pass it to the Dragino collection:
 
 ```python
-from functools import partial
-
 from dragino_lorawan import DraginoDevices
-from homeassistant.components import lorawan
 
-models = DraginoDevices(
-    network_id=entry.data["network_id"],
-    send_downlink=partial(
-        lorawan.async_send_downlink, hass, entry.data["provider_entry_id"]
-    ),
-)
+models = DraginoDevices(connection)
 ```
 
 Its switch entities call `await device.async_set_relay(channel, on)` inside

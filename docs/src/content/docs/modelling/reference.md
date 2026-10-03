@@ -51,13 +51,13 @@ additional resources can override this method and call `super().close()`.
 
 ### Construction and attributes
 
-`DeviceCollection(models=None, *, network_id, send_downlink=None)` creates a collection for one logical
+`DeviceCollection(connection, models=None)` creates a collection for one logical
 network. `models` is a sequence of model classes; when omitted, the collection uses
 its `DEVICES` declaration. An explicit empty sequence accepts no models.
 
 - `DEVICES` is a sequence of supported model classes, usually declared as a tuple.
-- `send_downlink` is an optional `Callable[[Downlink], Awaitable[str]]`. The collection
-  attaches it to every model before notifying device-added listeners.
+- `connection` implements the `Connection` protocol. The collection takes its
+  network ID and attaches its sender to every model before notifying device-added listeners.
 - `network_id: str` identifies the network accepted by this collection.
 - `devices: dict[str, DeviceT]` contains current models, keyed by canonical DevEUI.
   Treat it as a read-only view; only the collection changes its contents.
@@ -65,8 +65,19 @@ its `DEVICES` declaration. An explicit empty sequence accepts no models.
 The collection copies the registry at construction. Duplicate
 `(vendor_id, catalog_model_id)` pairs raise `ValueError`. A subclass inherits `DEVICES`
 unless it replaces that declaration. Explicit constructor models override it.
-Pass `network_id` by keyword. Registered models inherit `Device` and accept a
-descriptor as their constructor argument.
+Registered models inherit `Device` and accept a descriptor as their constructor argument.
+
+### Connection protocol
+
+The backend-neutral `Connection` protocol exposes:
+
+- `network_id: str`, a read-only property identifying the logical network.
+- `async_send_downlink(downlink: Downlink) -> str`, an async method that queues a
+  command and returns its queue ID for internal ACK correlation.
+
+`ChirpStackConnection` implements this protocol. Read-only connections raise
+`DownlinkError` on attempted writes. A collection does not manage the connection's
+event subscription or close it. The application owns those operations.
 
 ### _create_device(descriptor)
 

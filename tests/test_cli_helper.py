@@ -160,7 +160,7 @@ async def test_missing_optional_backend() -> None:
 
 def test_duplicate_model_identity() -> None:
     with pytest.raises(ValueError, match="Duplicate catalog identity"):
-        DeviceCollection([S2101, S2101], network_id="network")
+        DeviceCollection(Mock(network_id="network"), [S2101, S2101])
 
 
 async def test_list_supported_models_only(
@@ -171,7 +171,6 @@ async def test_list_supported_models_only(
         replace(DESCRIPTOR, dev_eui="0000000000000002", catalog_model_id="unsupported"),
     ]
     parsed = args("--list", "--json")
-    parsed.server = "network"
     with patch(
         "lorawan_connection.cli_helper.connect_from_args",
         AsyncMock(return_value=connection),
@@ -188,6 +187,18 @@ async def test_list_supported_models_only(
         }
     ]
     connection.async_subscribe.assert_not_awaited()
+    connection.close.assert_awaited_once()
+
+
+async def test_invalid_collection_closes_connection(connection: Mock) -> None:
+    with (
+        patch(
+            "lorawan_connection.cli_helper.connect_from_args",
+            AsyncMock(return_value=connection),
+        ),
+        pytest.raises(ValueError, match="Duplicate catalog identity"),
+    ):
+        await _watch(args(), [S2101, S2101])
     connection.close.assert_awaited_once()
 
 
@@ -385,7 +396,7 @@ def test_models_can_share_catalog_ids_across_vendors() -> None:
     class OtherVendor(S2101):
         vendor_id = 123
 
-    collection = DeviceCollection([S2101, OtherVendor], network_id="network")
+    collection = DeviceCollection(Mock(network_id="network"), [S2101, OtherVendor])
     descriptors = [
         DESCRIPTOR,
         replace(DESCRIPTOR, dev_eui="0000000000000002", vendor_id=123),

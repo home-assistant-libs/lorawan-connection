@@ -26,7 +26,7 @@ class Collection(DeviceCollection[DeviceModel]):
 
 
 def test_inventory_creates_models_and_replays() -> None:
-    collection = Collection(network_id="network")
+    collection = Collection(Mock(network_id="network"))
     event = inventory()
     collection.handle_event(event)
     added = Mock()
@@ -57,7 +57,7 @@ def test_inventory_creates_models_and_replays() -> None:
     ],
 )
 def test_all_activity_routes_by_identity(kind: EventType) -> None:
-    collection = Collection(network_id="network")
+    collection = Collection(Mock(network_id="network"))
     collection.handle_event(inventory())
     other = replace(DESCRIPTOR, dev_eui="0000000000000002")
     collection.handle_event(inventory(other))
@@ -68,7 +68,7 @@ def test_all_activity_routes_by_identity(kind: EventType) -> None:
 
 
 def test_unknown_activity_never_creates_a_device() -> None:
-    collection = Collection(network_id="network")
+    collection = Collection(Mock(network_id="network"))
     collection.handle_event(
         DeviceEventData("network", DESCRIPTOR.dev_eui, EventType.UPLINK, NOW)
     )
@@ -87,13 +87,13 @@ def test_unknown_activity_never_creates_a_device() -> None:
     ],
 )
 def test_unusable_identity_is_ignored(event: DeviceEventData) -> None:
-    collection = Collection(network_id="network")
+    collection = Collection(Mock(network_id="network"))
     collection.handle_event(event)
     assert not collection.devices
 
 
 def test_identity_change_retires_before_replacement() -> None:
-    collection = Collection(network_id="network")
+    collection = Collection(Mock(network_id="network"))
     collection.handle_event(inventory())
     original = collection.devices[DESCRIPTOR.dev_eui]
     order: list[str] = []
@@ -115,7 +115,7 @@ def test_identity_change_retires_before_replacement() -> None:
 
 
 def test_remove_and_close_are_idempotent() -> None:
-    collection = Collection(network_id="network")
+    collection = Collection(Mock(network_id="network"))
     collection.handle_event(inventory())
     first = collection.devices[DESCRIPTOR.dev_eui]
     removed = Mock()
@@ -142,7 +142,7 @@ def test_remove_and_close_are_idempotent() -> None:
 def test_listener_failure_does_not_block_others(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    collection = Collection(network_id="network")
+    collection = Collection(Mock(network_id="network"))
     collection.subscribe_device_added(Mock(side_effect=ValueError("consumer error")))
     good = Mock()
     collection.subscribe_device_added(good)
@@ -154,7 +154,7 @@ def test_listener_failure_does_not_block_others(
 def test_close_failure_does_not_leak_other_models(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    collection = Collection(network_id="network")
+    collection = Collection(Mock(network_id="network"))
     collection.handle_event(inventory())
     collection.handle_event(inventory(replace(DESCRIPTOR, dev_eui="0000000000000002")))
     first, second = collection.devices.values()
@@ -169,7 +169,7 @@ def test_close_failure_does_not_leak_other_models(
 
 
 def test_added_callback_can_close_collection() -> None:
-    collection = Collection(network_id="network")
+    collection = Collection(Mock(network_id="network"))
     seen: list[DeviceModel] = []
 
     def added(device: DeviceModel) -> None:
@@ -184,7 +184,7 @@ def test_added_callback_can_close_collection() -> None:
 
 
 def test_replay_skips_models_removed_by_a_callback() -> None:
-    collection = Collection(network_id="network")
+    collection = Collection(Mock(network_id="network"))
     collection.handle_event(inventory())
     collection.handle_event(inventory(replace(DESCRIPTOR, dev_eui="0000000000000002")))
     seen: list[DeviceModel] = []
@@ -198,13 +198,13 @@ def test_replay_skips_models_removed_by_a_callback() -> None:
 
 
 def test_empty_registry_ignores_unknown_devices() -> None:
-    collection = DeviceCollection[DeviceModel](network_id="network")
+    collection = DeviceCollection[DeviceModel](Mock(network_id="network"))
     collection.handle_event(inventory())
     assert not collection.devices
 
 
 def test_removed_callback_can_close_during_model_replacement() -> None:
-    collection = Collection(network_id="network")
+    collection = Collection(Mock(network_id="network"))
     collection.handle_event(inventory())
     original = collection.devices[DESCRIPTOR.dev_eui]
     collection.subscribe_device_removed(lambda device: collection.close())

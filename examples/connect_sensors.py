@@ -15,7 +15,7 @@ async def main() -> None:
         application_ids=[],
         network_id="my-network",
     )
-    devices = SenseCapDeviceCollection(network_id=connection.network_id)
+    devices = SenseCapDeviceCollection(connection)
     disconnected: asyncio.Future[Exception] = asyncio.get_running_loop().create_future()
 
     def on_disconnect(error: Exception) -> None:

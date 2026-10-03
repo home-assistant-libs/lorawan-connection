@@ -42,7 +42,7 @@ def inventory(
 
 def test_collection_lifecycle() -> None:
     """Initial replay, idempotence, independent devices and retirement."""
-    collection = SenseCapDeviceCollection(network_id="network")
+    collection = SenseCapDeviceCollection(Mock(network_id="network"))
     collection.handle_event(inventory())
     added, removed = Mock(), Mock()
     stop = collection.subscribe_device_added(added)
@@ -82,7 +82,7 @@ def test_zero_copy_payload_and_partial_state(generated: bool) -> None:
     if generated:
         integration = pytest.importorskip("chirpstack_api.integration")
         payload_type = integration.UplinkEvent
-    collection = SenseCapDeviceCollection(network_id="network")
+    collection = SenseCapDeviceCollection(Mock(network_id="network"))
     collection.handle_event(inventory())
     device = collection.devices[DESCRIPTOR.dev_eui]
     listener = Mock()
@@ -126,7 +126,7 @@ def test_zero_unknown_fields_and_port() -> None:
         "humidity": 0,
     }
     assert decode_s2101(bytes.fromhex("010700640000000000")) == {}
-    collection = SenseCapDeviceCollection(network_id="network")
+    collection = SenseCapDeviceCollection(Mock(network_id="network"))
     collection.handle_event(inventory())
     collection.handle_event(
         DeviceEventData(
@@ -142,7 +142,7 @@ def test_zero_unknown_fields_and_port() -> None:
 
 def test_unknown_device_network_and_vendor() -> None:
     """Payload, name, or wrong vendor cannot create an unrecognized model."""
-    collection = SenseCapDeviceCollection(network_id="network")
+    collection = SenseCapDeviceCollection(Mock(network_id="network"))
     collection.handle_event(
         DeviceEventData(
             "network",
@@ -159,7 +159,7 @@ def test_unknown_device_network_and_vendor() -> None:
 
 def test_listener_exception_and_unsubscribe() -> None:
     """One consumer cannot stop another receiving devices."""
-    collection = SenseCapDeviceCollection(network_id="network")
+    collection = SenseCapDeviceCollection(Mock(network_id="network"))
     collection.subscribe_device_added(Mock(side_effect=ValueError))
     listener = Mock()
     collection.subscribe_device_added(listener)
@@ -176,7 +176,7 @@ def test_invalid_eui(eui: str) -> None:
 
 def test_same_millisecond_partial_updates() -> None:
     """Different live readings may share a server receipt timestamp."""
-    collection = SenseCapDeviceCollection(network_id="network")
+    collection = SenseCapDeviceCollection(Mock(network_id="network"))
     collection.handle_event(inventory())
     event = DeviceEventData(
         "network", DESCRIPTOR.dev_eui, EventType.UPLINK, NOW, data=UplinkData(PAYLOAD)
@@ -192,7 +192,7 @@ def test_same_millisecond_partial_updates() -> None:
 
 
 def test_invalid_and_older_frames_preserve_model_state() -> None:
-    collection = SenseCapDeviceCollection(network_id="network")
+    collection = SenseCapDeviceCollection(Mock(network_id="network"))
     collection.handle_event(inventory())
     event = DeviceEventData(
         "network", DESCRIPTOR.dev_eui, EventType.UPLINK, NOW, data=UplinkData(PAYLOAD)

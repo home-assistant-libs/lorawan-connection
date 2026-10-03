@@ -5,8 +5,8 @@ from collections.abc import Callable, Sequence
 from typing import cast
 
 from .callbacks import Unsubscribe, notify, subscribe
+from .connection import Connection
 from .device import Device
-from .downlink import SendDownlink
 from .events import DeviceDescriptor, DeviceEvent, EventType
 from .payloads import Ack
 
@@ -20,14 +20,12 @@ class DeviceCollection[DeviceT: Device]:
 
     def __init__(
         self,
+        connection: Connection,
         models: Sequence[type[DeviceT]] | None = None,
-        *,
-        network_id: str,
-        send_downlink: SendDownlink | None = None,
     ) -> None:
         """Own one network; use explicit model classes or the subclass's DEVICES."""
-        self.network_id = network_id
-        self._send_downlink = send_downlink
+        self.network_id = connection.network_id
+        self._send_downlink = connection.async_send_downlink
         self.devices: dict[str, DeviceT] = {}
         self._models: dict[tuple[int, str], type[DeviceT]] = {}
         for model in self.DEVICES if models is None else models:

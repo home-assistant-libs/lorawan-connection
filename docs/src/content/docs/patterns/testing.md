@@ -9,6 +9,7 @@ Each test receives a fresh collection with the device already added.
 ```python
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -20,7 +21,10 @@ DEV_EUI = "0201010101010101"
 
 @pytest.fixture
 def devices() -> Iterator[SenseCapDeviceCollection]:
-    devices = SenseCapDeviceCollection(network_id="network")
+    connection = Mock(
+        network_id="network", async_send_downlink=AsyncMock(return_value="queue-id")
+    )
+    devices = SenseCapDeviceCollection(connection)
     descriptor = DeviceDescriptor(
         "network",
         DEV_EUI,
@@ -76,7 +80,8 @@ A listener exception must not prevent other consumers from receiving updates.
 
 ## Test commands
 
-Inject an `AsyncMock` sender and assert the encoded bytes, DevEUI, port, and expiry.
+Use an `AsyncMock` for the connection's `async_send_downlink` method and assert the
+encoded bytes, DevEUI, port, and expiry.
 Feed an ACK with the sender's queue-item ID to complete the command. Cover positive
 and negative ACKs, sender failures, and cancellation. Verify that ACKs leave
 reported state unchanged and that a later uplink updates it.

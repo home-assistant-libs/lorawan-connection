@@ -3,7 +3,7 @@
 import asyncio
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import grpc
 import pytest
@@ -45,7 +45,7 @@ async def test_output_commands(
         vendor_id=LT22222.vendor_id,
         catalog_model_id=LT22222.catalog_model_id,
     )
-    collection = DraginoDevices(network_id="network", send_downlink=sender)
+    collection = DraginoDevices(Mock(network_id="network", async_send_downlink=sender))
     collection.handle_event(inventory(descriptor))
     device = collection.devices[descriptor.dev_eui]
 

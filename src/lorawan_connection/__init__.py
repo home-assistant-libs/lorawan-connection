@@ -2,6 +2,7 @@
 
 from .callbacks import Unsubscribe, notify, subscribe
 from .collection import DeviceCollection
+from .connection import Connection
 from .device import Device
 from .downlink import Downlink, DownlinkError, SendDownlink
 from .events import DeviceDescriptor, DeviceEvent, DeviceEventData, EventType
@@ -30,6 +31,7 @@ __all__ = [
     "AckData",
     "Coordinates",
     "CoordinatesData",
+    "Connection",
     "Device",
     "DeviceCollection",
     "DeviceDescriptor",

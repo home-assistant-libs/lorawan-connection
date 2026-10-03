@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from lorawan_connection import (
     Ack,
     AckData,
+    Connection,
     Coordinates,
     CoordinatesData,
     DeviceCollection,
@@ -24,6 +25,7 @@ from lorawan_connection import (
     Uplink,
     UplinkData,
 )
+from lorawan_connection.chirpstack import ChirpStackConnection
 from sensecap_lorawan import S2101, SenseCapDeviceCollection
 
 uplink: Uplink = UplinkData(b"\x00")
@@ -41,9 +43,12 @@ event: DeviceEvent = DeviceEventData(
 
 # The class registry preserves the concrete model type for callers.
 
+connection: Connection = ChirpStackConnection(
+    "http://localhost:8080", "key", application_ids=[], network_id="network"
+)
 model_class: type[S2101] = S2101
-collection: DeviceCollection[S2101] = DeviceCollection([S2101], network_id="network")
-declared: DeviceCollection[S2101] = SenseCapDeviceCollection(network_id="network")
+collection: DeviceCollection[S2101] = DeviceCollection(connection, [S2101])
+declared: DeviceCollection[S2101] = SenseCapDeviceCollection(connection)
 
 
 def observe(model: S2101) -> None:

@@ -36,6 +36,9 @@ The backend subscription delivers events to the collection, which creates models
 and routes their events automatically. The `device_added` callback prints each
 model's name and subscribes to its state updates.
 
+Pass the connection directly to `SenseCapDeviceCollection(connection)`. It supplies
+the network ID and command sender through the shared `Connection` protocol.
+
 <Code code={source} lang="python" title="connect_sensors.py" />
 
 `network_id` is the caller's stable identifier for this connection's device namespace.
