@@ -11,7 +11,7 @@ async def main() -> None:
     connection = ChirpStackConnection(
         endpoint=os.environ["CHIRPSTACK_SERVER"],
         api_key=os.environ["CHIRPSTACK_API_KEY"],
-        tenant_id=os.environ.get("CHIRPSTACK_TENANT_ID", ""),
+        tenant_id=os.environ.get("CHIRPSTACK_TENANT_ID"),
         application_ids=[],
         network_id="my-network",
     )

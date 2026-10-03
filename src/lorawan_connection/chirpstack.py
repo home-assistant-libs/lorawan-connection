@@ -78,14 +78,14 @@ class ChirpStackConnection:
         self,
         endpoint: str,
         api_key: str,
-        tenant_id: str,
+        *,
+        tenant_id: str | None = None,
         application_ids: list[str],
         network_id: str,
-        *,
         poll_interval: float = 30,
         channel: grpc.aio.Channel | None = None,
     ) -> None:
-        """Use TLS for https; never silently downgrade failed TLS."""
+        """Use TLS for https; omit tenant_id to discover all accessible tenants."""
         url = urlsplit(endpoint)
         if (
             url.scheme not in ("http", "https")

@@ -28,9 +28,9 @@ def connection() -> ChirpStackConnection:
     return ChirpStackConnection(
         "http://localhost:8080",
         "secret",
-        "tenant",
-        ["application"],
-        "network",
+        tenant_id="tenant",
+        application_ids=["application"],
+        network_id="network",
         channel=Mock(close=AsyncMock()),
     )
 
@@ -205,9 +205,20 @@ async def test_catalog_resolution(connection: ChirpStackConnection) -> None:
     await connection.close()
 
 
-async def test_applications_across_tenants(connection: ChirpStackConnection) -> None:
+@pytest.mark.parametrize("tenant_options", [{}, {"tenant_id": None}])
+async def test_applications_across_tenants(
+    tenant_options: dict[str, str | None],
+) -> None:
     """Collect all pages of tenants and their applications without losing namesakes."""
-    connection.tenant_id = ""
+    connection = ChirpStackConnection(
+        "http://localhost:8080",
+        "secret",
+        application_ids=[],
+        network_id="network",
+        channel=Mock(close=AsyncMock()),
+        **tenant_options,
+    )
+    assert connection.tenant_id is None
     connection._tenant_api.Get = AsyncMock()
     connection._tenant_api.List = AsyncMock(
         side_effect=[
@@ -273,7 +284,7 @@ async def test_explicit_tenant_applications(connection: ChirpStackConnection) ->
 
 async def test_all_tenants_subscription(connection: ChirpStackConnection) -> None:
     """Inventory and live activity from multiple tenants share one event feed."""
-    connection.tenant_id = ""
+    connection.tenant_id = None
     connection.application_ids = ["app1", "app2"]
     connection._tenant_api.List = AsyncMock(
         return_value=api.ListTenantsResponse(
@@ -373,7 +384,9 @@ async def test_pagination_and_scope(connection: ChirpStackConnection) -> None:
 def test_endpoint_validation(endpoint: str) -> None:
     """TLS failures never cause automatic plaintext fallback."""
     with pytest.raises(ValueError):
-        ChirpStackConnection(endpoint, "secret", "tenant", [], "network")
+        ChirpStackConnection(
+            endpoint, "secret", application_ids=[], network_id="network"
+        )
 
 
 @pytest.mark.parametrize(
@@ -430,7 +443,7 @@ async def test_tls_channel_verifies_by_default() -> None:
         patch("grpc.aio.insecure_channel") as insecure,
     ):
         connection = ChirpStackConnection(
-            "https://example.org:8080", "key", "tenant", [], "network"
+            "https://example.org:8080", "key", application_ids=[], network_id="network"
         )
         secure.assert_called_once()
         insecure.assert_not_called()

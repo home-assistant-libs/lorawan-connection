@@ -53,7 +53,11 @@ async def connect_from_args(args: argparse.Namespace) -> "ChirpStackConnection":
     if not key:
         raise ValueError("Set CHIRPSTACK_API_KEY or use --api-key-file")
     connection = ChirpStackConnection(
-        args.server, key, args.tenant or "", [], args.server
+        args.server,
+        key,
+        tenant_id=args.tenant,
+        application_ids=[],
+        network_id=args.server,
     )
     try:
         try:

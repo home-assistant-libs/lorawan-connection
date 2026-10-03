@@ -54,7 +54,7 @@ async def test_scope_autoselection(
     assert result is connection
     assert result.application_ids == ["app", "app2"]
     assert constructor.call_args.args[1] == "secret"
-    assert constructor.call_args.args[2] == ""
+    assert constructor.call_args.kwargs["tenant_id"] is None
     connection.close.assert_not_awaited()
 
 
@@ -78,6 +78,7 @@ async def test_explicit_scope_and_key_file(connection: Mock, tmp_path: Path) -> 
         )
     assert result.application_ids == ["app2"]
     assert constructor.call_args.args[1] == "from-file"
+    assert constructor.call_args.kwargs["tenant_id"] == "tenant"
     connection.tenants.assert_not_awaited()
 
 

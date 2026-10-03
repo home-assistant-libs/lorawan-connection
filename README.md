@@ -135,6 +135,11 @@ The CLI's JSON `state` field now contains the model's public attributes and prop
 
 ## Migrating from 0.6 (unreleased)
 
+`ChirpStackConnection` accepts `tenant_id=None` by default to discover applications
+across all accessible tenants. Pass connection options after `endpoint` and
+`api_key` by keyword: `application_ids=...`, `network_id=...`, and an optional
+`tenant_id=...`.
+
 `Device.async_send_downlink()` now waits for a device ACK by default. Replace its
 `confirmed` argument with `wait_for_ack`: waiting automatically requests confirmation.
 Use `wait_for_ack=False` for the previous enqueue-only behavior. The low-level
