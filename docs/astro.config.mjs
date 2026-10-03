@@ -35,7 +35,7 @@ export default defineConfig({
         ] },
         { label: "Events and connections", items: [
           { label: "Understanding events", slug: "connection/events" },
-          { label: "ChirpStack backend", slug: "connection/chirpstack" },
+          { label: "Connecting to ChirpStack", slug: "connection/chirpstack" },
           { label: "Event reference", slug: "connection/reference" },
         ] },
         { label: "Device modelling", items: [

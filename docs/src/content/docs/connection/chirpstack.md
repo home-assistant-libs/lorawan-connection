@@ -1,5 +1,5 @@
 ---
-title: ChirpStack backend
+title: Connecting to ChirpStack
 description: Read catalog inventory and live device events from an existing ChirpStack server.
 ---
 

@@ -103,7 +103,7 @@ python -m my_sensors --server https://chirpstack.example.com:443 --api-key-file 
 ```
 
 See the [CLI guide](https://home-assistant-libs.github.io/lorawan-connection/patterns/cli/)
-and [ChirpStack backend](https://home-assistant-libs.github.io/lorawan-connection/connection/chirpstack/).
+and [Connecting to ChirpStack](https://home-assistant-libs.github.io/lorawan-connection/connection/chirpstack/).
 
 ## Migrating from 0.2
 
