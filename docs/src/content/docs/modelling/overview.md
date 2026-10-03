@@ -66,12 +66,15 @@ A writable device exposes async methods for its operations. For a Dragino LT-222
 instance named `relay`, switch its first relay on with:
 
 ```python
-queue_id = await relay.async_set_relay(1, True)
+import asyncio
+
+async with asyncio.timeout(30):
+    queue_id = await relay.async_set_relay(1, True)
 ```
 
 The model encodes the command and sends it through the connection's downlink sender.
 The method waits for a positive device acknowledgement and returns the queue ID.
-Use `asyncio.timeout()` around the call to set a deadline. This model updates
+The timeout raises `TimeoutError` if the call takes longer than 30 seconds. This model updates
 its reported relay state when an uplink arrives. Subscribe to its updates to observe
 that change. See [commands and relays](/lorawan-connection/patterns/commands/) for
 sender setup and the complete example.

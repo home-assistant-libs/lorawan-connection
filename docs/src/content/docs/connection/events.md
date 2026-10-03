@@ -106,10 +106,6 @@ reconnection. It creates a collection for each logical network and forwards even
 to it. One collection can span several ChirpStack applications; those are server
 inventory groups, separate from the program running the library.
 
-Choose a stable `network_id` and retain it across reconnects and credential changes.
-The pair `(network_id, dev_eui)` identifies a device. Descriptors normalize the
-DevEUI to 16 lowercase hexadecimal characters.
-
 Connection loss is reported through the subscription's disconnect callback. It
 does not mean the devices were removed. Close the old collection when the
 subscription ends. A new connection and subscription supply inventory to a new
