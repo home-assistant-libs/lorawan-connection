@@ -1,0 +1,145 @@
+---
+title: Devices and collections
+description: Model a device's values and commands, then manage devices in a collection.
+---
+
+import { Code } from '@astrojs/starlight/components';
+import source from '../../../../../examples/dragino_lorawan/__init__.py?raw';
+
+A device model is a Python object representing one physical LoRaWAN device. Its
+attributes hold reported values. Its methods let applications observe changes and
+send commands. The example on this page models a Dragino LT-22222-L.
+
+## Complete device example
+
+Create a subclass of `Device` for each supported model. In this example, `LT22222`
+defines its data, decodes incoming events in `handle_event()`, and encodes commands
+in its async methods. The base class provides identity, update subscriptions, and
+command delivery.
+
+Save this as `dragino_lorawan.py`. It also declares `DraginoDevices`, the collection
+explained later on this page. The code is the same implementation exercised by the
+example's tests.
+
+<Code code={source} lang="python" title="dragino_lorawan.py" />
+
+The constructor receives a `DeviceDescriptor` for the physical device and passes
+it to `super().__init__(descriptor)`. Data starts as `None` until a report arrives.
+The model uses channel dictionaries; other devices can use individual attributes,
+nested objects, or dataclasses.
+
+`handle_event()` checks the event type and decodes supported payloads before
+updating attributes. One message can update several values. This model calls
+`notify()` once after a change, so listeners see the complete update.
+
+## Read values and observe changes
+
+Applications read model attributes directly. Reading them does not contact the
+device. The values contain the latest report the model received.
+
+Define a callback for devices announced by the collection:
+
+```python
+from dragino_lorawan import LT22222
+
+
+def device_added(device: LT22222) -> None:
+    def show_values() -> None:
+        print(device.descriptor.name)
+        print(device.voltages, device.digital_inputs, device.relays)
+
+    show_values()
+    device.add_update_listener(show_values)
+```
+
+The first call reads the current values. Later, `notify()` calls `show_values()`
+again. Listeners take no arguments and run synchronously.
+
+`add_update_listener()` returns a function you can call to unsubscribe. Closing
+the model also removes its listeners. Registering a listener does not replay state;
+that is why the example calls `show_values()` first.
+
+## Send commands
+
+Applications call the model's async methods. For example:
+
+```python
+import asyncio
+
+from dragino_lorawan import LT22222
+
+
+async def turn_on(device: LT22222) -> str:
+    async with asyncio.timeout(30):
+        return await device.async_set_relay(1, True)
+```
+
+The model encodes the command and calls `async_send_downlink()`. The collection
+supplies the sender, as shown below. The method waits for a device acknowledgement
+and returns the queue ID. The caller's timeout raises `TimeoutError` after 30 seconds.
+
+An acknowledgement confirms delivery. Reported state changes when an uplink arrives,
+and the model notifies its listeners. See [sending commands](/lorawan-connection/patterns/commands/)
+for errors, cancellation, and the model's API.
+
+:::note[Unreleased]
+Command ACK waiting is available on `main` and is not yet released on PyPI.
+:::
+
+## Manage devices with a collection
+
+A collection holds the device instances for one logical network. It creates
+supported models from inventory events, sends later events to the correct instance,
+and removes devices when they leave the inventory.
+
+The `DraginoDevices` class at the end of the complete example declares its supported
+models in `DEVICES`. The base collection uses each class's `vendor_id` and
+`catalog_model_id` to select a model for an incoming descriptor.
+
+This function creates the collection and registers the `device_added` callback
+from above. It accepts an async sender from the connection:
+
+```python
+from dragino_lorawan import DraginoDevices
+from lorawan_connection import DeviceCollection, SendDownlink
+
+
+def create_collection(
+    network_id: str, send_downlink: SendDownlink
+) -> DeviceCollection[LT22222]:
+    collection = DraginoDevices(network_id=network_id, send_downlink=send_downlink)
+    collection.subscribe_device_added(device_added)
+    return collection
+```
+
+In the [ChirpStack connection example](/lorawan-connection/connection/chirpstack/),
+replace the SenseCAP collection and its device-added callback with these definitions.
+Create it with `create_collection(connection.network_id, connection.async_send_downlink)`
+and keep the connection's event subscription and cleanup. The collection attaches
+the sender before announcing each device.
+
+You can also construct a collection directly from model classes. Inside
+`create_collection`, the equivalent construction is:
+
+```python
+from lorawan_connection import DeviceCollection
+
+collection = DeviceCollection(
+    [LT22222], network_id=network_id, send_downlink=send_downlink
+)
+```
+
+## Device lifecycle
+
+`subscribe_device_added()` reports existing models immediately and future additions
+as they arrive. The collection announces a model before passing its first event
+to it, so the callback can attach listeners before readings arrive.
+Current instances are available in `collection.devices`, keyed by DevEUI.
+
+A metadata update replaces the descriptor on the existing instance. A change to its
+vendor or catalog identity replaces the model. Removal closes the model and calls
+listeners registered with `subscribe_device_removed()`.
+
+When stopping, unsubscribe from the connection, then call `collection.close()`.
+This closes every model, removes listeners, and ends pending command waits.
+Close operations are safe to repeat.

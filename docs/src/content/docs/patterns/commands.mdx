@@ -3,17 +3,15 @@ title: Sending commands
 description: Encode device commands in the library and send them through an async callback.
 ---
 
-import { Code } from '@astrojs/starlight/components';
-import source from '../../../../../examples/dragino_lorawan/__init__.py?raw';
-
 :::note[Unreleased]
 Command ACK waiting is available on `main` and is not yet released on PyPI.
 :::
 
-The example below models a Dragino LT-22222-L. Its methods encode commands, send
+The [device example](/lorawan-connection/modelling/overview/#complete-device-example)
+models a Dragino LT-22222-L. Its methods encode commands, send
 them through the connection, and wait for the device's acknowledgement.
 
-Save the complete Dragino example below as `dragino_lorawan.py`. In the
+Save that complete example as `dragino_lorawan.py`. In the
 [connection example](/lorawan-connection/connection/chirpstack/), replace the SenseCAP
 collection with this one to supply the command sender:
 
@@ -45,8 +43,6 @@ Relay commands use FPort 2 and prefix `03`. Each relay byte is `00` for open, `0
 closed, or `11` to leave it unchanged. The model gives commands a 30-second queue
 expiry so a stale action is not delivered much later. Choose a different policy
 for devices designed to receive commands infrequently.
-
-<Code code={source} lang="python" title="dragino_lorawan/__init__.py" />
 
 The command requests a confirmed downlink and waits for a matching positive `ACK`.
 The shared collection handles ACK correlation, including concurrent commands.
