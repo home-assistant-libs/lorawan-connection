@@ -15,6 +15,6 @@ and `llms-full.txt`. GitHub Actions builds every branch and deploys `main` to
 <https://home-assistant-libs.github.io/lorawan-connection/>.
 
 Guides explain design and usage. Reference pages define signatures and behavior.
-**Building a library** contains no HA code. **Home Assistant** explains the
-consumer integration separately and identifies the provider API as a POC.
+Keep device-library guides framework-neutral. Put framework-specific APIs and
+consumer integration examples in their dedicated section.
 The quickstart and device-library pages embed tested source from `examples/`.
