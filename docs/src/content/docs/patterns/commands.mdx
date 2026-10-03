@@ -6,8 +6,13 @@ description: Encode device commands in the library and send them through an asyn
 import { Code } from '@astrojs/starlight/components';
 import source from '../../../../../examples/dragino_lorawan/__init__.py?raw';
 
+:::note[Unreleased]
+Command ACK waiting is available on `main` and is not yet released on PyPI.
+:::
+
 The Dragino LT-22222-L has two independent relays. Its model owns command encoding
-and reported relay states. Applications call `await device.async_set_relay(1, True)`.
+and reported relay states. Applications call `await device.async_set_relay(1, True)`
+and wait for the device's acknowledgement.
 
 Supply the sender when constructing the collection:
 
@@ -38,15 +43,34 @@ for devices designed to receive commands infrequently.
 
 <Code code={source} lang="python" title="dragino_lorawan/__init__.py" />
 
-The command returns after the server queues it. Both relay attributes retain their
-reported values until an uplink arrives. A single report can update both relays,
-then the model calls `notify()` once. Transmission and protocol acknowledgements
-do not change relay state.
+The command requests a confirmed downlink and waits for a matching positive `ACK`.
+The shared collection handles ACK correlation, including concurrent commands.
+Both relay attributes retain their reported values until an uplink arrives. A single
+report can update both relays, then the model calls `notify()` once.
+
+The caller chooses how long to wait:
+
+```python
+import asyncio
+
+async with asyncio.timeout(30):
+    await device.async_set_relay(1, True)
+```
+
+A negative ACK raises `DownlinkError`; the timeout context raises `TimeoutError`.
+Close the collection on connection loss to end pending waits. Cancellation stops
+waiting but does not remove a command already queued on the server. Queue expiry
+controls how long the server may retain it.
+
+A model can pass `wait_for_ack=False` to `async_send_downlink()` for an unconfirmed
+command that returns after enqueueing. The confirmation flag is set automatically
+from `wait_for_ack`. An ACK confirms delivery; device reports establish relay state.
 
 ## Testing
 
 Inject an `AsyncMock` sender and assert the encoded bytes, DevEUI, port, and expiry.
-Verify that queue acceptance and write errors leave reported state unchanged.
+Feed an ACK with the returned queue-item ID to complete the command. Verify that
+queue acceptance, ACKs, and write errors leave reported state unchanged.
 Feed uplinks to test channel isolation, malformed frames, and notifications.
 
 The external POC test uses a real ChirpStack server and simulated gateway/device.

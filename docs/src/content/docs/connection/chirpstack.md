@@ -93,6 +93,10 @@ application bytes. FPort must be 1–223. An optional expiry is a timezone-aware
 ChirpStack owns encryption, frame counters, scheduling, and expiry. The helper never
 flushes existing commands or retries an ambiguous RPC result.
 
-A returned queue ID means accepted, a `TX_ACK` means transmitted, and a positive
+The backend's returned queue ID means accepted, a `TX_ACK` means transmitted, and a positive
 `ACK` means the device acknowledged a confirmed downlink. Models interpret device
 reports to determine whether the requested action took effect.
+
+`Device.async_send_downlink()` uses this sender and waits for the corresponding
+ACK by default. The backend method itself returns after enqueueing. See
+[commands and relays](/lorawan-connection/patterns/commands/) for caller timeouts.

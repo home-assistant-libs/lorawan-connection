@@ -207,10 +207,11 @@ models = DraginoDevices(
 )
 ```
 
-Its switch entities call `await device.async_set_relay(channel, on)`. The library
-chooses the port and bytes. Entities read `device.relays[channel]` and observe the
-same update listener used by sensor models. Convert `DownlinkError` to a
-`HomeAssistantError` so a denied or failed command reaches the caller.
+Its switch entities call `await device.async_set_relay(channel, on)` inside
+`asyncio.timeout(30)`. The library encodes the command and waits for its device ACK.
+Entities read `device.relays[channel]` and observe the same update listener used
+by sensor models. Device reports update relay state. Convert `DownlinkError` and
+`TimeoutError` to a `HomeAssistantError` so a failed command reaches the caller.
 
 Keep switches visible when the configured key is read-only. Fail the requested
 write with a permission error; do not reject setup or mark the whole network offline.

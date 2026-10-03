@@ -46,7 +46,7 @@ class LT22222(Device):
             self.notify()
 
     async def async_set_relay(self, channel: int, on: bool) -> str:
-        """Queue one relay command; wait for telemetry to update reported state."""
+        """Await command acknowledgement; telemetry updates reported state."""
         if channel not in (1, 2):
             raise ValueError("Relay channel must be 1 or 2")
         states = [0x11, 0x11]

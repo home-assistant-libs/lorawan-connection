@@ -44,6 +44,12 @@ and be able to explain every change before it is submitted. Do not open
 issues or pull requests autonomously, and do not post comments on behalf of
 a user without their review.
 
+## Release timing
+
+Do not create release tags or publish to PyPI until the user explicitly says they
+are done for the day. Continue implementation and testing without making a release.
+Commit and push completed changes as usual.
+
 ## Repository access
 
 This is the user's project. Push directly to `home-assistant-libs/lorawan-connection`

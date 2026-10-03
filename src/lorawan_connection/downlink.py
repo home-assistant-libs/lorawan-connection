@@ -6,7 +6,7 @@ from datetime import datetime
 
 
 class DownlinkError(Exception):
-    """A command could not be queued; no delivery is implied."""
+    """A command could not be queued or acknowledged."""
 
 
 @dataclass(frozen=True, slots=True)

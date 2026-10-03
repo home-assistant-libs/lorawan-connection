@@ -26,16 +26,27 @@ modify state. Notify after committing a complete model update. Removed listeners
 are skipped, new listeners wait for the next notification, and failures are logged
 without stopping other listeners. Closed devices ignore notifications.
 
-### async_send_downlink(*, data, f_port, confirmed=False, expires_at=None) → str
+### async_send_downlink(*, data, f_port, wait_for_ack=True, expires_at=None) → str
+
+ACK waiting is not yet released on PyPI.
 
 Queue application bytes for this model's DevEUI using its collection's sender.
-Returns the queue-item ID when the backend accepts the command. The method does not
-change model attributes or wait for delivery. A closed model or missing sender raises
-`DownlinkError`. Cancellation and sender errors propagate without retries.
+By default, request a confirmed downlink and return its queue-item ID after a
+positive device ACK. The collection correlates ACKs before forwarding them to the
+model's `handle_event()`. The model does not need to call a base event handler.
+
+Set `wait_for_ack=False` to send an unconfirmed downlink and return when queued.
+There is no separate `confirmed` or timeout argument. Use `asyncio.timeout()` to
+bound the operation. Cancellation ends the wait without removing a queued command.
+`expires_at` is a separate server queue expiry.
+
+A negative ACK, closed model, or missing sender raises `DownlinkError`. Closing
+the device ends pending ACK waits. Sender errors and cancellation propagate without
+retries. This method does not change reported model attributes.
 
 ### close() → None
 
-Set `closed` to `True` and clear listeners. Repeated calls are harmless. Models with
+Set `closed` to `True`, clear listeners, and fail pending ACK waits. Repeated calls are harmless. Models with
 additional resources can override this method and call `super().close()`.
 
 ## DeviceCollection[DeviceT]

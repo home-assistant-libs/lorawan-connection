@@ -72,10 +72,14 @@ Collections select models from catalog identity, never from names or payload gue
 
 ## Sending commands
 
+ACK waiting is available on `main` and is not yet released on PyPI.
+
 Pass an async `send_downlink` callback to the collection. Device models encode their
-commands and call `async_send_downlink(data=..., f_port=...)`. The ChirpStack backend
-queues the bytes and returns a queue-item ID. Device reports update model attributes;
-queue acceptance does not confirm that an action happened.
+commands and call `async_send_downlink(data=..., f_port=...)`. The method requests a
+confirmed downlink and waits for its device ACK before returning the queue-item ID.
+Use `wait_for_ack=False` to send an unconfirmed command and return after enqueueing.
+Callers can bound the wait with `asyncio.timeout()`. Device reports update model
+attributes; an ACK confirms delivery, not the resulting device state.
 
 The [Dragino relay example](https://home-assistant-libs.github.io/lorawan-connection/patterns/commands/)
 controls both LT-22222-L relays independently. It uses the existing ChirpStack catalog
@@ -126,6 +130,16 @@ Inherit `Device` without a state type parameter. Call `super().__init__(descript
 without `state=`. Define your model's data as attributes or properties. An existing
 state object can remain a vendor-defined attribute, but the base does not require it.
 The CLI's JSON `state` field now contains the model's public attributes and properties.
+
+## Migrating from 0.6 (unreleased)
+
+`Device.async_send_downlink()` now waits for a device ACK by default. Replace its
+`confirmed` argument with `wait_for_ack`: waiting automatically requests confirmation.
+Use `wait_for_ack=False` for the previous enqueue-only behavior. The low-level
+`Downlink.confirmed` field and backend sender still describe the transport request.
+Feed ACK events through the collection and close it on disconnect to end pending waits.
+Use `asyncio.timeout()` where the caller needs a deadline. Cancelling a wait does
+not remove a command already queued on the server.
 
 ## Home Assistant
 

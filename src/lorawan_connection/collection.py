@@ -2,11 +2,13 @@
 
 import logging
 from collections.abc import Callable, Sequence
+from typing import cast
 
 from .callbacks import Unsubscribe, notify, subscribe
 from .device import Device
 from .downlink import SendDownlink
 from .events import DeviceDescriptor, DeviceEvent, EventType
+from .payloads import Ack
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -111,6 +113,8 @@ class DeviceCollection[DeviceT: Device]:
             else:
                 device.descriptor = descriptor
         if device is not None and self.devices.get(eui) is device:
+            if event.type == EventType.ACK and event.data is not None:
+                device._handle_ack(cast(Ack, event.data))
             device.handle_event(event)
 
     def close(self) -> None:

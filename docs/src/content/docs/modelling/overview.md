@@ -70,7 +70,8 @@ queue_id = await relay.async_set_relay(1, True)
 ```
 
 The model encodes the command and sends it through the connection's downlink sender.
-The returned queue ID means the server accepted the command. This model updates
+The method waits for a positive device acknowledgement and returns the queue ID.
+Use `asyncio.timeout()` around the call to set a deadline. This model updates
 its reported relay state when an uplink arrives. Subscribe to its updates to observe
 that change. See [commands and relays](/lorawan-connection/patterns/commands/) for
 sender setup and the complete example.

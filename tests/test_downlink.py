@@ -10,7 +10,13 @@ import pytest
 from chirpstack_api import api
 
 from dragino_lorawan import LT22222, DraginoDevices
-from lorawan_connection import Downlink, DownlinkError, EventType
+from lorawan_connection import (
+    AckData,
+    DeviceEventData,
+    Downlink,
+    DownlinkError,
+    EventType,
+)
 from lorawan_connection.chirpstack import ChirpStackConnection
 
 from .conftest import DESCRIPTOR, inventory
@@ -36,13 +42,27 @@ async def test_relay_commands(channel: int, on: bool, payload: str) -> None:
     collection = DraginoDevices(network_id="network", send_downlink=sender)
     collection.handle_event(inventory(descriptor))
     device = collection.devices[descriptor.dev_eui]
+
+    async def send(downlink: Downlink) -> str:
+        collection.handle_event(
+            DeviceEventData(
+                "network",
+                descriptor.dev_eui,
+                EventType.ACK,
+                datetime.now(UTC),
+                data=AckData("queue-id", True),
+            )
+        )
+        return "queue-id"
+
+    sender.side_effect = send
     before = datetime.now(UTC)
     assert await device.async_set_relay(channel, on) == "queue-id"
     request = sender.call_args.args[0]
     assert request.dev_eui == descriptor.dev_eui
     assert request.data == bytes.fromhex(payload)
     assert request.f_port == 2
-    assert not request.confirmed
+    assert request.confirmed
     assert (
         before + timedelta(seconds=30)
         <= request.expires_at
