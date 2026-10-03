@@ -26,10 +26,18 @@ and API key.
 
 Declare one or more vendor IDs in the proposed `lorawan` manifest field. The
 provider matches those IDs against recognized catalog identities to discover the
-integration.
+integration. For example, a SenseCAP manifest includes:
+
+```json
+{
+  "dependencies": ["lorawan"],
+  "lorawan": [744]
+}
+```
+
+Use numeric LoRa Alliance VendorIDs; a match on any listed ID selects the integration.
 The discovery flow confirms one entry for that network. Its unique ID must remain
-stable when the server key changes. See [provider and discovery](/lorawan-connection/home-assistant/provider/)
-for current limitations and the subscription signature.
+stable when the server key changes.
 
 ## Config-entry setup
 

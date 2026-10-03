@@ -9,6 +9,7 @@ export default defineConfig({
   base: "/lorawan-connection",
   redirects: {
     "/patterns/decoding/": "/lorawan-connection/modelling/overview/#decode-events-and-update-state",
+    "/home-assistant/provider/": "/lorawan-connection/home-assistant/integration/",
     "/patterns/commands/": "/lorawan-connection/modelling/overview/#send-commands",
   },
   integrations: [
@@ -53,7 +54,6 @@ export default defineConfig({
         ] },
         { label: "Home Assistant", items: [
           { label: "Integration structure", slug: "home-assistant/integration" },
-          { label: "Provider and discovery", slug: "home-assistant/provider" },
         ] },
       ],
     }),
