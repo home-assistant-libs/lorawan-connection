@@ -12,7 +12,7 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from . import Device, DeviceCollection, DeviceEventData, EventType
+from . import Device, DeviceCollection, DeviceDescriptor, DeviceEventData, EventType
 from .callbacks import Unsubscribe
 
 if TYPE_CHECKING:
@@ -106,8 +106,34 @@ def _model_data(device: Device) -> dict[str, object]:
     }
 
 
+class _CLICollection(DeviceCollection[Device]):
+    """Report unmapped devices from vendors represented by the supplied models."""
+
+    def __init__(self, models: Sequence[type[Device]], *, network_id: str) -> None:
+        super().__init__(models, network_id=network_id)
+        self._vendor_ids = {model.vendor_id for model in models}
+        self._warned: set[str] = set()
+
+    def _create_device(self, descriptor: DeviceDescriptor) -> Device | None:
+        device = super()._create_device(descriptor)
+        if (
+            device is None
+            and descriptor.vendor_id in self._vendor_ids
+            and descriptor.dev_eui not in self._warned
+        ):
+            self._warned.add(descriptor.dev_eui)
+            print(
+                f"Warning: unmapped device {descriptor.name!r} "
+                f"(DevEUI {descriptor.dev_eui}, vendor ID {descriptor.vendor_id}, "
+                f"catalog model ID {descriptor.catalog_model_id or 'missing'}). "
+                "No supported model matches this device.",
+                file=sys.stderr,
+            )
+        return device
+
+
 async def _watch(args: argparse.Namespace, models: Sequence[type[Device]]) -> None:
-    collection = DeviceCollection[Device](models, network_id=args.server)
+    collection = _CLICollection(models, network_id=args.server)
     subscriptions: dict[str, Unsubscribe] = {}
     finished: asyncio.Future[Exception] = asyncio.get_running_loop().create_future()
 

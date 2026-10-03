@@ -107,6 +107,8 @@ By default, it discovers applications across all accessible tenants and streams
 live updates. Use `--tenant UUID` or repeat `--application UUID` to restrict the
 selection. Keys that cannot list tenants require `--tenant`.
 Use `--list` to print inventory and exit, or `--json` for machine-readable output.
+Unmapped devices from supported vendors produce a warning on stderr, once per
+device per run. Each warning includes the device name, DevEUI, vendor ID, and catalog model ID.
 
 ```sh
 pip install "lorawan-connection[chirpstack]"

@@ -63,6 +63,9 @@ changes. Add `--json` for one JSON object per line:
 ```
 
 Output types are `added`, `state`, and `removed`. Only supported models appear.
+If a device has a supported vendor ID but no matching model, the helper warns on
+stderr once per device per run. The warning includes its name, DevEUI, vendor ID,
+and catalog model ID. This also applies to `--list`; `--json` output stays on stdout.
 The JSON `state` field contains the model's public data. Dataclass values become JSON
 objects. Bytes become hex strings, dates use ISO format, and enums use their values.
 Other custom objects use their string representation.

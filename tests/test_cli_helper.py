@@ -238,6 +238,84 @@ async def test_live_state_removal_and_disconnect(
     connection.close.assert_awaited_once()
 
 
+@pytest.mark.parametrize("list_only", [False, True])
+@pytest.mark.parametrize("json_output", [False, True])
+async def test_warn_unmapped_devices_from_supported_vendors(
+    connection: Mock,
+    capsys: pytest.CaptureFixture[str],
+    list_only: bool,
+    json_output: bool,
+) -> None:
+    class OtherVendor(S2101):
+        vendor_id = 123
+
+    unmapped = [
+        replace(DESCRIPTOR, dev_eui="0000000000000002", catalog_model_id="unknown"),
+        replace(DESCRIPTOR, dev_eui="0000000000000003", catalog_model_id=""),
+        replace(
+            DESCRIPTOR,
+            dev_eui="0000000000000004",
+            vendor_id=OtherVendor.vendor_id,
+            catalog_model_id="unknown",
+        ),
+    ]
+    descriptors = [
+        DESCRIPTOR,
+        *unmapped,
+        replace(DESCRIPTOR, dev_eui="0000000000000005", vendor_id=999),
+        replace(DESCRIPTOR, dev_eui="0000000000000006", vendor_id=None),
+    ]
+    connection.inventory.return_value = descriptors
+
+    async def subscribe(callback, disconnected):
+        for event_type in (EventType.ADDED, EventType.UPDATED):
+            for descriptor in descriptors:
+                callback(
+                    DeviceEventData(
+                        "network",
+                        descriptor.dev_eui,
+                        event_type,
+                        datetime.now(UTC),
+                        descriptor,
+                    )
+                )
+        disconnected(RuntimeError("offline"))
+        return Mock()
+
+    connection.async_subscribe.side_effect = subscribe
+    parsed = args()
+    parsed.server = "network"
+    parsed.list = list_only
+    parsed.json = json_output
+    with patch(
+        "lorawan_connection.cli_helper.connect_from_args",
+        AsyncMock(return_value=connection),
+    ):
+        if list_only:
+            await _watch(parsed, [S2101, OtherVendor])
+        else:
+            with pytest.raises(RuntimeError, match="offline"):
+                await _watch(parsed, [S2101, OtherVendor])
+
+    captured = capsys.readouterr()
+    warnings = captured.err.splitlines()
+    assert len(warnings) == len(unmapped)
+    for warning, descriptor in zip(warnings, unmapped, strict=True):
+        assert warning.startswith("Warning: unmapped device ")
+        assert repr(descriptor.name) in warning
+        assert descriptor.dev_eui in warning
+        assert f"vendor ID {descriptor.vendor_id}" in warning
+        assert f"catalog model ID {descriptor.catalog_model_id or 'missing'}" in warning
+    if json_output:
+        rows = [json.loads(line) for line in captured.out.splitlines()]
+        assert rows
+        assert all(row["dev_eui"] == DESCRIPTOR.dev_eui for row in rows)
+    else:
+        assert f"added: {DESCRIPTOR.name}" in captured.out
+        assert "Warning:" not in captured.out
+    connection.close.assert_awaited_once()
+
+
 async def test_cancellation_closes_models_and_connection(connection: Mock) -> None:
     stop = Mock()
     subscribed = asyncio.Event()
