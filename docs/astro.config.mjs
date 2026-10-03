@@ -10,12 +10,12 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "lorawan-connection",
-      description: "Backend-neutral LoRaWAN events and device collections for Python.",
+      description: "A Python library for modelling LoRaWAN devices.",
       plugins: [
         starlightLinksValidator(),
         starlightLlmsTxt({
           projectName: "lorawan-connection",
-          description: "Read-only LoRaWAN event protocols, fixture dataclasses, and a device collection base for vendor libraries. The base package has no runtime dependencies; an optional ChirpStack backend provides inventory, live events, and queued downlinks.",
+          description: "A Python library for modelling LoRaWAN devices. Build device libraries with readings, commands, and update subscriptions. An optional ChirpStack connection provides inventory, live events, and queued downlinks.",
           details: [
             "- Requires Python 3.12 or later. Install with `pip install lorawan-connection`.",
             "- A caller owns the connection and forwards inventory and live events to a vendor DeviceCollection.",
