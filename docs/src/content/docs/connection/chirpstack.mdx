@@ -19,7 +19,7 @@ connecting. The backend accesses the server with an API key.
 
 Install the backend with `pip install "lorawan-connection[chirpstack]"`.
 
-Save the [SenseCAP example library](/lorawan-connection/patterns/library/#complete-example)
+Save the [SenseCAP example library](/lorawan-connection/getting-started/quickstart/#example-library)
 as `sensecap_lorawan.py`. Save the script below as `connect_sensors.py` in the same
 directory. Set `CHIRPSTACK_SERVER` to your server URL and `CHIRPSTACK_API_KEY` to
 your API key. Set `CHIRPSTACK_TENANT_ID` if your key cannot list tenants.
@@ -109,4 +109,4 @@ reports to determine whether the requested action took effect.
 
 `Device.async_send_downlink()` uses this sender and waits for the corresponding
 ACK by default. The backend method itself returns after enqueueing. See
-[sending commands](/lorawan-connection/patterns/commands/) for caller timeouts.
+[sending commands](/lorawan-connection/modelling/overview/#send-commands) for caller timeouts.

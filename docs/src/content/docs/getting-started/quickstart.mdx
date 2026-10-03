@@ -5,6 +5,7 @@ description: Replay an S2101 capture and observe its measurements.
 
 import { Code } from "@astrojs/starlight/components";
 import replay from "../../../../../examples/replay.py?raw";
+import library from "../../../../../examples/sensecap_lorawan/__init__.py?raw";
 
 Install the shared library from PyPI:
 
@@ -12,7 +13,7 @@ Install the shared library from PyPI:
 pip install lorawan-connection
 ```
 
-Save the [complete device library example](/lorawan-connection/patterns/library/#complete-example)
+Save the [example library](#example-library)
 as `sensecap_lorawan.py`. Save the replay below as `replay.py` in the same directory,
 then run it:
 
@@ -36,6 +37,17 @@ The model decodes it and notifies its state listener.
 The example closes the collection when finished. A real application also removes
 its provider subscription before closing its collection.
 
-Read [the device library](/lorawan-connection/patterns/library/) to see the model
-and decoder used here. Read [event delivery](/lorawan-connection/connection/events/)
-for the provider's responsibilities.
+## Example library
+
+Save this as `sensecap_lorawan.py` alongside `replay.py`:
+
+<Code code={library} lang="python" title="sensecap_lorawan.py" />
+
+This example follows the [Seeed reference decoders](https://github.com/Seeed-Solution/SenseCAP-Decoder).
+It decodes channel-one temperature and humidity records, but does not validate the
+two-byte trailer. It has been tested with captured payloads and a simulated device,
+not physical SenseCAP hardware.
+
+Read [Devices and collections](/lorawan-connection/modelling/overview/) to write
+your own models, then [Build a device library](/lorawan-connection/patterns/library/)
+to organize them into a package.

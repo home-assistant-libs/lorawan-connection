@@ -74,6 +74,13 @@ invalid frames leave existing state unchanged.
 For listeners, test unsubscribe and close. Repeated cleanup should be harmless.
 A listener exception must not prevent other consumers from receiving updates.
 
+## Test commands
+
+Inject an `AsyncMock` sender and assert the encoded bytes, DevEUI, port, and expiry.
+Feed an ACK with the sender's queue-item ID to complete the command. Cover positive
+and negative ACKs, sender failures, and cancellation. Verify that ACKs leave
+reported state unchanged and that a later uplink updates it.
+
 ## Test with ChirpStack payloads
 
 To test with generated ChirpStack messages, install the `chirpstack` extra.

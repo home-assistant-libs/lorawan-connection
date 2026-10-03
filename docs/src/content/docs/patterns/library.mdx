@@ -1,141 +1,87 @@
 ---
 title: Build a device library
-description: Start with a payload decoder, add device models, and expose a collection to applications.
+description: Organize device models into a library with a public collection, a CLI, and tests.
 ---
 
-import { Code } from "@astrojs/starlight/components";
-import library from "../../../../../examples/sensecap_lorawan/__init__.py?raw";
+A device library exposes a collection and the device models it manages.
+Applications discover models through the collection, read their attributes,
+subscribe to updates, and call their command methods.
 
-A device library turns LoRaWAN events into a Python API for a vendor's devices.
-It contains payload decoders, device classes with values and commands, and a
-collection that creates device models and routes events to them automatically.
-Applications observe the models and subscribe to their updates.
+Start with a model from [Devices and collections](/lorawan-connection/modelling/overview/).
+That guide covers decoding, state, commands, and model lifecycle. This page shows
+how those pieces fit into a Python package.
 
-This guide builds a small SenseCAP library for the S2101 temperature and humidity
-sensor. Start with one model and a captured payload. You can test the library
-before connecting it to a server.
+## Organize the package
 
-## 1. Create the package
-
-Create a Python package with `lorawan-connection` as a dependency in its
-`pyproject.toml`. Install the shared library and pytest for development:
-
-```sh
-pip install lorawan-connection pytest
-```
-
-Start with a small layout:
+Add `lorawan-connection` as a dependency in your package's `pyproject.toml`.
+Keep device models and their decoders together. For a SenseCAP library, the layout
+could be:
 
 ```text
 pyproject.toml
 sensecap_lorawan/
-  __init__.py       # decoder, device class, and collection
+  __init__.py       # public exports
+  s2101.py          # S2101 model and decoder
+  collection.py    # supported device models
+  __main__.py      # command-line entry point
 tests/
+  conftest.py      # collection fixture
   test_s2101.py
 ```
 
-Keep the first implementation in `__init__.py`. As you add models, move their
-classes and shared decoders into separate modules. Continue exporting the device
-classes and collection from the package so applications keep the same imports.
+The [quickstart example](/lorawan-connection/getting-started/quickstart/#example-library)
+contains the S2101 model and decoder. Put those in `s2101.py`. Add a module for each
+new model; move decoders shared by several models into a separate module.
 
-## 2. Write and test the decoder
+## Expose a collection
 
-Start with the vendor's payload specification and a captured frame whose readings
-you know. Write a function that takes bytes and returns decoded values. For the
-S2101, `decode_s2101(data)` returns temperature in degrees Celsius and relative
-humidity in percent.
-
-Test that function first:
-
-```python
-from sensecap_lorawan import decode_s2101
-
-
-def test_decode_s2101() -> None:
-    payload = bytes.fromhex("01011098530000010210A87A0000AF51")
-    assert decode_s2101(payload) == {"temperature": 21.4, "humidity": 31.4}
-```
-
-Add tests for partial readings and malformed frames. Decide how the decoder handles
-unknown measurements and vendor error values. The [decoding guide](/lorawan-connection/patterns/decoding/)
-explains the S2101 format and the sample decoder's validation limits.
-
-## 3. Wrap the decoder in a device class
-
-Create an `S2101` subclass of `Device`. Each instance represents one physical sensor.
-Its constructor accepts a `DeviceDescriptor` and passes it to
-`super().__init__(descriptor)` to initialize identity and subscriptions.
-
-Add `temperature` and `humidity` attributes, initially `None`. Implement
-`handle_event(event)` to accept the supported uplink port, call the decoder, and
-update the attributes present in the payload. Call `self.notify()` after an update
-so listeners can read the new values. A temperature-only reading preserves the
-previous humidity.
-
-Choose attributes and methods that fit each device. One event can update several
-attributes. A relay controller might expose relay states and an async
-`async_set_relay()` method. Keep event types, ports, parsing, and command encoding
-inside the library. See [sending commands](/lorawan-connection/patterns/commands/)
-when adding a writable device.
-
-## 4. Declare the supported models
-
-After defining `S2101`, add a `DeviceCollection` subclass in the same module and
-list your device classes in `DEVICES`:
+Declare the library's supported models in `collection.py`:
 
 ```python
 from lorawan_connection import DeviceCollection
+
+from .s2101 import S2101
 
 
 class SenseCapDeviceCollection(DeviceCollection[S2101]):
     DEVICES = (S2101,)
 ```
 
-Each device class declares `vendor_id` and `catalog_model_id`. The base collection
-matches those against incoming device descriptors, creates the matching class,
-and routes later events to that instance. It also handles removal and cleanup.
-Adding another supported model means implementing its class and adding it to
-`DEVICES`.
+The collection is the application's entry point for all supported devices on a
+network. It creates models, routes their events, and reports additions and
+removals. A device-added callback receives a model ready for the application to
+observe.
 
-See [devices and collections](/lorawan-connection/modelling/overview/) for the ID
-fields and lifecycle details.
-
-## Complete example
-
-Here are the decoder, device class, and collection together. Save this as
-`sensecap_lorawan/__init__.py` in the package above.
-
-<Code code={library} lang="python" title="sensecap_lorawan/__init__.py" />
-
-## 5. Test readings and notifications
-
-Test the public API with captured payloads. The collection creates the S2101 model
-from its descriptor and sends uplinks to it. Assert that the model decodes readings
-and notifies its listeners.
-
-The [testing guide](/lorawan-connection/patterns/testing/) provides a collection
-fixture with an S2101 already added. Use it to test readings and notifications.
-The [quickstart](/lorawan-connection/getting-started/quickstart/) is a runnable replay
-that prints the readings from the sample payload.
-
-For live devices, see [Connecting to ChirpStack](/lorawan-connection/connection/chirpstack/).
-That example connects the collection to the backend and uses a device-added
-callback to subscribe to each model's updates.
-
-## 6. Add a CLI for live devices
-
-Once replay tests pass, add `sensecap_lorawan/__main__.py`:
+Export the collection and model classes from `__init__.py`:
 
 ```python
-from lorawan_connection.cli_helper import run
+from .collection import SenseCapDeviceCollection
+from .s2101 import S2101
 
-from . import SenseCapDeviceCollection
-
-if __name__ == "__main__":
-    run(SenseCapDeviceCollection.DEVICES)
+__all__ = ["S2101", "SenseCapDeviceCollection"]
 ```
 
-The shared helper connects to ChirpStack and prints updates from supported devices.
-Install the optional
-`lorawan-connection[chirpstack]` dependency to run it. Follow the
-[command-line guide](/lorawan-connection/patterns/cli/) for server and API-key arguments.
+This gives callers stable imports as the package grows. With several device
+classes, use their union as the collection's type parameter and list them all
+in `DEVICES`.
+
+## Keep the application boundary clear
+
+The library owns payload formats, ports, units, device commands, and reported
+state. Its public attributes and methods let applications use devices without
+interpreting LoRaWAN messages.
+
+The application owns credentials, connection setup, and reconnection. Keep backend
+imports in connection scripts such as the CLI. The device models use the shared
+event and downlink interfaces. See [Connecting to ChirpStack](/lorawan-connection/connection/chirpstack/)
+for a complete application using the SenseCAP collection.
+
+## Add a CLI and tests
+
+Expose a command with the [command-line helper](/lorawan-connection/patterns/cli/).
+It accepts the collection's model classes, connects to a server, and prints device
+updates. This lets users try the library with their devices.
+
+Use the [testing guide](/lorawan-connection/patterns/testing/) to create a collection
+fixture with a device already added. Test the library through its public model
+attributes, command methods, and update listeners using captured payloads.

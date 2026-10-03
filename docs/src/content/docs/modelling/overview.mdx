@@ -28,9 +28,19 @@ it to `super().__init__(descriptor)`. Data starts as `None` until a report arriv
 The model uses channel dictionaries; other devices can use individual attributes,
 nested objects, or dataclasses.
 
-`handle_event()` checks the event type and decodes supported payloads before
-updating attributes. One message can update several values. This model calls
-`notify()` once after a change, so listeners see the complete update.
+## Decode events and update state
+
+Implement `handle_event()` to check the event type and supported port, then decode
+the payload. Keep byte layouts, units, checksums, and vendor error values in the
+model or its decoder. Python's `int.from_bytes` and `struct` can read binary fields.
+
+Validate the whole payload before changing attributes. Invalid data leaves the
+previous values intact. A partial reading updates only the values it contains,
+unless the device protocol says an omitted value is no longer available.
+
+One message can update several values. Update them all before calling `notify()`
+so listeners see the complete update. Models choose their own timestamp ordering
+and stale-data rules; the collection does not impose them.
 
 ## Read values and observe changes
 
@@ -76,14 +86,38 @@ async def turn_on(device: LT22222) -> None:
 
 The model encodes the command and calls `async_send_downlink()`. The collection
 supplies the sender, as shown below. The method completes after a device acknowledgement.
-The caller's timeout raises `TimeoutError` after 30 seconds.
+The caller's timeout raises `TimeoutError` after 30 seconds. Keep the connection's
+event subscription running so acknowledgements can arrive.
 
 An acknowledgement confirms delivery. Reported state changes when an uplink arrives,
-and the model notifies its listeners. See [sending commands](/lorawan-connection/patterns/commands/)
-for errors, cancellation, and the model's API.
+and the model notifies its listeners.
 
-:::note[Unreleased]
-:::
+### Implement a command method
+
+Validate the caller's arguments and encode them using the device's protocol.
+Then await `self.async_send_downlink(data=payload, f_port=port)` from the model's
+async method. The base class supplies the device's DevEUI and waits for its ACK.
+It returns `None` on success. Keep reported attributes unchanged until a device
+report arrives.
+
+By default, `wait_for_ack=True` requests a confirmed downlink. A model can pass
+`wait_for_ack=False` to send an unconfirmed command and return after the server
+accepts it. Confirmation follows this setting automatically.
+
+If a command should expire while queued, pass a timezone-aware `expires_at`
+datetime. Queue expiry limits how long the server retains a command; the caller's
+timeout limits how long the application waits.
+
+### Handle failures
+
+A rejected command or negative acknowledgement raises `DownlinkError`.
+Sending also raises `DownlinkError` when the model is closed or has no sender.
+Applications can catch this and `TimeoutError` where they report the result to
+the user.
+
+Cancellation stops waiting. It does not remove a command already queued on the
+server, which may still reach the device. Close the collection on connection loss
+to end pending acknowledgement waits.
 
 ## Manage devices with a collection
 
