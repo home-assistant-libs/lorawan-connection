@@ -2,6 +2,8 @@
 
 ## Documentation
 
+- Name subscription cleanup callbacks `unsubscribe` in examples, with a suffix
+  when several subscriptions need distinct names.
 - Keep the general documentation framework-neutral. Home Assistant details belong
   only under `docs/src/content/docs/home-assistant/` or in a dedicated Home
   Assistant section of the README. Sidebar navigation can link to that section.

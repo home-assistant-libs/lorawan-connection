@@ -34,11 +34,13 @@ async def main() -> None:
     devices.subscribe_device_added(device_added)
     try:
         connection.application_ids = list(await connection.applications())
-        stop = await connection.async_subscribe(devices.handle_event, on_disconnect)
+        unsubscribe = await connection.async_subscribe(
+            devices.handle_event, on_disconnect
+        )
         try:
             error = await disconnected
         finally:
-            stop()
+            unsubscribe()
         raise error
     finally:
         devices.close()

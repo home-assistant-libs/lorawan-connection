@@ -34,7 +34,9 @@ class Sensors(DeviceCollection[Sensor]):
 
 
 sensors = Sensors(network_id="my-network")
-stop = sensors.subscribe_device_added(lambda device: print(device.descriptor.name))
+unsubscribe = sensors.subscribe_device_added(
+    lambda device: print(device.descriptor.name)
+)
 # Feed inventory and live events into sensors.handle_event(event).
 ```
 

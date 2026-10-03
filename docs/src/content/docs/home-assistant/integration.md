@@ -62,7 +62,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SenseCapConfigEntry) -> 
         hass.config_entries.async_schedule_reload(entry.entry_id)
 
     try:
-        stop = await lorawan.async_subscribe(
+        unsubscribe = await lorawan.async_subscribe(
             hass,
             entry.data["provider_entry_id"],
             frozenset({VENDOR_ID}),
@@ -73,7 +73,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SenseCapConfigEntry) -> 
         devices.close()
         raise ConfigEntryNotReady("LoRaWAN provider is not connected") from error
 
-    entry.async_on_unload(stop)
+    entry.async_on_unload(unsubscribe)
     entry.async_on_unload(devices.close)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
@@ -184,7 +184,8 @@ class SenseCapTemperature(SensorEntity):
         return not self.device.closed
 
     async def async_added_to_hass(self) -> None:
-        self.async_on_remove(self.device.add_update_listener(self.async_write_ha_state))
+        unsubscribe = self.device.add_update_listener(self.async_write_ha_state)
+        self.async_on_remove(unsubscribe)
 ```
 
 Add humidity the same way, using `SensorDeviceClass.HUMIDITY` and `PERCENTAGE`.
