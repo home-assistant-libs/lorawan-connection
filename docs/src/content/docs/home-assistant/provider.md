@@ -66,9 +66,25 @@ open. Remove the disconnect listener when unloading the consumer too.
 
 ## Catalog discovery
 
-Vendor `744` identifies Seeed and can select the `sensecap` integration. Discovery
-creates one config flow per vendor integration and provider. The HA registration
-mechanism for vendor IDs still needs to be defined.
+The proposed `lorawan` manifest field lists the numeric LoRa Alliance VendorIDs
+that an integration represents. For example, a SenseCAP manifest includes:
+
+```json
+{
+  "domain": "sensecap",
+  "dependencies": ["lorawan"],
+  "lorawan": [744]
+}
+```
+
+This is a manifest excerpt. List one or more vendor IDs; a match on any ID selects
+the integration. Use Alliance VendorIDs, not ChirpStack catalog vendor UUIDs.
+
+HA validates the list and generates a vendor-to-integration discovery index.
+The provider matches resolved device vendor IDs against that index and starts a
+discovery flow with `provider_entry_id` and `network_id`. Discovery is deduplicated
+per integration and provider. Later matching devices join the same collection.
+The device library selects supported models within those vendors.
 
 ChirpStack needs an imported global catalog profile for reliable automatic model
 identification in the tested version. The `device_id` protobuf field exists, but
@@ -81,7 +97,7 @@ The tested SenseCAP path is:
 1. Provision an S2101 in ChirpStack using its recognized catalog profile.
 2. Add the LoRaWAN integration and select the tenant and applications.
 3. Confirm the discovered SenseCAP integration.
-4. The provider's device descriptions creates an S2101 model in the collection.
+4. The collection creates an S2101 model from the provider's device description.
 5. Entities read temperature and humidity after an uplink updates that model.
 
 ## ChirpStack findings

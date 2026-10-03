@@ -24,7 +24,9 @@ The vendor library depends on `lorawan-connection`. Store `provider_entry_id` an
 the stable `network_id` in the vendor config entry. The provider keeps the endpoint
 and API key.
 
-The provider discovers a vendor integration from recognized catalog identities.
+Declare one or more vendor IDs in the proposed `lorawan` manifest field. The
+provider matches those IDs against recognized catalog identities to discover the
+integration.
 The discovery flow confirms one entry for that network. Its unique ID must remain
 stable when the server key changes. See [provider and discovery](/lorawan-connection/home-assistant/provider/)
 for current limitations and the subscription signature.
