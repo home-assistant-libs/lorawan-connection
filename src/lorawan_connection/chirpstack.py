@@ -395,8 +395,9 @@ class ChirpStackConnection:
 
     def _notify_disconnect(self) -> None:
         self._subscribers.clear()
-        notify(self._disconnect_listeners, None)
-        self._disconnect_listeners.clear()
+        listeners, self._disconnect_listeners = self._disconnect_listeners, []
+        notify(listeners, None)
+        listeners.clear()
 
     def _failed(self, error: Exception) -> None:
         if self._closed:

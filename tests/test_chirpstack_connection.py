@@ -592,3 +592,26 @@ async def test_identical_subscriptions_are_independent(
     callback.assert_called_once()
     first()
     await connection.close()
+
+
+async def test_disconnect_owner_can_close_before_consumers_are_notified(
+    connection: ChirpStackConnection,
+) -> None:
+    """An eager owner reload must not swallow later disconnect notifications."""
+    tasks = []
+
+    def close_transport():
+        tasks.append(
+            asyncio.Task(
+                connection.close(), loop=asyncio.get_running_loop(), eager_start=True
+            )
+        )
+
+    consumer = Mock()
+    connection.on_disconnect(close_transport)
+    connection.on_disconnect(consumer)
+    with patch.object(connection, "_snapshot", AsyncMock(return_value={})):
+        await connection.async_connect()
+    connection._failed(ConnectionUnavailable())
+    await asyncio.gather(*tasks)
+    consumer.assert_called_once_with()
