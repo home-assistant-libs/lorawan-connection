@@ -26,13 +26,13 @@ modify state. Notify after committing a complete model update. Removed listeners
 are skipped, new listeners wait for the next notification, and failures are logged
 without stopping other listeners. Closed devices ignore notifications.
 
-### async_send_downlink(*, data, f_port, wait_for_ack=True, expires_at=None) → str
+### async_send_downlink(*, data, f_port, wait_for_ack=True, expires_at=None) → None
 
 ACK waiting is not yet released on PyPI.
 
 Queue application bytes for this model's DevEUI using its collection's sender.
-By default, request a confirmed downlink and return its queue-item ID after a
-positive device ACK. The collection correlates ACKs before forwarding them to the
+By default, request a confirmed downlink and complete after a positive device ACK.
+Returns `None` on success. The collection correlates ACKs before forwarding them to the
 model's `handle_event()`. The model does not need to call a base event handler.
 
 Set `wait_for_ack=False` to send an unconfirmed downlink and return when queued.

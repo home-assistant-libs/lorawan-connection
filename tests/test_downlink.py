@@ -64,7 +64,7 @@ async def test_output_commands(
     sender.side_effect = send
     before = datetime.now(UTC)
     command = getattr(device, method)
-    assert await command(channel, on) == "queue-id"
+    assert await command(channel, on) is None
     request = sender.call_args.args[0]
     assert request.dev_eui == descriptor.dev_eui
     assert request.data == bytes.fromhex(payload)

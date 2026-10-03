@@ -111,26 +111,26 @@ class LT22222(Device):
             ) = state
             self.notify()
 
-    async def async_set_relay(self, channel: int, on: bool) -> str:
+    async def async_set_relay(self, channel: int, on: bool) -> None:
         """Await command acknowledgement; telemetry updates reported state."""
         if channel not in (1, 2):
             raise ValueError("Relay channel must be 1 or 2")
         states = [0x11, 0x11]
         states[channel - 1] = int(on)
-        return await self.async_send_downlink(
+        await self.async_send_downlink(
             data=bytes((0x03, *states)),
             f_port=2,
             expires_at=datetime.now(UTC) + timedelta(seconds=30),
         )
 
-    async def async_set_digital_output(self, channel: int, on: bool) -> str:
+    async def async_set_digital_output(self, channel: int, on: bool) -> None:
         """Enable an active-low output and await its command acknowledgement."""
         if channel not in (1, 2):
             raise ValueError("Digital output channel must be 1 or 2")
         # The protocol includes DO3 even though this model has no third output.
         states = [0x11, 0x11, 0x11]
         states[channel - 1] = int(on)
-        return await self.async_send_downlink(
+        await self.async_send_downlink(
             data=bytes((0x02, *states)),
             f_port=2,
             expires_at=datetime.now(UTC) + timedelta(seconds=30),

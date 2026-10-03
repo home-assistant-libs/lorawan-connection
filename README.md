@@ -78,7 +78,7 @@ ACK waiting is available on `main` and is not yet released on PyPI.
 
 Pass an async `send_downlink` callback to the collection. Device models encode their
 commands and call `async_send_downlink(data=..., f_port=...)`. The method requests a
-confirmed downlink and waits for its device ACK before returning the queue-item ID.
+confirmed downlink and completes after its device ACK. It returns `None` on success.
 Use `wait_for_ack=False` to send an unconfirmed command and return after enqueueing.
 Callers can bound the wait with `asyncio.timeout()`. Device reports update model
 attributes; an ACK confirms delivery, not the resulting device state.
@@ -141,7 +141,7 @@ across all accessible tenants. Pass connection options after `endpoint` and
 `api_key` by keyword: `application_ids=...`, `network_id=...`, and an optional
 `tenant_id=...`.
 
-`Device.async_send_downlink()` now waits for a device ACK by default. Replace its
+`Device.async_send_downlink()` now returns `None` and waits for a device ACK by default. Replace its
 `confirmed` argument with `wait_for_ack`: waiting automatically requests confirmation.
 Use `wait_for_ack=False` for the previous enqueue-only behavior. The low-level
 `Downlink.confirmed` field and backend sender still describe the transport request.

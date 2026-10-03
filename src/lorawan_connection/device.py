@@ -50,7 +50,7 @@ class Device(ABC):
         f_port: int,
         wait_for_ack: bool = True,
         expires_at: datetime | None = None,
-    ) -> str:
+    ) -> None:
         """Send a command and wait for its ACK unless explicitly disabled."""
         if self._closed:
             raise DownlinkError("Device is closed")
@@ -60,7 +60,8 @@ class Device(ABC):
             self.descriptor.dev_eui, f_port, data, wait_for_ack, expires_at
         )
         if not wait_for_ack:
-            return await self._send_downlink(downlink)
+            await self._send_downlink(downlink)
+            return
 
         # An ACK can reach the event feed before enqueue returns its queue ID.
         self._enqueuing += 1
@@ -79,7 +80,6 @@ class Device(ABC):
         try:
             if not await result:
                 raise DownlinkError("Device did not acknowledge the command")
-            return queue_id
         finally:
             self._pending_acks.pop(queue_id, None)
 

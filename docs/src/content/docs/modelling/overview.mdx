@@ -69,14 +69,14 @@ import asyncio
 from dragino_lorawan import LT22222
 
 
-async def turn_on(device: LT22222) -> str:
+async def turn_on(device: LT22222) -> None:
     async with asyncio.timeout(30):
-        return await device.async_set_relay(1, True)
+        await device.async_set_relay(1, True)
 ```
 
 The model encodes the command and calls `async_send_downlink()`. The collection
-supplies the sender, as shown below. The method waits for a device acknowledgement
-and returns the queue ID. The caller's timeout raises `TimeoutError` after 30 seconds.
+supplies the sender, as shown below. The method completes after a device acknowledgement.
+The caller's timeout raises `TimeoutError` after 30 seconds.
 
 An acknowledgement confirms delivery. Reported state changes when an uplink arrives,
 and the model notifies its listeners. See [sending commands](/lorawan-connection/patterns/commands/)

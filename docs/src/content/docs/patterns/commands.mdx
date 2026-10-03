@@ -45,7 +45,8 @@ expiry so a stale action is not delivered much later. Choose a different policy
 for devices designed to receive commands infrequently.
 
 The command requests a confirmed downlink and waits for a matching positive `ACK`.
-The shared collection handles ACK correlation, including concurrent commands.
+It returns `None` on success. The shared collection handles ACK correlation,
+including concurrent commands.
 Model attributes retain their reported values until an uplink arrives. The model
 updates all values from that report before calling `notify()` once.
 
@@ -93,7 +94,7 @@ from `wait_for_ack`. An ACK confirms delivery; device reports establish relay st
 ## Testing
 
 Inject an `AsyncMock` sender and assert the encoded bytes, DevEUI, port, and expiry.
-Feed an ACK with the returned queue-item ID to complete the command. Verify that
+Feed an ACK with the sender's queue-item ID to complete the command. Verify that
 queue acceptance, ACKs, and write errors leave reported state unchanged.
 Feed uplinks to test channel isolation, malformed frames, and notifications.
 

@@ -72,7 +72,7 @@ async def test_waits_for_matching_device_ack(devices, sender) -> None:
     await asyncio.sleep(0)
     assert not command.done()
     ack(devices)
-    assert await command == "queue-id"
+    assert await command is None
     assert device.events[-1].type == EventType.ACK
 
 
@@ -95,7 +95,7 @@ async def test_ack_before_enqueue_returns(devices, sender, acknowledged) -> None
     sender.side_effect = send
     device = devices.devices[DESCRIPTOR.dev_eui]
     if acknowledged:
-        assert await device.async_send_downlink(data=b"command", f_port=2) == "queue-id"
+        assert await device.async_send_downlink(data=b"command", f_port=2) is None
     else:
         with pytest.raises(DownlinkError, match="did not acknowledge"):
             await device.async_send_downlink(data=b"command", f_port=2)
@@ -119,17 +119,17 @@ async def test_concurrent_commands(devices, sender) -> None:
     second = asyncio.create_task(device.async_send_downlink(data=b"two", f_port=2))
     await asyncio.sleep(0)
     ack(devices, "second")
-    assert await second == "second"
+    assert await second is None
     assert not first.done()
     ack(devices, "first")
-    assert await first == "first"
+    assert await first is None
 
 
 async def test_opt_out_is_unconfirmed(devices, sender) -> None:
     device = devices.devices[DESCRIPTOR.dev_eui]
     assert (
         await device.async_send_downlink(data=b"command", f_port=2, wait_for_ack=False)
-        == "queue-id"
+        is None
     )
     assert not sender.call_args.args[0].confirmed
     assert not device._pending_acks
