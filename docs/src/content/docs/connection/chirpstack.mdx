@@ -3,6 +3,9 @@ title: Connecting to ChirpStack
 description: Read catalog inventory and live device events from an existing ChirpStack server.
 ---
 
+import { Code } from '@astrojs/starlight/components';
+import source from '../../../../../examples/connect_sensors.py?raw';
+
 The ChirpStack backend connects your device library to an existing ChirpStack
 server. It discovers provisioned devices and delivers their inventory and live
 events to your collection. The collection creates supported device models, which
@@ -16,25 +19,21 @@ connecting. The backend accesses the server with an API key.
 
 Install the backend with `pip install "lorawan-connection[chirpstack]"`.
 
-```python
-from lorawan_connection.chirpstack import ChirpStackConnection
+Save the [SenseCAP example library](/lorawan-connection/patterns/library/#complete-example)
+as `sensecap_lorawan.py`. Save the script below as `connect_sensors.py` in the same
+directory. Set `CHIRPSTACK_SERVER` to your server URL and `CHIRPSTACK_API_KEY` to
+your API key. Set `CHIRPSTACK_TENANT_ID` if your key cannot list tenants.
 
-connection = ChirpStackConnection(
-    endpoint="https://chirpstack.example.com:443",
-    api_key=api_key,
-    tenant_id=tenant_id,
-    application_ids=application_ids,
-    network_id="my-network",
-)
-try:
-    stop = await connection.async_subscribe(collection.handle_event, on_disconnect)
-    await finished.wait()
-    stop()
-finally:
-    await connection.close()
+```sh
+python connect_sensors.py
 ```
 
-The caller supplies the collection, key, IDs, and disconnect callback.
+The script selects all applications accessible to the key and prints supported
+devices and their readings. It waits until the disconnect callback supplies an
+error, then closes the collection and connection. Ctrl+C also runs that cleanup.
+
+<Code code={source} lang="python" title="connect_sensors.py" />
+
 `network_id` is the caller's stable identifier for this connection's device namespace.
 Use `https` for TLS with system trust roots. `http` explicitly selects an unencrypted
 connection. TLS errors never cause a plaintext fallback.

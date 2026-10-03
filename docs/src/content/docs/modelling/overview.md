@@ -63,7 +63,7 @@ when the device's behavior supports it.
 ## Send commands
 
 A writable device exposes async methods for its operations. For a Dragino LT-22222-L
-instance named `relay`, switch its first relay on with:
+instance named `relay`, switch its first relay on inside an async function:
 
 ```python
 import asyncio

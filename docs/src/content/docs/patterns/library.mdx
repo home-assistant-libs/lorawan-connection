@@ -81,7 +81,8 @@ when adding a writable device.
 ## 4. Declare the supported models
 
 Applications need one place to send events for all devices your library supports.
-Create a `DeviceCollection` subclass and list your device classes in `DEVICES`:
+After defining `S2101`, add a `DeviceCollection` subclass in the same module and
+list your device classes in `DEVICES`:
 
 ```python
 from lorawan_connection import DeviceCollection

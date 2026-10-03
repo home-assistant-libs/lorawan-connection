@@ -7,8 +7,9 @@ description: Forward provider events to a library collection and observe its mod
 The LoRaWAN provider and SenseCAP integration exist on the
 [Core POC branch](https://github.com/balloobbot/core/tree/lorawan-poc).
 The provider subscription shown here is not yet an upstream Home Assistant API.
-The branch currently vendors the shared library; the examples below use its
-standalone package name. Discovery registration still needs an agreed HA hook.
+The branch installs the shared library from PyPI and vendors the device libraries.
+The examples below use standalone device-library package names.
+Discovery registration still needs an agreed HA hook.
 :::
 
 Forward provider events to the device library. Read its model state from entities.
@@ -92,23 +93,32 @@ transport recovery and credential reauthentication.
 
 ## Platform setup
 
-Listen for library device additions and removals. The temperature-only example
-below assumes a `SenseCapTemperature` entity defined in the next section.
+Listen for library device additions and removals. Put this in `sensor.py`, together
+with the `SenseCapTemperature` entity from the next section. It imports
+`SenseCapConfigEntry` from the integration's `__init__.py` shown above.
 
 ```python
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from sensecap_lorawan import S2101
+
+from . import SenseCapConfigEntry
 
 
-async def async_setup_entry(hass, entry, async_add_entities):
-    entities = {}
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: SenseCapConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+) -> None:
+    entities: dict[str, SenseCapTemperature] = {}
 
     @callback
-    def added(device):
+    def added(device: S2101) -> None:
         entity = entities[device.descriptor.dev_eui] = SenseCapTemperature(device)
         async_add_entities([entity])
 
     @callback
-    def removed(device):
+    def removed(device: S2101) -> None:
         entity = entities.pop(device.descriptor.dev_eui, None)
         if entity is not None and entity.hass is not None:
             entity.async_write_ha_state()
@@ -140,7 +150,6 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import UnitOfTemperature
-from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceInfo
 
 from sensecap_lorawan import S2101
@@ -194,10 +203,15 @@ separate external test.
 
 ## Writable devices
 
-The POC's Dragino integration passes a sender bound to its provider config entry:
+In the vendor integration's `async_setup_entry`, create a Dragino collection with
+a sender bound to its provider config entry. This excerpt uses the `hass` and
+`entry` parameters from that function:
 
 ```python
 from functools import partial
+
+from dragino_lorawan import DraginoDevices
+from homeassistant.components import lorawan
 
 models = DraginoDevices(
     network_id=entry.data["network_id"],
@@ -212,6 +226,9 @@ Its switch entities call `await device.async_set_relay(channel, on)` inside
 Entities read `device.relays[channel]` and observe the same update listener used
 by sensor models. Device reports update relay state. Convert `DownlinkError` and
 `TimeoutError` to a `HomeAssistantError` so a failed command reaches the caller.
+
+ACK waiting uses the unreleased library changes on the
+[confirmed-command POC branch](https://github.com/balloobbot/core/tree/lorawan-confirmed-commands).
 
 Keep switches visible when the configured key is read-only. Fail the requested
 write with a permission error; do not reject setup or mark the whole network offline.

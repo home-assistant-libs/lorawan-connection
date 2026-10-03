@@ -23,6 +23,12 @@ Credential failures belong to the provider's reauthentication flow.
 The current integration helper has this signature:
 
 ```python
+from collections.abc import Callable
+
+from homeassistant.core import HomeAssistant
+from lorawan_connection import DeviceEvent, Unsubscribe
+
+
 async def async_subscribe(
     hass: HomeAssistant,
     provider_entry_id: str,

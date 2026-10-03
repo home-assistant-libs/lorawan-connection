@@ -87,13 +87,15 @@ identity and preserves the other relay when sending a command.
 
 ## Device-library CLI
 
-Pass the library's supported model classes to the shared helper:
+For a device library named `my_sensors` that exports `Sensors`, put this in
+`my_sensors/__main__.py`:
 
 ```python
 from lorawan_connection.cli_helper import run
-from my_sensors import Sensors
+from . import Sensors
 
-run(Sensors.DEVICES)
+if __name__ == "__main__":
+    run(Sensors.DEVICES)
 ```
 
 The helper discovers supported devices and prints their state. Models supply catalog

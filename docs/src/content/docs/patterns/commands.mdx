@@ -14,15 +14,21 @@ The Dragino LT-22222-L has two independent relays. Its model owns command encodi
 and reported relay states. Applications call `await device.async_set_relay(1, True)`
 and wait for the device's acknowledgement.
 
-Supply the sender when constructing the collection:
+Save the complete Dragino example below as `dragino_lorawan.py`. In the
+[connection example](/lorawan-connection/connection/chirpstack/), replace the SenseCAP
+collection with this one to supply the command sender:
 
 ```python
+from dragino_lorawan import DraginoDevices
+
 devices = DraginoDevices(
     network_id=connection.network_id,
     send_downlink=connection.async_send_downlink,
 )
-stop = await connection.async_subscribe(devices.handle_event, on_disconnect)
 ```
+
+Import `LT22222` from `dragino_lorawan` for the `device_added` type annotation and
+print its `relays` attribute. Keep the subscription and cleanup from that example.
 
 The collection attaches the sender before announcing each model. Sensor-only libraries
 can omit it. Each device supplies its own DevEUI, so callers only specify command data.
@@ -48,7 +54,8 @@ The shared collection handles ACK correlation, including concurrent commands.
 Both relay attributes retain their reported values until an uplink arrives. A single
 report can update both relays, then the model calls `notify()` once.
 
-The caller chooses how long to wait:
+Given an `LT22222` model named `device` from the collection, call this inside an
+async function to wait up to 30 seconds:
 
 ```python
 import asyncio
