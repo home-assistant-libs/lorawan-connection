@@ -74,23 +74,13 @@ invalid frames leave existing state unchanged.
 For listeners, test unsubscribe and close. Repeated cleanup should be harmless.
 A listener exception must not prevent other consumers from receiving updates.
 
-## Generated payload compatibility
+## Test with ChirpStack payloads
 
-`DeviceEventData` can wrap a generated message directly. The wrapper must retain
-object identity. Test the same model behavior with fixtures and generated payloads
-when adding a backend. Matching attribute names alone do not prove matching units
-or optional-field semantics.
-
-The optional `compatibility` dependency group pins `chirpstack-api==4.19.0` for
-these checks. It does not become a runtime dependency or an install extra.
-Tests cover uplinks, joins, status flags, acknowledgements, logs, and locations.
-In particular, an unavailable battery reading differs from a valid zero.
+To test with generated ChirpStack messages, install the `chirpstack` extra.
+Pass a generated message as `DeviceEventData.data`, just as you pass `UplinkData`
+in the example above.
 
 ```sh
-pip install lorawan-connection pytest chirpstack-api==4.19.0
+pip install "lorawan-connection[chirpstack]" pytest
 pytest
 ```
-
-Static conformance checks for fixture dataclasses live in `tests/typing/`.
-The documentation embeds the standalone example source, and CI executes it.
-The real-server POC test remains outside this package's unit suite.
