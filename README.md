@@ -70,6 +70,17 @@ Events are live notifications. The package does not persist history, reconnect a
 transport, or request replay after a gap. Providers report inventory before activity.
 Collections select models from catalog identity, never from names or payload guesses.
 
+## Sending commands
+
+Pass an async `send_downlink` callback to the collection. Device models encode their
+commands and call `async_send_downlink(data=..., f_port=...)`. The ChirpStack backend
+queues the bytes and returns a queue-item ID. Device reports update model attributes;
+queue acceptance does not confirm that an action happened.
+
+The [Dragino relay example](https://home-assistant-libs.github.io/lorawan-connection/patterns/commands/)
+controls both LT-22222-L relays independently. It uses the existing ChirpStack catalog
+identity and preserves the other relay when sending a command.
+
 ## Device-library CLI
 
 Pass the library's supported model classes to the shared helper:

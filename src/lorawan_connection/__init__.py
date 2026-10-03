@@ -3,6 +3,7 @@
 from .callbacks import Unsubscribe, notify, subscribe
 from .collection import DeviceCollection
 from .device import Device
+from .downlink import Downlink, DownlinkError, SendDownlink
 from .events import DeviceDescriptor, DeviceEvent, DeviceEventData, EventType
 from .payloads import (
     Ack,
@@ -35,6 +36,9 @@ __all__ = [
     "DeviceEvent",
     "DeviceEventData",
     "EventType",
+    "Downlink",
+    "DownlinkError",
+    "SendDownlink",
     "Join",
     "JoinData",
     "Location",

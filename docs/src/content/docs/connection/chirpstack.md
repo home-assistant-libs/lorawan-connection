@@ -61,6 +61,7 @@ poll_interval=30, channel=None)` owns its channel, including an injected test ch
 | `await applications()` | Validate tenant access and return `{application_uuid: name}`. |
 | `await inventory()` | Read descriptors without starting streams or updating the subscription inventory. |
 | `await async_subscribe(callback, on_disconnect)` | Start inventory polling and live events; return a synchronous unsubscribe function. |
+| `await async_send_downlink(downlink)` | Validate device scope and enqueue application bytes; return the queue-item UUID. |
 | `await refresh()` | Refresh a running subscription's inventory. |
 | `await close()` | Stop tasks, await cleanup, and close the channel. |
 | `devices` | Current subscription inventory, keyed by DevEUI. |
@@ -72,5 +73,22 @@ credentials or access scope; `ConnectionUnavailable` reports other subscription 
 ChirpStack can return the same authentication error for an invalid key and missing
 permission. Discovery methods retain gRPC errors so callers can offer a tenant-ID fallback.
 
-Provision devices in ChirpStack. This backend reads inventory and events; it does not
+Provision devices in ChirpStack. This backend reads inventory and events and sends downlinks; it does not
 configure gateways or provision devices.
+
+## Write access
+
+Downlinks use the public `DeviceService.Enqueue` gRPC method. The connection must
+have an active subscription, and the device must belong to its selected inventory.
+Before enqueueing, the backend reads the device to check its current application.
+Use a tenant API key with write access for commands. A read-only key still supports
+inventory and live events; attempted writes raise `DownlinkError`.
+
+`Downlink(dev_eui, f_port, data, confirmed=False, expires_at=None)` contains plaintext
+application bytes. FPort must be 1–223. An optional expiry is a timezone-aware datetime.
+ChirpStack owns encryption, frame counters, scheduling, and expiry. The helper never
+flushes existing commands or retries an ambiguous RPC result.
+
+A returned queue ID means accepted, a `TX_ACK` means transmitted, and a positive
+`ACK` means the device acknowledged a confirmed downlink. Models interpret device
+reports to determine whether the requested action took effect.

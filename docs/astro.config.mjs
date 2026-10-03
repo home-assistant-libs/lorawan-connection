@@ -15,7 +15,7 @@ export default defineConfig({
         starlightLinksValidator(),
         starlightLlmsTxt({
           projectName: "lorawan-connection",
-          description: "Read-only LoRaWAN event protocols, fixture dataclasses, and a device collection base for vendor libraries. The base package has no runtime dependencies; an optional ChirpStack backend provides inventory and live events.",
+          description: "Read-only LoRaWAN event protocols, fixture dataclasses, and a device collection base for vendor libraries. The base package has no runtime dependencies; an optional ChirpStack backend provides inventory, live events, and queued downlinks.",
           details: [
             "- Requires Python 3.12 or later. Install with `pip install lorawan-connection`.",
             "- A caller owns the connection and forwards inventory and live events to a vendor DeviceCollection.",
@@ -45,6 +45,7 @@ export default defineConfig({
         { label: "Building a library", items: [
           { label: "The device library", slug: "patterns/library" },
           { label: "Decoding and state", slug: "patterns/decoding" },
+          { label: "Commands and relays", slug: "patterns/commands" },
           { label: "Command-line helper", slug: "patterns/cli" },
           { label: "Testing", slug: "patterns/testing" },
         ] },

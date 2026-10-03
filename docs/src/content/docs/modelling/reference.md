@@ -26,6 +26,13 @@ modify state. Notify after committing a complete model update. Removed listeners
 are skipped, new listeners wait for the next notification, and failures are logged
 without stopping other listeners. Closed devices ignore notifications.
 
+### async_send_downlink(*, data, f_port, confirmed=False, expires_at=None) → str
+
+Queue application bytes for this model's DevEUI using its collection's sender.
+Returns the queue-item ID when the backend accepts the command. The method does not
+change model attributes or wait for delivery. A closed model or missing sender raises
+`DownlinkError`. Cancellation and sender errors propagate without retries.
+
 ### close() → None
 
 Set `closed` to `True` and clear listeners. Repeated calls are harmless. Models with
@@ -35,11 +42,13 @@ additional resources can override this method and call `super().close()`.
 
 ### Construction and attributes
 
-`DeviceCollection(models=None, *, network_id)` creates a collection for one logical
+`DeviceCollection(models=None, *, network_id, send_downlink=None)` creates a collection for one logical
 network. `models` is a sequence of model classes; when omitted, the collection uses
 its `DEVICES` declaration. An explicit empty sequence accepts no models.
 
 - `DEVICES` is a sequence of supported model classes, usually declared as a tuple.
+- `send_downlink` is an optional `Callable[[Downlink], Awaitable[str]]`. The collection
+  attaches it to every model before notifying device-added listeners.
 - `network_id: str` identifies the network accepted by this collection.
 - `devices: dict[str, DeviceT]` contains current models, keyed by canonical DevEUI.
   Treat it as a read-only view; only the collection changes its contents.

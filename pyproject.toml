@@ -43,7 +43,7 @@ testpaths = ["tests"]
 pythonpath = ["examples"]
 
 [tool.coverage.run]
-source = ["lorawan_connection", "sensecap_lorawan"]
+source = ["lorawan_connection", "sensecap_lorawan", "dragino_lorawan"]
 branch = true
 
 [tool.coverage.report]

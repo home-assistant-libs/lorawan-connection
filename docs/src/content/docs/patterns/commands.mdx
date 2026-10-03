@@ -1,0 +1,57 @@
+---
+title: Commands and relays
+description: Encode device commands in the library and send them through an async callback.
+---
+
+import { Code } from '@astrojs/starlight/components';
+import source from '../../../../../examples/dragino_lorawan/__init__.py?raw';
+
+The Dragino LT-22222-L has two independent relays. Its model owns command encoding
+and reported relay states. Applications call `await device.async_set_relay(1, True)`.
+
+Supply the sender when constructing the collection:
+
+```python
+devices = DraginoDevices(
+    network_id=connection.network_id,
+    send_downlink=connection.async_send_downlink,
+)
+stop = await connection.async_subscribe(devices.handle_event, on_disconnect)
+```
+
+The collection attaches the sender before announcing each model. Sensor-only libraries
+can omit it. Each device supplies its own DevEUI, so callers only specify command data.
+All network operations are async. Notifications remain synchronous.
+
+## Dragino example
+
+The model matches VendorID `676` and catalog model UUID
+`cb0a7bef-eaa0-4c61-a0b6-ce33e6ecbc4f`. Assign the global LT-22222-L **Class C** profile
+for your region in ChirpStack. Provision its keys there and configure the device for
+Class C. The model accepts the documented 11-byte reports for working modes 1–5.
+Trigger reports and other device models are ignored.
+
+Relay commands use FPort 2 and prefix `03`. Each relay byte is `00` for open, `01` for
+closed, or `11` to leave it unchanged. The model gives commands a 30-second queue
+expiry so a stale action is not delivered much later. Choose a different policy
+for devices designed to receive commands infrequently.
+
+<Code code={source} lang="python" title="dragino_lorawan/__init__.py" />
+
+The command returns after the server queues it. Both relay attributes retain their
+reported values until an uplink arrives. A single report can update both relays,
+then the model calls `notify()` once. Transmission and protocol acknowledgements
+do not change relay state.
+
+## Testing
+
+Inject an `AsyncMock` sender and assert the encoded bytes, DevEUI, port, and expiry.
+Verify that queue acceptance and write errors leave reported state unchanged.
+Feed uplinks to test channel isolation, malformed frames, and notifications.
+
+The external POC test uses a real ChirpStack server and simulated gateway/device.
+It exercises OTAA, encrypted relay commands, state-report uplinks, read-only key
+rejection, and connection recovery. Physical LT-22222-L hardware is not yet tested.
+
+Sources: [Dragino manual](https://wiki.dragino.com/docs/LoRaWAN-End-Node/io-controllers-sensor-nodes/lt-22222-l/)
+and [ChirpStack catalog](https://github.com/chirpstack/chirpstack-device-profiles/blob/master/vendors/dragino/devices/lt-22222-l.toml).

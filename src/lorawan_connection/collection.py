@@ -5,6 +5,7 @@ from collections.abc import Callable, Sequence
 
 from .callbacks import Unsubscribe, notify, subscribe
 from .device import Device
+from .downlink import SendDownlink
 from .events import DeviceDescriptor, DeviceEvent, EventType
 
 _LOGGER = logging.getLogger(__name__)
@@ -20,9 +21,11 @@ class DeviceCollection[DeviceT: Device]:
         models: Sequence[type[DeviceT]] | None = None,
         *,
         network_id: str,
+        send_downlink: SendDownlink | None = None,
     ) -> None:
         """Own one network; use explicit model classes or the subclass's DEVICES."""
         self.network_id = network_id
+        self._send_downlink = send_downlink
         self.devices: dict[str, DeviceT] = {}
         self._models: dict[tuple[int, str], type[DeviceT]] = {}
         for model in self.DEVICES if models is None else models:
@@ -102,6 +105,7 @@ class DeviceCollection[DeviceT: Device]:
             if device is None:
                 if (device := self._create_device(descriptor)) is None:
                     return
+                device._send_downlink = self._send_downlink
                 self.devices[eui] = device
                 notify(self._added, device)
             else:

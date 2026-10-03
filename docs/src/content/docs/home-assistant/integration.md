@@ -191,3 +191,26 @@ later additions, removal, unload, and reload after disconnect.
 Decoder tests belong to the vendor library. The HA suite tests entity mapping and
 lifecycle without a real network server. The POC's real ChirpStack test remains a
 separate external test.
+
+## Writable devices
+
+The POC's Dragino integration passes a sender bound to its provider config entry:
+
+```python
+from functools import partial
+
+models = DraginoDevices(
+    network_id=entry.data["network_id"],
+    send_downlink=partial(
+        lorawan.async_send_downlink, hass, entry.data["provider_entry_id"]
+    ),
+)
+```
+
+Its switch entities call `await device.async_set_relay(channel, on)`. The library
+chooses the port and bytes. Entities read `device.relays[channel]` and observe the
+same update listener used by sensor models. Convert `DownlinkError` to a
+`HomeAssistantError` so a denied or failed command reaches the caller.
+
+Keep switches visible when the configured key is read-only. Fail the requested
+write with a permission error; do not reject setup or mark the whole network offline.

@@ -16,6 +16,8 @@ from lorawan_connection import (
     DeviceDescriptor,
     DeviceEvent,
     DeviceEventData,
+    Downlink,
+    DownlinkError,
     EventType,
     Unsubscribe,
 )
@@ -167,6 +169,43 @@ class ChirpStackConnection:
                 tenant_id=self.tenant_id,
             )
         }
+
+    async def async_send_downlink(self, downlink: Downlink) -> str:
+        """Queue bytes for a selected device, without retrying or awaiting delivery."""
+        if not self.available or self._closed:
+            raise DownlinkError("LoRaWAN connection is not available")
+        if downlink.dev_eui not in self.devices:
+            raise DownlinkError("Device is not in the selected inventory")
+        try:
+            device = (
+                await self._call(
+                    self._device_api.Get, api.GetDeviceRequest(dev_eui=downlink.dev_eui)
+                )
+            ).device
+            if device.application_id not in self.application_ids:
+                raise DownlinkError("Device is no longer in a selected application")
+            item = api.DeviceQueueItem(
+                dev_eui=downlink.dev_eui,
+                f_port=downlink.f_port,
+                data=downlink.data,
+                confirmed=downlink.confirmed,
+            )
+            if downlink.expires_at is not None:
+                item.expires_at.FromDatetime(downlink.expires_at)
+            response: api.EnqueueDeviceQueueItemResponse = await self._call(
+                self._device_api.Enqueue,
+                api.EnqueueDeviceQueueItemRequest(queue_item=item),
+            )
+        except grpc.RpcError as error:
+            if error.code() in (
+                grpc.StatusCode.UNAUTHENTICATED,
+                grpc.StatusCode.PERMISSION_DENIED,
+            ):
+                raise DownlinkError(
+                    "ChirpStack rejected the API key or its write permission"
+                ) from error
+            raise DownlinkError("ChirpStack could not queue the command") from error
+        return str(response.id)
 
     async def inventory(self) -> tuple[DeviceDescriptor, ...]:
         """Read current inventory without starting polls or event streams."""
