@@ -39,7 +39,7 @@ export default defineConfig({
           { label: "Event reference", slug: "connection/reference" },
         ] },
         { label: "Device modelling", items: [
-          { label: "Collections and models", slug: "modelling/overview" },
+          { label: "Devices and collections", slug: "modelling/overview" },
           { label: "Collection reference", slug: "modelling/reference" },
         ] },
         { label: "Building a library", items: [

@@ -1,77 +1,138 @@
 ---
-title: Collections and models
-description: Model lifecycle belongs to the collection; decoding belongs to each device.
+title: Devices and collections
+description: Model a device's values and commands, then manage devices in a collection.
 ---
 
-Define each model with `Device`, then declare the supported classes on your
-collection. The base collection builds the catalog lookup and creates models:
+A device model is a Python object representing one physical LoRaWAN device. Its
+attributes hold the readings or states reported by that device. Its methods let
+you subscribe to changes and, for writable devices, send commands.
+
+Create a subclass of `Device` for each supported model. An `S2101` instance represents
+one SenseCAP sensor, with `temperature` and `humidity` attributes. An `LT22222`
+instance represents one Dragino relay controller, with two relay states.
+
+## Model the device's data
+
+The `Device` base stores the device descriptor and manages update listeners.
+Initialize it with `super().__init__(descriptor)`, then define the data your device
+needs. You can use individual attributes, channel dictionaries, nested objects,
+or a state dataclass. One message can update several values.
+
+For example, given an S2101 instance named `device`, read its current values directly:
+
+```python
+print(device.descriptor.name)
+print(device.temperature, device.humidity)
+```
+
+Reading these attributes does not contact the device. They contain the latest
+values the model has received. Use `None` for measurements that have not arrived;
+zero is a valid reading. A partial reading updates only the values it contains.
+
+Implement `handle_event(event)` to interpret incoming events and update these
+attributes. The model decides which event types and ports it understands and how
+to decode the payload. See [building a device library](/lorawan-connection/patterns/library/)
+for the complete S2101 implementation.
+
+## Subscribe to updates
+
+Call `add_update_listener()` to receive notifications from a device:
+
+```python
+def show_readings() -> None:
+    print(device.temperature, device.humidity)
+
+
+show_readings()
+stop = device.add_update_listener(show_readings)
+```
+
+The first call reads the current values. Registering a listener does not replay
+state. Later, the model calls `self.notify()` after updating its attributes, and
+`show_readings()` runs again. Call `stop()` to unsubscribe.
+
+Listeners take no arguments and run synchronously. Update all affected attributes
+before calling `notify()` so listeners see the complete reading. The model decides
+whether repeated values need a notification; `notify()` itself does not compare
+old and new values.
+
+Freshness rules also belong to the device model. A sleeping LoRaWAN sensor is not
+automatically offline. A library can expose a last-seen value or a stale-data rule
+when the device's behavior supports it.
+
+## Send commands
+
+A writable device exposes async methods for its operations. For a Dragino LT-22222-L
+instance named `relay`, switch its first relay on with:
+
+```python
+queue_id = await relay.async_set_relay(1, True)
+```
+
+The model encodes the command and sends it through the connection's downlink sender.
+The returned queue ID means the server accepted the command. This model updates
+its reported relay state when an uplink arrives. Subscribe to its updates to observe
+that change. See [commands and relays](/lorawan-connection/patterns/commands/) for
+sender setup and the complete example.
+
+## Manage devices with a collection
+
+A collection holds the device instances for one logical network. It creates
+supported models from inventory events, sends later events to the correct instance,
+and removes devices when they leave the inventory.
+
+Declare the supported classes in a `DeviceCollection` subclass:
 
 ```python
 from lorawan_connection import DeviceCollection
-from .models import S2101
+from sensecap_lorawan import S2101
 
 
 class SenseCapDeviceCollection(DeviceCollection[S2101]):
     DEVICES = (S2101,)
 
 
-models = SenseCapDeviceCollection(network_id="my-network")
+collection = SenseCapDeviceCollection(network_id="my-network")
 ```
 
 For a one-off collection, pass the classes directly:
 
 ```python
-models = DeviceCollection([S2101], network_id="my-network")
+collection = DeviceCollection([S2101], network_id="my-network")
 ```
 
-Models declare `vendor_id` and `catalog_model_id` as class attributes. The collection
-matches both against the descriptor and rejects duplicate pairs at construction.
-`vendor_id` is the numeric LoRa Alliance VendorID. `catalog_model_id` currently holds
-the ChirpStack catalog model UUID; it is distinct from a QR VendorProfileID.
-Override `_create_device(descriptor)` only when you need additional matching rules.
+Each model declares `vendor_id` and `catalog_model_id` as class attributes. The
+collection matches both against a device descriptor and rejects duplicate pairs
+at construction. `vendor_id` is the numeric LoRa Alliance VendorID.
+`catalog_model_id` currently holds the ChirpStack catalog model UUID, distinct from
+a QR VendorProfileID. Override `_create_device(descriptor)` only for additional
+matching rules.
 
-The caller feeds all events to `collection.handle_event(event)`. It never checks
-whether a model exists or calls an `add_device` method.
+## Receive devices from the collection
 
-## Model lifecycle
-
-An inventory event creates a supported model. The collection stores it and calls
-device-added listeners before passing that event to the model. The consumer can
-attach state listeners before the model processes its first event.
-
-A metadata update replaces the model's descriptor. Renaming a device or changing
-its server profile ID does not replace a model with the same catalog identity.
-A changed vendor ID or catalog model ID retires the old model. The factory then
-decides whether the replacement identity is supported.
-
-A removal calls `device.close()` and then device-removed listeners. The model has
-already left the collection when those listeners run. Closing the collection
-retires all models and clears collection listeners.
-
-## Model state
-
-The `Device` base stores identity and listeners. Initialize it with
-`super().__init__(descriptor)`. Each vendor model defines its data: individual
-attributes, channel collections, nested objects, or a state dataclass.
-Implement `handle_event(event)` to decode data and call `self.notify()` after an update.
-One event can update any number of attributes.
+Subscribe to device additions, then forward the event feed to
+`collection.handle_event(event)`:
 
 ```python
-stop = device.add_update_listener(lambda: print(device.temperature, device.humidity))
+def device_added(device: S2101) -> None:
+    print(device.descriptor.name, device.temperature, device.humidity)
+    device.add_update_listener(lambda: print(device.temperature, device.humidity))
+
+
+stop_added = collection.subscribe_device_added(device_added)
 ```
 
-Listeners take no arguments. Registration does not replay state; read model attributes
-for initial values. `notify()` calls listeners even if state is unchanged, so the
-model decides whether a repeated reading needs notification. Commit a complete update
-before notifying. The base `close()` clears listeners and prevents further notifications.
+The subscription reports existing models immediately and future additions as they
+arrive. The collection announces a new model before passing its first event to it,
+so the callback can attach listeners before readings arrive. The collection creates
+devices automatically from descriptors; the caller only feeds events into it.
+Current instances are also available in `collection.devices`, keyed by DevEUI.
 
-Use `None` for an unobserved measurement. Preserve zero readings. A partial uplink
-updates only the measurements it contains. Device models interpret ports, status,
-and other event types; consumers should not duplicate that logic.
+A metadata update replaces the descriptor on the existing instance. A change to its
+vendor or catalog model identity closes that instance and creates a replacement
+if the new identity is supported. A removal takes the device out of the collection,
+closes it, and calls device-removed listeners registered with `subscribe_device_removed()`.
 
-The collection does not define state freshness or device availability. A sleeping
-LoRaWAN sensor is not automatically offline. A library can expose a last-seen value
-or a documented stale-data rule when the device's behavior supports it.
-
-See [decoding and state](/lorawan-connection/patterns/decoding/) for the complete
-SenseCAP example and its limits.
+Calling `device.close()` clears its update listeners and prevents further
+notifications. Calling `collection.close()` closes all its devices and clears the
+collection's listeners. Both operations are safe to repeat.
