@@ -32,6 +32,10 @@ The script selects all applications accessible to the key and prints supported
 devices and their readings. It waits until the disconnect callback supplies an
 error, then closes the collection and connection. Ctrl+C also runs that cleanup.
 
+The backend subscription delivers events to the collection, which creates models
+and routes their events automatically. The `device_added` callback prints each
+model's name and subscribes to its state updates.
+
 <Code code={source} lang="python" title="connect_sensors.py" />
 
 `network_id` is the caller's stable identifier for this connection's device namespace.

@@ -8,8 +8,8 @@ import library from "../../../../../examples/sensecap_lorawan/__init__.py?raw";
 
 A device library turns LoRaWAN events into a Python API for a vendor's devices.
 It contains payload decoders, device classes with values and commands, and a
-collection that manages those devices. Applications feed events into the collection
-and subscribe to device updates.
+collection that creates device models and routes events to them automatically.
+Applications observe the models and subscribe to their updates.
 
 This guide builds a small SenseCAP library for the S2101 temperature and humidity
 sensor. Start with one model and a captured payload. You can test the library
@@ -80,7 +80,6 @@ when adding a writable device.
 
 ## 4. Declare the supported models
 
-Applications need one place to send events for all devices your library supports.
 After defining `S2101`, add a `DeviceCollection` subclass in the same module and
 list your device classes in `DEVICES`:
 
@@ -108,22 +107,20 @@ Here are the decoder, device class, and collection together. Save this as
 
 <Code code={library} lang="python" title="sensecap_lorawan/__init__.py" />
 
-## 5. Feed events into the collection
+## 5. Test readings and notifications
 
-Test the public API next. Create a collection, subscribe to device additions, and
-feed it a descriptor event followed by an uplink. The collection creates the S2101
-instance automatically. Subscribe to that device's updates in the device-added
-callback, then read its attributes when notified.
+Test the public API with captured payloads. The collection creates the S2101 model
+from its descriptor and sends uplinks to it. Assert that the model decodes readings
+and notifies its listeners.
 
 The [testing guide](/lorawan-connection/patterns/testing/) provides a collection
 fixture with an S2101 already added. Use it to test readings and notifications.
 The [quickstart](/lorawan-connection/getting-started/quickstart/) is a runnable replay
 that prints the readings from the sample payload.
 
-An application uses the same API with live events: forward them to
-`collection.handle_event(event)`. The application owns the connection, credentials,
-and reconnection. When stopping, it unsubscribes from the event source and calls
-`collection.close()`.
+For live devices, see [Connecting to ChirpStack](/lorawan-connection/connection/chirpstack/).
+That example connects the collection to the backend and uses a device-added
+callback to subscribe to each model's updates.
 
 ## 6. Add a CLI for live devices
 
@@ -138,7 +135,7 @@ if __name__ == "__main__":
     run(SenseCapDeviceCollection.DEVICES)
 ```
 
-The shared helper connects to ChirpStack, discovers supported devices, feeds their
-events into the models, and prints updates. Install the optional
+The shared helper connects to ChirpStack and prints updates from supported devices.
+Install the optional
 `lorawan-connection[chirpstack]` dependency to run it. Follow the
 [command-line guide](/lorawan-connection/patterns/cli/) for server and API-key arguments.

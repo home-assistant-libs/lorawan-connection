@@ -15,8 +15,9 @@ if __name__ == "__main__":
     run(SenseCapDeviceCollection.DEVICES)
 ```
 
-The helper builds the catalog lookup, discovers devices, and feeds events into their
-models. It subscribes to each model's state and prints updates. The model owns decoding.
+The helper connects a `DeviceCollection` to ChirpStack. The collection creates
+supported models and routes events to them. The helper subscribes to each model's
+state and prints updates. The model owns decoding.
 
 ## Model contract
 

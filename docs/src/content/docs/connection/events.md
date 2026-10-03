@@ -77,15 +77,15 @@ payload types for every event.
 
 ## How events reach a device
 
-A connection backend reads the network server and delivers these events to a
-callback. The included [ChirpStack backend](/lorawan-connection/connection/chirpstack/)
-provides this feed. A program using a device library connects the feed to its
-collection's `handle_event(event)` method.
+A collection receives inventory and activity through one backend subscription.
+The [ChirpStack connection example](/lorawan-connection/connection/chirpstack/)
+registers `collection.handle_event` as that subscription's callback. The collection
+then creates supported models and routes each event to its device automatically.
 
 The subscription first delivers existing devices as `ADDED` events. For each
 supported device, the collection creates a model and calls its device-added
-listeners. Those listeners can subscribe to the model before its first reading
-arrives.
+listeners. Applications use those listeners to observe the models and subscribe
+to state updates before the first reading arrives.
 
 Later activity goes to the existing model. An uplink can update several attributes,
 then the model calls `notify()` so listeners can read the new values. Inventory
@@ -102,8 +102,8 @@ refresh; an incomplete read must not make devices disappear.
 ## Who manages the connection?
 
 The program using the device library owns the connection, credentials, and
-reconnection. It creates a collection for each logical network and forwards events
-to it. One collection can span several ChirpStack applications; those are server
+reconnection. It connects a collection for each logical network to the backend
+subscription. One collection can span several ChirpStack applications; those are server
 inventory groups, separate from the program running the library.
 
 Connection loss is reported through the subscription's disconnect callback. It

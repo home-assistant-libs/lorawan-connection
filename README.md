@@ -7,9 +7,9 @@ Backend-neutral LoRaWAN events and device collections for Python 3.12+.
 The base package has no runtime dependencies. Install the optional ChirpStack backend
 to connect to a server.
 
-Feed inventory and live events into a vendor `DeviceCollection`. It creates
-supported models and reports them through device-added callbacks. Consumers then
-observe model state. The caller owns the network connection.
+A vendor `DeviceCollection` creates supported models and routes incoming events
+to them automatically. Applications use device-added callbacks to observe those
+models and subscribe to their state updates.
 
 ```python
 from lorawan_connection import Device, DeviceCollection, DeviceDescriptor, DeviceEvent
@@ -37,7 +37,6 @@ sensors = Sensors(network_id="my-network")
 unsubscribe = sensors.subscribe_device_added(
     lambda device: print(device.descriptor.name)
 )
-# Feed inventory and live events into sensors.handle_event(event).
 ```
 
 The collection builds its catalog lookup from `DEVICES`. You can also pass classes
@@ -45,6 +44,8 @@ at construction: `DeviceCollection([Sensor], network_id="my-network")`.
 The `Device` base supplies identity, `add_update_listener()`, `notify()`, and cleanup.
 Models define their own attributes, including multiple measurements or channels.
 Listeners take no arguments and read model attributes after a complete update.
+See [Connecting to ChirpStack](https://home-assistant-libs.github.io/lorawan-connection/connection/chirpstack/)
+to connect the collection to a server.
 
 ## Install
 
