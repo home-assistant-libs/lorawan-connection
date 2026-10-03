@@ -8,7 +8,7 @@ from sensecap_lorawan import S2101, SenseCapDeviceCollection
 
 
 def main() -> None:
-    connection = Mock(network_id="home")
+    connection = Mock()
     devices = SenseCapDeviceCollection(connection)
 
     def device_added(device: S2101) -> None:

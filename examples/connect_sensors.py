@@ -3,6 +3,7 @@
 import asyncio
 import os
 
+from lorawan_connection import ConnectionUnavailable
 from lorawan_connection.chirpstack import ChirpStackConnection
 from sensecap_lorawan import S2101, SenseCapDeviceCollection
 
@@ -18,9 +19,11 @@ async def main() -> None:
     devices = SenseCapDeviceCollection(connection)
     disconnected: asyncio.Future[Exception] = asyncio.get_running_loop().create_future()
 
-    def on_disconnect(error: Exception) -> None:
+    def on_disconnect() -> None:
         if not disconnected.done():
-            disconnected.set_result(error)
+            disconnected.set_result(
+                connection.error or ConnectionUnavailable("Disconnected")
+            )
 
     def device_added(device: S2101) -> None:
         print(f"Device: {device.descriptor.name}")
@@ -34,14 +37,10 @@ async def main() -> None:
     devices.subscribe_device_added(device_added)
     try:
         connection.application_ids = list(await connection.applications())
-        unsubscribe = await connection.async_subscribe(
-            devices.handle_event, on_disconnect
-        )
-        try:
-            error = await disconnected
-        finally:
-            unsubscribe()
-        raise error
+        connection.on_disconnect(on_disconnect)
+        await connection.async_connect()
+        await devices.async_setup()
+        raise await disconnected
     finally:
         devices.close()
         await connection.close()

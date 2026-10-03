@@ -56,9 +56,8 @@ network. `models` is a sequence of model classes; when omitted, the collection u
 its `DEVICES` declaration. An explicit empty sequence accepts no models.
 
 - `DEVICES` is a sequence of supported model classes, usually declared as a tuple.
-- `connection` implements the `Connection` protocol. The collection takes its
-  network ID and attaches its sender to every model before notifying device-added listeners.
-- `network_id: str` identifies the network accepted by this collection.
+- `connection` implements the `Connection` protocol. The collection uses it to
+  subscribe to events and send commands.
 - `devices: dict[str, DeviceT]` contains current models, keyed by canonical DevEUI.
   Treat it as a read-only view; only the collection changes its contents.
 
@@ -71,13 +70,22 @@ Registered models inherit `Device` and accept a descriptor as their constructor 
 
 The backend-neutral `Connection` protocol exposes:
 
-- `network_id: str`, a read-only property identifying the logical network.
-- `async_send_downlink(downlink: Downlink) -> str`, an async method that queues a
-  command and returns its queue ID for internal ACK correlation.
+- `async_subscribe(*, vendor_ids, callback) -> Unsubscribe` reports matching existing
+  devices before returning, then live events. Arguments are keyword-only.
+- `on_disconnect(callback) -> Unsubscribe` registers a notification callback with no arguments.
+- `async_send_downlink(downlink: Downlink) -> str` queues a command and returns its
+  queue ID for internal ACK correlation.
 
-`ChirpStackConnection` implements this protocol. Read-only connections raise
-`DownlinkError` on attempted writes. A collection does not manage the connection's
-event subscription or close it. The application owns those operations.
+The connection owner controls startup, recovery, and shutdown. Those operations
+are outside this protocol. Unavailable subscriptions raise `ConnectionUnavailable`.
+Read-only connections raise `DownlinkError` on attempted writes.
+
+### async_setup() → None
+
+Subscribe to the vendor IDs declared by the registered model classes. Existing
+models are ready when setup returns. Later events reach `handle_event()` automatically.
+Setup is allowed once per collection. Calling it again or after close raises `RuntimeError`.
+A failed or cancelled setup closes any models already created and propagates the error.
 
 ### _create_device(descriptor)
 
@@ -88,10 +96,10 @@ or `None`. Do not perform I/O or feed events back into the collection from the f
 
 ### handle_event(event: DeviceEvent) → None
 
-- Closed collections and events for another network are ignored.
+- Closed collections ignore events. The connection scopes events to its network.
 - Event DevEUIs are compared after removing colons and lowercasing.
 - `ADDED` and `UPDATED` need a matching descriptor. Missing or mismatched descriptors are ignored.
-- Either inventory type can create a model. Duplicate inventory does not create duplicates.
+- Either `ADDED` or `UPDATED` can create a model. Repeated descriptions do not create duplicates.
 - A changed `(vendor_id, catalog_model_id)` closes and removes the previous model before calling the factory.
 - An unchanged identity updates `device.descriptor` in place.
 - New models are stored, then device-added callbacks run, then the model receives the event.
@@ -116,11 +124,12 @@ after the model is removed and `close()` is called. There is no initial replay.
 Both methods raise `RuntimeError` after the collection is closed. Their returned
 unsubscribe functions are idempotent. Callback exceptions are logged and isolated.
 Callbacks must be synchronous and should only observe models or manage listeners.
-They can close the collection; do not recursively inject inventory changes.
+They can close the collection; do not recursively inject device changes.
 
 ### close() → None
 
-Permanently close the collection, retire all models, and clear all listeners.
+Unsubscribe from device events, retire all models, and clear all listeners.
+Leave the shared connection open.
 Repeated calls do nothing. Cleanup exceptions from one model are logged; other
 models still close and removal callbacks still run. Subsequent events are ignored.
 

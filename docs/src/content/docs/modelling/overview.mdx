@@ -122,8 +122,8 @@ to end pending acknowledgement waits.
 ## Manage devices with a collection
 
 A collection holds the device instances for one logical network. It creates
-supported models from inventory events, sends later events to the correct instance,
-and removes devices when they leave the inventory.
+supported models from device descriptions, sends later events to the correct instance,
+and removes devices when they are removed.
 
 The `DraginoDevices` class at the end of the complete example declares its supported
 models in `DEVICES`. The base collection uses each class's `vendor_id` and
@@ -145,9 +145,9 @@ def create_collection(connection: Connection) -> DeviceCollection[LT22222]:
 
 In the [ChirpStack connection example](/lorawan-connection/connection/chirpstack/),
 replace the SenseCAP collection and its device-added callback with these definitions.
-Create it with `create_collection(connection)` and keep the connection's event
-subscription and cleanup. The collection takes its network ID and downlink sender
-from the connection. It attaches the sender before announcing each device.
+Create it with `create_collection(connection)`, then call `await collection.async_setup()`.
+The collection subscribes to its registered vendors and attaches the command sender
+before announcing each device.
 
 You can also construct a collection directly from model classes. Inside
 `create_collection`, the equivalent construction is:
@@ -158,9 +158,9 @@ from lorawan_connection import DeviceCollection
 collection = DeviceCollection(connection, [LT22222])
 ```
 
-`Connection` is a protocol shared by backends and test doubles. Creating or closing
-a collection does not open, subscribe to, or close the connection. Several
-collections can share the same connection.
+`Connection` is a protocol shared by backends and test doubles. Call `async_setup()`
+to subscribe after creating a collection. Several collections can share the same
+connection. Closing one collection leaves the connection and other collections open.
 
 ## Device lifecycle
 
@@ -173,6 +173,6 @@ A metadata update replaces the descriptor on the existing instance. A change to 
 vendor or catalog identity replaces the model. Removal closes the model and calls
 listeners registered with `subscribe_device_removed()`.
 
-When stopping, unsubscribe from the connection, then call `collection.close()`.
-This closes every model, removes listeners, and ends pending command waits.
+When stopping, call `collection.close()`. It unsubscribes from device events,
+closes every model, removes listeners, and ends pending command waits.
 Close operations are safe to repeat.

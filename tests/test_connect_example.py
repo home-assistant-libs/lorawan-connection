@@ -25,6 +25,8 @@ def connection(monkeypatch: pytest.MonkeyPatch) -> Mock:
         network_id="my-network",
         applications=AsyncMock(return_value={"application": "Sensors"}),
         async_subscribe=AsyncMock(),
+        async_connect=AsyncMock(),
+        error=None,
         close=AsyncMock(),
     )
     monkeypatch.setattr(
@@ -43,7 +45,8 @@ async def test_connection_example(
 
     async def subscribe(
         callback: Callable[[DeviceEvent], None],
-        on_disconnect: Callable[[Exception], None],
+        *,
+        vendor_ids: frozenset[int],
     ) -> Mock:
         devices = callback.__self__
         devices.subscribe_device_added(models.append)
@@ -66,7 +69,8 @@ async def test_connection_example(
                 data=UplinkData(PAYLOAD),
             )
         )
-        on_disconnect(ConnectionUnavailable("Disconnected"))
+        connection.error = ConnectionUnavailable("Disconnected")
+        connection.on_disconnect.call_args.args[0]()
         return stop
 
     connection.async_subscribe.side_effect = subscribe
@@ -87,7 +91,7 @@ async def test_connection_example_cancelled(connection: Mock) -> None:
     subscribed = asyncio.Event()
     stop = Mock()
 
-    async def subscribe(*args: object) -> Mock:
+    async def subscribe(**kwargs: object) -> Mock:
         subscribed.set()
         return stop
 

@@ -143,8 +143,8 @@ The CLI's JSON `state` field now contains the model's public attributes and prop
 
 Construct collections with `Sensors(connection)` or `DeviceCollection(connection, models)`.
 The connection replaces the separate `network_id` and `send_downlink` arguments.
-It implements the backend-neutral `Connection` protocol: a `network_id` property
-and an async `async_send_downlink(downlink)` method. ChirpStack supplies both.
+The connection implements the backend-neutral `Connection` protocol for subscriptions,
+disconnect notifications, and command delivery.
 
 `ChirpStackConnection` accepts `tenant_id=None` by default to discover applications
 across all accessible tenants. Pass connection options after `endpoint` and
@@ -158,6 +158,22 @@ Use `wait_for_ack=False` for the previous enqueue-only behavior. The low-level
 Feed ACK events through the collection and close it on disconnect to end pending waits.
 Use `asyncio.timeout()` where the caller needs a deadline. Cancelling a wait does
 not remove a command already queued on the server.
+
+## Collection subscriptions
+
+Pass a connection to the collection, then call `await devices.async_setup()`.
+The collection selects vendor IDs from its registered model classes and receives
+existing devices before setup returns. Later events reach models automatically.
+`devices.close()` unsubscribes and closes the models without closing the connection.
+
+`Connection` exposes only `async_subscribe(*, vendor_ids, callback)`,
+`on_disconnect(callback)`, and `async_send_downlink(downlink)`.
+Applications own connection startup, recovery, and shutdown.
+
+For ChirpStack, call `await connection.async_connect()` before setting up collections.
+Register disconnect notifications with `connection.on_disconnect(callback)`;
+the callback takes no arguments. Replace manual event forwarding with
+`await devices.async_setup()`. Several collections can share one connection.
 
 ## Home Assistant
 

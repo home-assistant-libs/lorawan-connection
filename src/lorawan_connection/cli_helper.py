@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 from . import (
     Connection,
+    ConnectionUnavailable,
     Device,
     DeviceCollection,
     DeviceDescriptor,
@@ -145,9 +146,11 @@ async def _watch(args: argparse.Namespace, models: Sequence[type[Device]]) -> No
     subscriptions: dict[str, Unsubscribe] = {}
     finished: asyncio.Future[Exception] = asyncio.get_running_loop().create_future()
 
-    def on_disconnect(error: Exception) -> None:
+    def on_disconnect() -> None:
         if not finished.done():
-            finished.set_result(error)
+            finished.set_result(
+                connection.error or ConnectionUnavailable("Disconnected")
+            )
 
     def output(kind: str, device: Device, state: object = None) -> None:
         descriptor = device.descriptor
@@ -196,12 +199,10 @@ async def _watch(args: argparse.Namespace, models: Sequence[type[Device]]) -> No
                     )
                 )
             return
-        stop = await connection.async_subscribe(collection.handle_event, on_disconnect)
-        try:
-            error = await finished
-        finally:
-            stop()
-        raise error
+        connection.on_disconnect(on_disconnect)
+        await connection.async_connect()
+        await collection.async_setup()
+        raise await finished
     finally:
         for stop_model in subscriptions.values():
             stop_model()

@@ -2,7 +2,7 @@
 
 from .callbacks import Unsubscribe, notify, subscribe
 from .collection import DeviceCollection
-from .connection import Connection
+from .connection import Connection, ConnectionUnavailable
 from .device import Device
 from .downlink import Downlink, DownlinkError, SendDownlink
 from .events import DeviceDescriptor, DeviceEvent, DeviceEventData, EventType
@@ -32,6 +32,7 @@ __all__ = [
     "Coordinates",
     "CoordinatesData",
     "Connection",
+    "ConnectionUnavailable",
     "Device",
     "DeviceCollection",
     "DeviceDescriptor",

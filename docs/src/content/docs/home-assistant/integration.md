@@ -12,7 +12,7 @@ The examples below use standalone device-library package names.
 Discovery registration still needs an agreed HA hook.
 :::
 
-Forward provider events to the device library. Read its model state from entities.
+Connect a device collection to the provider. Read its model state from entities.
 The HA integration manages config entries and subscriptions; the library selects
 models and decodes their data.
 
@@ -43,10 +43,10 @@ from homeassistant.components import lorawan
 from homeassistant.components.lorawan import ConnectionUnavailable
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 
-from sensecap_lorawan import VENDOR_ID, SenseCapDeviceCollection
+from sensecap_lorawan import SenseCapDeviceCollection
 
 type SenseCapConfigEntry = ConfigEntry[SenseCapDeviceCollection]
 PLATFORMS = [Platform.SENSOR]
@@ -57,26 +57,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: SenseCapConfigEntry) -> 
         connection = lorawan.get_connection(hass, entry.data["provider_entry_id"])
     except ConnectionUnavailable as error:
         raise ConfigEntryNotReady("LoRaWAN provider is not connected") from error
-    devices = entry.runtime_data = SenseCapDeviceCollection(connection)
-
-    @callback
-    def disconnected() -> None:
-        hass.config_entries.async_schedule_reload(entry.entry_id)
-
-    try:
-        unsubscribe = await lorawan.async_subscribe(
-            hass,
-            provider_entry_id=entry.data["provider_entry_id"],
-            vendor_ids=frozenset({VENDOR_ID}),
-            callback=devices.handle_event,
-            on_disconnect=disconnected,
+    entry.async_on_unload(
+        connection.on_disconnect(
+            lambda: hass.config_entries.async_schedule_reload(entry.entry_id)
         )
-    except ConnectionUnavailable as error:
-        devices.close()
-        raise ConfigEntryNotReady("LoRaWAN provider is not connected") from error
-
-    entry.async_on_unload(unsubscribe)
+    )
+    devices = entry.runtime_data = SenseCapDeviceCollection(connection)
     entry.async_on_unload(devices.close)
+    try:
+        await devices.async_setup()
+    except ConnectionUnavailable as error:
+        raise ConfigEntryNotReady("LoRaWAN provider is not connected") from error
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
@@ -85,9 +76,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: SenseCapConfigEntry) ->
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 ```
 
-Subscription sends initial inventory before returning. Models can therefore exist
+`devices.async_setup()` receives existing devices before returning. Models can therefore exist
 before platform setup. `subscribe_device_added` replays them to each platform.
-No per-device provider subscription or inventory lookup is needed.
+The collection owns its event subscription.
 
 If the provider disconnects, the integration schedules a reload. Setup fails with
 `ConfigEntryNotReady` while the provider remains unavailable. The provider owns

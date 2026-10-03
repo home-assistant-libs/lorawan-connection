@@ -67,7 +67,7 @@ importable. In your library repository, import your installed development packag
 
 ## Event sequences to cover
 
-Test inventory before any telemetry, repeated inventory, metadata changes, catalog
+Test existing devices before any telemetry, repeated device descriptions, metadata changes, catalog
 identity changes, and removal. Subscribe after models exist to check initial replay.
 Test a second network with the same DevEUI to verify isolation.
 

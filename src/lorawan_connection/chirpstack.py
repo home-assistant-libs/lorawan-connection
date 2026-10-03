@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 from urllib.parse import urlsplit
@@ -13,6 +14,7 @@ from google.protobuf.json_format import Parse, ParseError
 from google.protobuf.message import Message
 
 from lorawan_connection import (
+    ConnectionUnavailable,
     DeviceDescriptor,
     DeviceEvent,
     DeviceEventData,
@@ -20,6 +22,8 @@ from lorawan_connection import (
     DownlinkError,
     EventType,
     Unsubscribe,
+    notify,
+    subscribe,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -50,8 +54,10 @@ class AuthenticationError(Exception):
     """Credentials have been rejected."""
 
 
-class ConnectionUnavailable(Exception):
-    """The current subscription cannot deliver events."""
+@dataclass(eq=False)
+class _Subscriber:
+    vendor_ids: frozenset[int] | None
+    callback: Callable[[DeviceEvent], None]
 
 
 def connection_error(error: Exception) -> Exception:
@@ -110,8 +116,10 @@ class ChirpStackConnection:
         self.poll_interval = poll_interval
         self.devices: dict[str, DeviceDescriptor] = {}
         self.available = False
-        self._callback: Callable[[DeviceEvent], None] | None = None
-        self._on_disconnect: Callable[[Exception], None] | None = None
+        self.error: Exception | None = None
+        self._subscribers: list[_Subscriber] = []
+        self._disconnect_listeners: list[Callable[[None], None]] = []
+        self._connecting = False
         self._streams: dict[str, asyncio.Task[None]] = {}
         self._poller: asyncio.Task[None] | None = None
         self._refresh: asyncio.Task[None] | None = None
@@ -289,12 +297,23 @@ class ChirpStackConnection:
                 )
         return snapshot
 
-    def _emit(self, event: DeviceEvent) -> None:
-        if self._callback is not None:
-            try:
-                self._callback(event)
-            except Exception:
-                _LOGGER.exception("LoRaWAN event consumer failed")
+    def _emit(
+        self, event: DeviceEvent, previous: DeviceDescriptor | None = None
+    ) -> None:
+        descriptor = event.descriptor or self.devices.get(event.dev_eui)
+        if descriptor is None:
+            return
+        for subscriber in tuple(self._subscribers):
+            if subscriber not in self._subscribers:
+                continue
+            vendors = subscriber.vendor_ids
+            if vendors is None or descriptor.vendor_id in vendors:
+                notify([subscriber.callback], event)
+            elif previous is not None and previous.vendor_id in vendors:
+                notify(
+                    [subscriber.callback],
+                    self._inventory_event(EventType.REMOVED, previous),
+                )
 
     def _inventory_event(
         self, kind: EventType, descriptor: DeviceDescriptor
@@ -320,19 +339,17 @@ class ChirpStackConnection:
                 if eui not in old:
                     self._emit(self._inventory_event(EventType.ADDED, descriptor))
                 elif old[eui] != descriptor:
-                    self._emit(self._inventory_event(EventType.UPDATED, descriptor))
+                    self._emit(
+                        self._inventory_event(EventType.UPDATED, descriptor), old[eui]
+                    )
                 if eui not in self._streams:
                     self._streams[eui] = asyncio.create_task(self._stream(eui))
 
-    async def async_subscribe(
-        self,
-        callback: Callable[[DeviceEvent], None],
-        on_disconnect: Callable[[Exception], None],
-    ) -> Unsubscribe:
-        """Deliver current inventory before returning the unsubscribe function."""
-        if self.available or self._callback is not None or self._closed:
-            raise ConnectionUnavailable("Connection is closed or already subscribed")
-        self._callback, self._on_disconnect = callback, on_disconnect
+    async def async_connect(self) -> None:
+        """Read inventory and start polling and device streams."""
+        if self.available or self._connecting or self._closed:
+            raise ConnectionUnavailable("Connection is closed or already started")
+        self._connecting = True
         try:
             await self.refresh()
         except BaseException as error:
@@ -340,14 +357,46 @@ class ChirpStackConnection:
             if isinstance(error, (grpc.RpcError, ConnectionUnavailable)):
                 raise connection_error(error) from error
             raise
+        finally:
+            self._connecting = False
+        if self._closed:
+            raise ConnectionUnavailable("Connection closed during startup")
         self.available = True
         self._poller = asyncio.create_task(self._poll())
 
-        def unsubscribe() -> None:
-            self._callback = None
-            self._on_disconnect = None
+    async def async_subscribe(
+        self,
+        *,
+        vendor_ids: frozenset[int] | None,
+        callback: Callable[[DeviceEvent], None],
+    ) -> Unsubscribe:
+        """Deliver matching inventory, then live events; None selects all vendors."""
+        if not self.available or self._closed:
+            raise ConnectionUnavailable("Connection is not available")
+        subscriber = _Subscriber(vendor_ids, callback)
+        self._subscribers.append(subscriber)
 
+        def unsubscribe() -> None:
+            if subscriber in self._subscribers:
+                self._subscribers.remove(subscriber)
+
+        for descriptor in tuple(self.devices.values()):
+            if subscriber not in self._subscribers:
+                break
+            if vendor_ids is None or descriptor.vendor_id in vendor_ids:
+                notify([callback], self._inventory_event(EventType.ADDED, descriptor))
         return unsubscribe
+
+    def on_disconnect(self, callback: Callable[[], None]) -> Unsubscribe:
+        """Notify after connection loss or closure; callers own recovery."""
+        if self._closed:
+            raise ConnectionUnavailable("Connection is closed")
+        return subscribe(self._disconnect_listeners, lambda _: callback())
+
+    def _notify_disconnect(self) -> None:
+        self._subscribers.clear()
+        notify(self._disconnect_listeners, None)
+        self._disconnect_listeners.clear()
 
     def _failed(self, error: Exception) -> None:
         if self._closed:
@@ -357,8 +406,8 @@ class ChirpStackConnection:
         for task in (*self._streams.values(), self._poller):
             if task is not None and task is not asyncio.current_task():
                 task.cancel()
-        if self._on_disconnect:
-            self._on_disconnect(connection_error(error))
+        self.error = connection_error(error)
+        self._notify_disconnect()
 
     async def _poll(self) -> None:
         try:
@@ -438,9 +487,13 @@ class ChirpStackConnection:
 
     async def close(self) -> None:
         """Cancel streams and polls, await cleanup, and close the channel."""
+        was_available = self.available
         self.available = False
         self._closed = True
-        self._callback = self._on_disconnect = None
+        if was_available:
+            self._notify_disconnect()
+        self._subscribers.clear()
+        self._disconnect_listeners.clear()
         tasks = [
             task
             for task in (*self._streams.values(), self._poller, self._refresh)

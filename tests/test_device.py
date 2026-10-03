@@ -182,7 +182,6 @@ async def test_collections_share_connection_without_owning_it() -> None:
     assert sent.dev_eui == DESCRIPTOR.dev_eui
     assert sent.data == b"command"
     assert not device.closed
-    assert second.network_id == connection.network_id
     second.close()
     connection.close.assert_not_called()
     connection.async_subscribe.assert_not_called()

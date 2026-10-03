@@ -1,11 +1,13 @@
 """Behavior of collections, identity changes, replay, and teardown."""
 
+import asyncio
 from dataclasses import replace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from lorawan_connection import (
+    ConnectionUnavailable,
     DeviceCollection,
     DeviceDescriptor,
     DeviceEventData,
@@ -212,4 +214,71 @@ def test_removed_callback_can_close_during_model_replacement() -> None:
         inventory(replace(DESCRIPTOR, catalog_model_id="other"), EventType.UPDATED)
     )
     assert original.close_count == 1
+    assert not collection.devices
+
+
+async def test_setup_subscribes_to_registered_vendors() -> None:
+    class Sensor(DeviceModel):
+        vendor_id = 744
+        catalog_model_id = "model"
+
+    unsubscribe = Mock()
+    connection = Mock(async_subscribe=AsyncMock(return_value=unsubscribe))
+    collection = DeviceCollection(connection, [Sensor])
+    added = Mock()
+    collection.subscribe_device_added(added)
+
+    async def subscribe(*, vendor_ids, callback):
+        callback(inventory())
+        return unsubscribe
+
+    connection.async_subscribe.side_effect = subscribe
+    await collection.async_setup()
+    connection.async_subscribe.assert_awaited_once_with(
+        vendor_ids=frozenset({744}), callback=collection.handle_event
+    )
+    device = collection.devices[DESCRIPTOR.dev_eui]
+    added.assert_called_once_with(device)
+    with pytest.raises(RuntimeError, match="already set up"):
+        await collection.async_setup()
+    collection.close()
+    collection.close()
+    unsubscribe.assert_called_once()
+    assert device.closed
+    connection.close.assert_not_called()
+
+
+@pytest.mark.parametrize("error", [ConnectionUnavailable(), asyncio.CancelledError()])
+async def test_setup_failure_closes_created_models(error: BaseException) -> None:
+    connection = Mock(async_subscribe=AsyncMock())
+    collection = Collection(connection)
+    device = Mock()
+    collection.subscribe_device_added(device)
+
+    async def subscribe(**kwargs):
+        kwargs["callback"](inventory())
+        raise error
+
+    connection.async_subscribe.side_effect = subscribe
+    with pytest.raises(type(error)):
+        await collection.async_setup()
+    assert device.call_args.args[0].closed
+    assert not collection.devices
+    connection.close.assert_not_called()
+
+
+async def test_close_during_setup_releases_subscription() -> None:
+    unsubscribe = Mock()
+    connection = Mock(async_subscribe=AsyncMock())
+    collection = Collection(connection)
+    collection.subscribe_device_added(lambda _: collection.close())
+
+    async def subscribe(**kwargs):
+        kwargs["callback"](inventory())
+        return unsubscribe
+
+    connection.async_subscribe.side_effect = subscribe
+    with pytest.raises(RuntimeError, match="closed during setup"):
+        await collection.async_setup()
+    unsubscribe.assert_called_once()
     assert not collection.devices

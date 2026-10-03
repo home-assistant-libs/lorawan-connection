@@ -24,7 +24,9 @@ class DeviceCollection[DeviceT: Device]:
         models: Sequence[type[DeviceT]] | None = None,
     ) -> None:
         """Own one network; use explicit model classes or the subclass's DEVICES."""
-        self.network_id = connection.network_id
+        self._connection = connection
+        self._unsubscribe: Unsubscribe | None = None
+        self._setup_started = False
         self._send_downlink = connection.async_send_downlink
         self.devices: dict[str, DeviceT] = {}
         self._models: dict[tuple[int, str], type[DeviceT]] = {}
@@ -39,6 +41,24 @@ class DeviceCollection[DeviceT: Device]:
         self._added: list[Callable[[DeviceT], None]] = []
         self._removed: list[Callable[[DeviceT], None]] = []
         self._closed = False
+
+    async def async_setup(self) -> None:
+        """Subscribe to the vendors represented by the registered models."""
+        if self._closed or self._setup_started:
+            raise RuntimeError("Device collection is closed or already set up")
+        self._setup_started = True
+        try:
+            unsubscribe = await self._connection.async_subscribe(
+                vendor_ids=frozenset(vendor_id for vendor_id, _ in self._models),
+                callback=self.handle_event,
+            )
+        except BaseException:
+            self.close()
+            raise
+        if self._closed:
+            unsubscribe()
+            raise RuntimeError("Device collection was closed during setup")
+        self._unsubscribe = unsubscribe
 
     def _create_device(self, descriptor: DeviceDescriptor) -> DeviceT | None:
         """Construct a registered model, or leave an unknown identity unsupported."""
@@ -79,7 +99,7 @@ class DeviceCollection[DeviceT: Device]:
 
     def handle_event(self, event: DeviceEvent) -> None:
         """Consume descriptors before activity, never infer a model from data."""
-        if self._closed or event.network_id != self.network_id:
+        if self._closed:
             return
         eui = event.dev_eui.replace(":", "").lower()
         if event.type == EventType.REMOVED:
@@ -90,7 +110,7 @@ class DeviceCollection[DeviceT: Device]:
             descriptor = event.descriptor
             if (
                 descriptor is None
-                or descriptor.network_id != self.network_id
+                or descriptor.network_id != event.network_id
                 or descriptor.dev_eui != eui
             ):
                 return
@@ -118,6 +138,9 @@ class DeviceCollection[DeviceT: Device]:
     def close(self) -> None:
         """Retire all models and listeners; repeated calls are harmless."""
         self._closed = True
+        if self._unsubscribe is not None:
+            self._unsubscribe()
+            self._unsubscribe = None
         for eui in tuple(self.devices):
             self._remove(eui)
         self._added.clear()

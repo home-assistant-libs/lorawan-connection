@@ -4,21 +4,21 @@ description: What LoRaWAN events contain and how they reach device models.
 ---
 
 An event describes a change or activity for one LoRaWAN device. A sensor sending
-a temperature reading produces an uplink event. Adding that sensor to the server's
-inventory produces an inventory event.
+a temperature reading produces an uplink event. Registering that sensor on the server produces an `ADDED` event
+when the connection discovers it.
 
 `lorawan-connection` gives these events a common Python interface. Device libraries
 use them to discover supported devices, decode readings, and update their models.
 
 ## Which events are there?
 
-Inventory events describe which devices are available and their metadata:
+Device added, updated, and removed events describe which devices are available and their metadata:
 
 | Event | Meaning |
 | --- | --- |
-| `ADDED` | A device is in the subscribed inventory. This also reports existing devices when a subscription starts. |
+| `ADDED` | A device is among the subscribed devices. This also reports existing devices when a subscription starts. |
 | `UPDATED` | A device's metadata changed, such as its name or assigned profile. |
-| `REMOVED` | A device left the subscribed inventory. |
+| `REMOVED` | A device is no longer among the subscribed devices. |
 
 Activity events describe messages and reports for those devices:
 
@@ -77,10 +77,11 @@ payload types for every event.
 
 ## How events reach a device
 
-A collection receives inventory and activity through one backend subscription.
-The [ChirpStack connection example](/lorawan-connection/connection/chirpstack/)
-registers `collection.handle_event` as that subscription's callback. The collection
-then creates supported models and routes each event to its device automatically.
+Call `await collection.async_setup()` to subscribe to events for the vendors
+represented by the collection's model classes. The collection creates supported
+models and routes each event to its device automatically. The
+[ChirpStack connection example](/lorawan-connection/connection/chirpstack/)
+shows connection startup and collection setup.
 
 The subscription first delivers existing devices as `ADDED` events. For each
 supported device, the collection creates a model and calls its device-added
@@ -88,28 +89,27 @@ listeners. Applications use those listeners to observe the models and subscribe
 to state updates before the first reading arrives.
 
 Later activity goes to the existing model. An uplink can update several attributes,
-then the model calls `notify()` so listeners can read the new values. Inventory
+then the model calls `notify()` so listeners can read the new values. Device
 changes arrive through the same feed; `REMOVED` closes and removes the model.
 The [quickstart](/lorawan-connection/getting-started/quickstart/) shows this sequence
 with a descriptor and a captured uplink.
 
 The descriptor must arrive before activity for an unknown device. If the backend
-first learns about a device through activity, it refreshes inventory before
+first learns about a device through activity, it refreshes its device list before
 forwarding that activity. Collections ignore activity for devices they have not
-created. A backend only reports removals after a complete successful inventory
+created. A backend only reports removals after a complete successful device-list
 refresh; an incomplete read must not make devices disappear.
 
 ## Who manages the connection?
 
 The program using the device library owns the connection, credentials, and
 reconnection. It connects a collection for each logical network to the backend
-subscription. One collection can span several ChirpStack applications; those are server
-inventory groups, separate from the program running the library.
+subscription. One collection can span several ChirpStack applications; each application
+groups devices on the server.
 
-Connection loss is reported through the subscription's disconnect callback. It
-does not mean the devices were removed. Close the old collection when the
-subscription ends. A new connection and subscription supply inventory to a new
-collection. Events missed during the disconnect are not recovered.
+Register a connection-loss listener with `connection.on_disconnect(callback)`.
+The callback takes no arguments. Close the old collection when the connection
+is lost. A new connection supplies existing devices to a new collection. Events missed during the disconnect are not recovered.
 
 Event callbacks and model listeners run synchronously on the caller's thread or
 event loop. Keep network I/O in async connection and command methods. Pass regular

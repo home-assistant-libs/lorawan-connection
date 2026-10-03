@@ -1,13 +1,13 @@
 ---
 title: Connecting to ChirpStack
-description: Read catalog inventory and live device events from an existing ChirpStack server.
+description: Read registered devices and live device events from an existing ChirpStack server.
 ---
 
 import { Code } from '@astrojs/starlight/components';
 import source from '../../../../../examples/connect_sensors.py?raw';
 
 The ChirpStack backend connects your device library to an existing ChirpStack
-server. It discovers provisioned devices and delivers their inventory and live
+server. It discovers provisioned devices and delivers device descriptions and live
 events to your collection. The collection creates supported device models, which
 decode readings and notify your application when their state changes.
 
@@ -29,15 +29,14 @@ python connect_sensors.py
 ```
 
 The script selects all applications accessible to the key and prints supported
-devices and their readings. It waits until the disconnect callback supplies an
-error, then closes the collection and connection. Ctrl+C also runs that cleanup.
+devices and their readings. It waits for a disconnect notification, then closes the collection and connection. Ctrl+C also runs that cleanup.
 
 The backend subscription delivers events to the collection, which creates models
 and routes their events automatically. The `device_added` callback prints each
 model's name and subscribes to its state updates.
 
-Pass the connection directly to `SenseCapDeviceCollection(connection)`. It supplies
-the network ID and command sender through the shared `Connection` protocol.
+Pass the connection directly to `SenseCapDeviceCollection(connection)`. Call
+`await devices.async_setup()` to subscribe to the vendors in its model registry.
 
 <Code code={source} lang="python" title="connect_sensors.py" />
 
@@ -47,23 +46,23 @@ connection. TLS errors never cause a plaintext fallback.
 
 Omit `tenant_id` or pass `None` to discover applications across all accessible tenants. Supply a
 tenant UUID to restrict discovery to that tenant, or when the API key cannot list
-tenants. `application_ids` selects which applications supply inventory and events.
+tenants. `application_ids` selects which applications supply devices and events.
 
-## Inventory and events
+## Existing devices and events
 
-`async_subscribe(callback, on_disconnect)` delivers current devices as `ADDED` events
-before returning. It then delivers inventory changes and device activity.
-There is one subscription per connection; applications can distribute events to
-several consumers. Call `close()` after unsubscribing to release the connection.
+Call `await connection.async_connect()` to read existing devices and start live
+updates. Each collection then calls `async_setup()` to subscribe independently.
+Closing a collection removes its subscription and leaves the connection open.
+The connection owner calls `await connection.close()` when it stops.
 
-The backend polls inventory every 30 seconds and opens an internal ChirpStack event
-stream for each device. It resolves catalog profiles into model and vendor identities.
-Custom profiles without catalog identity remain in inventory, with no recognized model.
-An incomplete inventory read preserves the previous inventory.
+The backend polls the device list every 30 seconds and opens an internal ChirpStack
+event stream for each device. Catalog profiles supply model and vendor identities.
+An incomplete read preserves the previous device list. Custom profiles without
+catalog identity remain visible but do not select a device model.
 
 Generated protobuf payloads pass through the event envelope by reference. The internal
 stream returns JSON, so each payload must first be parsed into a generated message.
-Newly observed devices receive an inventory event before their activity is delivered.
+Newly observed devices receive an `ADDED` event before their activity is delivered.
 
 The internal API is a compatibility dependency, tested against ChirpStack 4.19.2 and
 Python bindings 4.19.0. It requires device event retention to be enabled. Retained events
@@ -79,15 +78,18 @@ poll_interval=30, channel=None)` owns its channel, including an injected test ch
 | --- | --- |
 | `await tenants()` | Return `{tenant_uuid: name}`. A scoped key may be denied. |
 | `await applications()` | Return `{application_uuid: name}` for the selected tenant, or all accessible tenants when `tenant_id` is `None` (the default). |
-| `await inventory()` | Read descriptors without starting streams or updating the subscription inventory. |
-| `await async_subscribe(callback, on_disconnect)` | Start inventory polling and live events; return a synchronous unsubscribe function. |
+| `await inventory()` | Read descriptors without starting streams or updating the current device list. |
+| `await async_connect()` | Read existing devices and start polling and live events. |
+| `await async_subscribe(*, vendor_ids, callback)` | Report matching existing devices, then live events. Return an unsubscribe function. `vendor_ids=None` includes all vendors. |
+| `on_disconnect(callback)` | Register a callback with no arguments; return an unsubscribe function. |
 | `await async_send_downlink(downlink)` | Validate device scope and enqueue application bytes; return the queue-item UUID. |
-| `await refresh()` | Refresh a running subscription's inventory. |
+| `await refresh()` | Refresh the connected device list. |
 | `await close()` | Stop tasks, await cleanup, and close the channel. |
-| `devices` | Current subscription inventory, keyed by DevEUI. |
-| `available` | Whether the subscription can deliver events. |
+| `devices` | Current devices, keyed by DevEUI. |
+| `available` | Whether the connection can deliver events. |
+| `error` | The last connection failure, or `None`. |
 
-Callbacks run synchronously. `on_disconnect(error)` runs after `available` becomes
+Callbacks run synchronously. Callbacks registered with `on_disconnect()` run after `available` becomes
 false. Create a new connection to recover. `AuthenticationError` reports rejected
 credentials or access scope; `ConnectionUnavailable` reports other subscription failures.
 ChirpStack can return the same authentication error for an invalid key and missing
@@ -96,10 +98,10 @@ permission. Discovery methods retain gRPC errors so callers can offer a tenant-I
 ## Write access
 
 Downlinks use the public `DeviceService.Enqueue` gRPC method. The connection must
-have an active subscription, and the device must belong to its selected inventory.
+be connected, and the device must belong to its selected applications.
 Before enqueueing, the backend reads the device to check its current application.
 Use a tenant API key with write access for commands. A read-only key still supports
-inventory and live events; attempted writes raise `DownlinkError`.
+device discovery and live events; attempted writes raise `DownlinkError`.
 
 `Downlink(dev_eui, f_port, data, confirmed=False, expires_at=None)` contains plaintext
 application bytes. FPort must be 1–223. An optional expiry is a timezone-aware datetime.

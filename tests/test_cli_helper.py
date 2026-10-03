@@ -39,6 +39,8 @@ def connection() -> Mock:
         applications=AsyncMock(return_value={"app": "App", "app2": "Second"}),
         inventory=AsyncMock(return_value=[DESCRIPTOR]),
         async_subscribe=AsyncMock(),
+        async_connect=AsyncMock(),
+        error=None,
         close=AsyncMock(),
     )
 
@@ -207,7 +209,7 @@ async def test_live_state_removal_and_disconnect(
 ) -> None:
     stop = Mock()
 
-    async def subscribe(callback, disconnected):
+    async def subscribe(*, vendor_ids, callback):
         now = datetime.now(UTC)
         callback(
             DeviceEventData(
@@ -228,7 +230,8 @@ async def test_live_state_removal_and_disconnect(
                 "network", DESCRIPTOR.dev_eui, EventType.REMOVED, now, DESCRIPTOR
             )
         )
-        disconnected(RuntimeError("offline"))
+        connection.error = RuntimeError("offline")
+        connection.on_disconnect.call_args.args[0]()
         return stop
 
     connection.async_subscribe.side_effect = subscribe
@@ -278,7 +281,7 @@ async def test_warn_unmapped_devices_from_supported_vendors(
     ]
     connection.inventory.return_value = descriptors
 
-    async def subscribe(callback, disconnected):
+    async def subscribe(*, vendor_ids, callback):
         for event_type in (EventType.ADDED, EventType.UPDATED):
             for descriptor in descriptors:
                 callback(
@@ -290,7 +293,8 @@ async def test_warn_unmapped_devices_from_supported_vendors(
                         descriptor,
                     )
                 )
-        disconnected(RuntimeError("offline"))
+        connection.error = RuntimeError("offline")
+        connection.on_disconnect.call_args.args[0]()
         return Mock()
 
     connection.async_subscribe.side_effect = subscribe
@@ -331,7 +335,7 @@ async def test_cancellation_closes_models_and_connection(connection: Mock) -> No
     stop = Mock()
     subscribed = asyncio.Event()
 
-    async def subscribe(callback, disconnected):
+    async def subscribe(*, vendor_ids, callback):
         callback(
             DeviceEventData(
                 "network",

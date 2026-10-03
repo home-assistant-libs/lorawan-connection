@@ -70,7 +70,7 @@ The JSON `state` field contains the model's public data. Dataclass values become
 objects. Bytes become hex strings, dates use ISO format, and enums use their values.
 Other custom objects use their string representation.
 
-Add `--list` to read inventory once and exit. Live mode stops on a
+Add `--list` to read the device list once and exit. Live mode stops on a
 connection failure with exit code 1. Ctrl+C closes models and the connection.
 The helper does not reconnect. `--help` works without the optional backend installed.
 
