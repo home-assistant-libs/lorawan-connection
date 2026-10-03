@@ -45,16 +45,17 @@ With a device library named `my_sensors` installed, run:
 
 ```sh
 python -m my_sensors --server https://chirpstack.example.com:443 \
-  --api-key-file /path/to/api-key --list
+  --api-key-file /path/to/api-key
 ```
 
 Use `CHIRPSTACK_API_KEY` instead of `--api-key-file` if you keep the key in the environment.
-The helper selects the tenant when the key can list exactly one tenant.
-Otherwise, pass `--tenant UUID`. Tenant-scoped keys require this argument with the
-tested ChirpStack version. All applications in that tenant are selected by default;
-repeat `--application UUID` to restrict the selection.
+The helper discovers applications across all tenants accessible to the API key
+at startup. Pass `--tenant UUID` to restrict it to one tenant, or repeat
+`--application UUID` to select specific applications. Keys that cannot list tenants
+require `--tenant`; this includes tenant-scoped keys with the tested ChirpStack version.
 
-Remove `--list` to print live state changes. Add `--json` for one JSON object per line:
+The command prints discovered devices and stays connected to print live state
+changes. Add `--json` for one JSON object per line:
 
 ```json
 {"type":"state","dev_eui":"0102030405060708","name":"Greenhouse","model":"S2101","state":{"temperature":21.4,"humidity":31.4}}
@@ -65,15 +66,15 @@ The JSON `state` field contains the model's public data. Dataclass values become
 objects. Bytes become hex strings, dates use ISO format, and enums use their values.
 Other custom objects use their string representation.
 
-`--list` reads inventory once and opens no event streams. Live mode stops on a
+Add `--list` to read inventory once and exit. Live mode stops on a
 connection failure with exit code 1. Ctrl+C closes models and the connection.
 The helper does not reconnect. `--help` works without the optional backend installed.
 
 ## Compose a custom command
 
 `add_connection_args(parser)` adds the connection arguments to an `ArgumentParser`.
-`await connect_from_args(args)` returns a `ChirpStackConnection` with its tenant and
-applications selected. The caller must await `connection.close()`.
+`await connect_from_args(args)` returns a `ChirpStackConnection` with its application
+selection and optional tenant filter. The caller must await `connection.close()`.
 
 `run(models, argv=None)` owns argument parsing, the event loop, output, and cleanup.
 Call it from a synchronous script entry point. `argv` is useful when testing a command.

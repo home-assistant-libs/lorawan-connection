@@ -52,9 +52,9 @@ async def test_scope_autoselection(
     ) as constructor:
         result = await connect_from_args(args())
     assert result is connection
-    assert result.tenant_id == "tenant"
     assert result.application_ids == ["app", "app2"]
     assert constructor.call_args.args[1] == "secret"
+    assert constructor.call_args.args[2] == ""
     connection.close.assert_not_awaited()
 
 
@@ -81,28 +81,23 @@ async def test_explicit_scope_and_key_file(connection: Mock, tmp_path: Path) -> 
     connection.tenants.assert_not_awaited()
 
 
-@pytest.mark.parametrize("tenants", [{}, {"a": "First", "b": "Second"}])
-async def test_ambiguous_tenant(
-    connection: Mock, monkeypatch: pytest.MonkeyPatch, tenants: dict[str, str]
+async def test_application_filter_without_tenant(
+    connection: Mock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("CHIRPSTACK_API_KEY", "secret")
-    connection.tenants.return_value = tenants
-    with (
-        patch(
-            "lorawan_connection.chirpstack.ChirpStackConnection",
-            return_value=connection,
-        ),
-        pytest.raises(ValueError, match="--tenant"),
+    with patch(
+        "lorawan_connection.chirpstack.ChirpStackConnection", return_value=connection
     ):
-        await connect_from_args(args())
-    connection.close.assert_awaited_once()
+        result = await connect_from_args(args("--application", "app2"))
+    assert result.application_ids == ["app2"]
+    connection.close.assert_not_awaited()
 
 
 async def test_scoped_key_cannot_list_tenants(
     connection: Mock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("CHIRPSTACK_API_KEY", "secret")
-    connection.tenants.side_effect = RuntimeError("denied")
+    connection.applications.side_effect = RuntimeError("denied")
     with (
         patch(
             "lorawan_connection.chirpstack.ChirpStackConnection",

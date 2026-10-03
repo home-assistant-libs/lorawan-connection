@@ -26,7 +26,7 @@ def add_connection_args(parser: argparse.ArgumentParser) -> None:
         "--api-key-file", type=Path, help="Read the API key from a file"
     )
     parser.add_argument(
-        "--tenant", help="Tenant UUID; auto-selected if only one exists"
+        "--tenant", help="Tenant UUID; defaults to all accessible tenants"
     )
     parser.add_argument(
         "--application",
@@ -56,27 +56,22 @@ async def connect_from_args(args: argparse.Namespace) -> "ChirpStackConnection":
         args.server, key, args.tenant or "", [], args.server
     )
     try:
-        if not args.tenant:
-            try:
-                tenants = await connection.tenants()
-            except Exception as error:
-                raise ValueError(
-                    "Cannot list tenants; supply --tenant with its UUID"
-                ) from error
-            if len(tenants) != 1:
-                choices = ", ".join(
-                    f"{name} ({uuid})" for uuid, name in tenants.items()
-                )
-                raise ValueError(
-                    f"Select a tenant with --tenant. Available: {choices or 'none'}"
-                )
-            connection.tenant_id = next(iter(tenants))
-        applications = await connection.applications()
+        try:
+            applications = await connection.applications()
+        except Exception as error:
+            if args.tenant:
+                raise
+            raise ValueError(
+                "Cannot discover applications; check the endpoint and API key. "
+                "If the key cannot list tenants, supply --tenant with its UUID"
+            ) from error
         selected = args.application or list(applications)
         if not selected:
-            raise ValueError("No applications are available in this tenant")
+            raise ValueError("No applications are available in the selected tenants")
         if not set(selected) <= applications.keys():
-            raise ValueError("Selected application does not belong to this tenant")
+            raise ValueError(
+                "Selected application does not belong to the selected tenants"
+            )
         connection.application_ids = list(dict.fromkeys(selected))
         return connection
     except BaseException:

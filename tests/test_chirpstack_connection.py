@@ -205,6 +205,143 @@ async def test_catalog_resolution(connection: ChirpStackConnection) -> None:
     await connection.close()
 
 
+async def test_applications_across_tenants(connection: ChirpStackConnection) -> None:
+    """Collect all pages of tenants and their applications without losing namesakes."""
+    connection.tenant_id = ""
+    connection._tenant_api.Get = AsyncMock()
+    connection._tenant_api.List = AsyncMock(
+        side_effect=[
+            api.ListTenantsResponse(
+                total_count=2,
+                result=[api.TenantListItem(id="first", name="First")],
+            ),
+            api.ListTenantsResponse(
+                total_count=2,
+                result=[api.TenantListItem(id="second", name="Second")],
+            ),
+        ]
+    )
+    connection._application_api.List = AsyncMock(
+        side_effect=[
+            api.ListApplicationsResponse(
+                total_count=2,
+                result=[api.ApplicationListItem(id="app1", name="Sensors")],
+            ),
+            api.ListApplicationsResponse(
+                total_count=2,
+                result=[api.ApplicationListItem(id="app2", name="Relays")],
+            ),
+            api.ListApplicationsResponse(
+                total_count=1,
+                result=[api.ApplicationListItem(id="app3", name="Sensors")],
+            ),
+        ]
+    )
+    assert await connection.applications() == {
+        "app1": "Sensors",
+        "app2": "Relays",
+        "app3": "Sensors",
+    }
+    requests = [
+        call.args[0] for call in connection._application_api.List.call_args_list
+    ]
+    assert [(request.tenant_id, request.offset) for request in requests] == [
+        ("first", 0),
+        ("first", 1),
+        ("second", 0),
+    ]
+    connection._tenant_api.Get.assert_not_awaited()
+    await connection.close()
+
+
+async def test_explicit_tenant_applications(connection: ChirpStackConnection) -> None:
+    """An explicit tenant works without permission to list tenants."""
+    connection._tenant_api.Get = AsyncMock()
+    connection._tenant_api.List = AsyncMock(side_effect=AssertionError("Not allowed"))
+    connection._application_api.List = AsyncMock(
+        return_value=api.ListApplicationsResponse(
+            total_count=1,
+            result=[api.ApplicationListItem(id="application", name="Sensors")],
+        )
+    )
+    assert await connection.applications() == {"application": "Sensors"}
+    assert connection._tenant_api.Get.call_args.args[0].id == "tenant"
+    assert connection._application_api.List.call_args.args[0].tenant_id == "tenant"
+    connection._tenant_api.List.assert_not_awaited()
+    await connection.close()
+
+
+async def test_all_tenants_subscription(connection: ChirpStackConnection) -> None:
+    """Inventory and live activity from multiple tenants share one event feed."""
+    connection.tenant_id = ""
+    connection.application_ids = ["app1", "app2"]
+    connection._tenant_api.List = AsyncMock(
+        return_value=api.ListTenantsResponse(
+            total_count=2,
+            result=[api.TenantListItem(id="first"), api.TenantListItem(id="second")],
+        )
+    )
+
+    async def applications(request, **kwargs):
+        return api.ListApplicationsResponse(
+            total_count=1,
+            result=[
+                api.ApplicationListItem(
+                    id="app1" if request.tenant_id == "first" else "app2"
+                )
+            ],
+        )
+
+    device_ids = {"app1": "0000000000000001", "app2": "0000000000000002"}
+
+    async def devices(request, **kwargs):
+        return api.ListDevicesResponse(
+            total_count=1,
+            result=[
+                api.DeviceListItem(
+                    dev_eui=device_ids[request.application_id],
+                    device_profile_id="profile",
+                )
+            ],
+        )
+
+    connection._application_api.List = AsyncMock(side_effect=applications)
+    connection._device_api.List = AsyncMock(side_effect=devices)
+    connection._profile_api.Get = AsyncMock(return_value=api.GetDeviceProfileResponse())
+    callback = Mock()
+    try:
+        with patch.object(connection, "_stream", AsyncMock()) as stream:
+            stop = await connection.async_subscribe(callback, Mock())
+            await asyncio.sleep(0)
+            assert {call.args[0] for call in stream.call_args_list} == set(
+                device_ids.values()
+            )
+            for dev_eui in device_ids.values():
+                await connection.handle_activity(
+                    DeviceEventData(
+                        "network",
+                        dev_eui,
+                        EventType.UPLINK,
+                        datetime.now(UTC),
+                        data=integration.UplinkEvent(data=PAYLOAD, f_port=1),
+                    )
+                )
+            events = [call.args[0] for call in callback.call_args_list]
+            assert [event.type for event in events] == [
+                EventType.ADDED,
+                EventType.ADDED,
+                EventType.UPLINK,
+                EventType.UPLINK,
+            ]
+            assert {event.descriptor.application_id for event in events[:2]} == {
+                "app1",
+                "app2",
+            }
+            stop()
+    finally:
+        await connection.close()
+
+
 async def test_pagination_and_scope(connection: ChirpStackConnection) -> None:
     """Honor all pages and reject a tenant/application scope mismatch."""
     method = AsyncMock(

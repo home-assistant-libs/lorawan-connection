@@ -95,7 +95,10 @@ run(Sensors.DEVICES)
 The helper discovers supported devices and prints their state. Models supply catalog
 identity and update listeners through the shared `Device` base. The CLI reads public
 model attributes and properties.
-Use `--list` for inventory or `--json` for machine-readable output.
+By default, it discovers applications across all accessible tenants and streams
+live updates. Use `--tenant UUID` or repeat `--application UUID` to restrict the
+selection. Keys that cannot list tenants require `--tenant`.
+Use `--list` to print inventory and exit, or `--json` for machine-readable output.
 
 ```sh
 pip install "lorawan-connection[chirpstack]"

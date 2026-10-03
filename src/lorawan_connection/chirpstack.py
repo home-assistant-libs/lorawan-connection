@@ -159,16 +159,23 @@ class ChirpStackConnection:
         }
 
     async def applications(self) -> dict[str, str]:
-        """Validate tenant access and list available applications."""
-        await self._call(self._tenant_api.Get, api.GetTenantRequest(id=self.tenant_id))
-        return {
-            item.id: item.name
-            for item in await self._list(
+        """List applications in the selected tenant, or all accessible tenants."""
+        if self.tenant_id:
+            await self._call(
+                self._tenant_api.Get, api.GetTenantRequest(id=self.tenant_id)
+            )
+            tenant_ids = [self.tenant_id]
+        else:
+            tenant_ids = list(await self.tenants())
+        applications = {}
+        for tenant_id in tenant_ids:
+            items = await self._list(
                 self._application_api.List,
                 api.ListApplicationsRequest,
-                tenant_id=self.tenant_id,
+                tenant_id=tenant_id,
             )
-        }
+            applications.update({item.id: item.name for item in items})
+        return applications
 
     async def async_send_downlink(self, downlink: Downlink) -> str:
         """Queue bytes for a selected device, without retrying or awaiting delivery."""
@@ -215,7 +222,7 @@ class ChirpStackConnection:
         applications = await self.applications()
         if not set(self.application_ids) <= applications.keys():
             raise ConnectionUnavailable(
-                "Selected application no longer belongs to the tenant"
+                "Selected application is no longer accessible in the selected tenants"
             )
         profiles = {}
         snapshot = {}

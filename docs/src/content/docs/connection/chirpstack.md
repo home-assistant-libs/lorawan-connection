@@ -29,6 +29,10 @@ The caller supplies the collection, key, IDs, and disconnect callback.
 Use `https` for TLS with system trust roots. `http` explicitly selects an unencrypted
 connection. TLS errors never cause a plaintext fallback.
 
+Set `tenant_id=""` to discover applications across all accessible tenants. Supply a
+tenant UUID to restrict discovery to that tenant, or when the API key cannot list
+tenants. `application_ids` selects which applications supply inventory and events.
+
 ## Inventory and events
 
 `async_subscribe(callback, on_disconnect)` delivers current devices as `ADDED` events
@@ -58,7 +62,7 @@ poll_interval=30, channel=None)` owns its channel, including an injected test ch
 | Method or attribute | Behavior |
 | --- | --- |
 | `await tenants()` | Return `{tenant_uuid: name}`. A scoped key may be denied. |
-| `await applications()` | Validate tenant access and return `{application_uuid: name}`. |
+| `await applications()` | Return `{application_uuid: name}` for the selected tenant, or all accessible tenants when `tenant_id` is empty. |
 | `await inventory()` | Read descriptors without starting streams or updating the subscription inventory. |
 | `await async_subscribe(callback, on_disconnect)` | Start inventory polling and live events; return a synchronous unsubscribe function. |
 | `await async_send_downlink(downlink)` | Validate device scope and enqueue application bytes; return the queue-item UUID. |
