@@ -3,8 +3,18 @@ title: Connecting to ChirpStack
 description: Read catalog inventory and live device events from an existing ChirpStack server.
 ---
 
+The ChirpStack backend connects your device library to an existing ChirpStack
+server. It discovers provisioned devices and delivers their inventory and live
+events to your collection. The collection creates supported device models, which
+decode readings and notify your application when their state changes.
+
+For writable devices, the backend also sends commands from models to ChirpStack
+for delivery. Provision devices and configure gateways in ChirpStack before
+connecting. The backend accesses the server with an API key.
+
+## Connect your collection
+
 Install the backend with `pip install "lorawan-connection[chirpstack]"`.
-The base package keeps its dependency-free event and collection API.
 
 ```python
 from lorawan_connection.chirpstack import ChirpStackConnection
@@ -76,9 +86,6 @@ false. Create a new connection to recover. `AuthenticationError` reports rejecte
 credentials or access scope; `ConnectionUnavailable` reports other subscription failures.
 ChirpStack can return the same authentication error for an invalid key and missing
 permission. Discovery methods retain gRPC errors so callers can offer a tenant-ID fallback.
-
-Provision devices in ChirpStack. This backend reads inventory and events and sends downlinks; it does not
-configure gateways or provision devices.
 
 ## Write access
 
