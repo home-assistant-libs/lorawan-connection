@@ -3,9 +3,14 @@ title: Build a device library
 description: Organize device models into a library with a public collection, a CLI, and tests.
 ---
 
-A device library exposes a collection and the device models it manages.
-Applications discover models through the collection, read their attributes,
-subscribe to updates, and call their command methods.
+A device library gives applications Python objects for the devices it supports.
+Its public entry point is a collection that accepts a `Connection`. Applications
+discover devices through that collection, read their attributes, subscribe to
+updates, and call their command methods.
+
+Keep payload decoding, measurement units, and command encoding in this package.
+The application supplies the connection and decides how to display the data.
+Release and test the library independently of the applications that use it.
 
 Start with a model from [Devices and collections](/lorawan-connection/modelling/overview/).
 That guide covers decoding, state, commands, and model lifecycle. This page shows
@@ -75,6 +80,45 @@ The application owns credentials, connection setup, and reconnection. Keep backe
 imports in connection scripts such as the CLI. The device models use the shared
 event and downlink interfaces. See [Connecting to ChirpStack](/lorawan-connection/connection/chirpstack/)
 for a complete application using the SenseCAP collection.
+
+For example, an application with an open connection can monitor the library like
+this. Cancel `monitor()` to stop; its `finally` block closes the collection.
+
+```python
+import asyncio
+
+from lorawan_connection import Connection
+from sensecap_lorawan import S2101, SenseCapDeviceCollection
+
+
+async def monitor(connection: Connection) -> None:
+    devices = SenseCapDeviceCollection(connection)
+
+    def device_added(device: S2101) -> None:
+        def show_readings() -> None:
+            print(device.descriptor.name, device.temperature, device.humidity)
+
+        show_readings()
+        device.add_update_listener(show_readings)
+        device.add_remove_listener(
+            lambda: print("Removed:", device.descriptor.name)
+        )
+
+    devices.subscribe_device_added(device_added)
+    try:
+        await devices.async_setup()
+        await asyncio.Event().wait()
+    finally:
+        devices.close()
+```
+
+The collection creates a model for each supported device and attaches its command
+sender. Values can be `None` until the first report. A model can expose several
+measurements, channels, or sub-systems; one event can update any number of them.
+
+Closing the collection clears its models' listeners and leaves the supplied
+connection open. Device removal calls the model's removal listeners. Closing the
+collection during application shutdown does not report every device as removed.
 
 ## Add a CLI and tests
 
