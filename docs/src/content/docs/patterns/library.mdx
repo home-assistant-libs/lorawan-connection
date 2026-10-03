@@ -19,27 +19,26 @@ how those pieces fit into a Python package.
 ## Organize the package
 
 Add `lorawan-connection` as a dependency in your package's `pyproject.toml`.
-Use a `devices/` folder with one file per model. Name files after the device's
-function, such as `temperature_humidity.py`, rather than its model number.
+Use a `devices/` folder with one file per model, such as `devices/s2101.py`.
 Keep each model and its decoder together. For a SenseCAP library, the layout could be:
 
 ```text
 pyproject.toml
 sensecap_lorawan/
-  __init__.py                   # public exports
-  collection.py                 # supported device models
-  __main__.py                   # command-line entry point
+  __init__.py       # public exports
+  collection.py     # supported device models
+  __main__.py       # command-line entry point
   devices/
     __init__.py
-    temperature_humidity.py     # S2101 model and decoder
+    s2101.py        # S2101 model and decoder
 tests/
-  conftest.py                   # collection fixture
+  conftest.py       # collection fixture
   devices/
-    test_temperature_humidity.py
+    test_s2101.py
 ```
 
 The [quickstart example](/lorawan-connection/getting-started/quickstart/#example-library)
-contains the S2101 model and decoder. Put those in `devices/temperature_humidity.py`.
+contains the S2101 model and decoder. Put those in `devices/s2101.py`.
 Move decoders shared by several models into a separate module.
 
 ## Expose a collection
@@ -49,7 +48,7 @@ Declare the library's supported models in `collection.py`:
 ```python
 from lorawan_connection import DeviceCollection
 
-from .devices.temperature_humidity import S2101
+from .devices.s2101 import S2101
 
 
 class SenseCapDeviceCollection(DeviceCollection[S2101]):
@@ -65,7 +64,7 @@ Export the collection and model classes from `__init__.py`:
 
 ```python
 from .collection import SenseCapDeviceCollection
-from .devices.temperature_humidity import S2101
+from .devices.s2101 import S2101
 
 __all__ = ["S2101", "SenseCapDeviceCollection"]
 ```
