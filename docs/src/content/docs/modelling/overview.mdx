@@ -173,6 +173,17 @@ A metadata update replaces the descriptor on the existing instance. A change to 
 vendor or catalog identity replaces the model. Removal closes the model and calls
 listeners registered with `subscribe_device_removed()`.
 
+To observe one model directly, register a callback on it:
+
+```python
+unsubscribe = device.add_remove_listener(
+    lambda: print(f"Removed: {device.descriptor.name}")
+)
+```
+
+The callback runs after removal or replacement closes that model. Ordinary
+connection shutdown clears this listener without reporting removal.
+
 When stopping, call `collection.close()`. It unsubscribes from device events,
 closes every model, removes listeners, and ends pending command waits.
 Close operations are safe to repeat.

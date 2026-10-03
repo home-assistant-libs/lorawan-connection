@@ -282,3 +282,69 @@ async def test_close_during_setup_releases_subscription() -> None:
         await collection.async_setup()
     unsubscribe.assert_called_once()
     assert not collection.devices
+
+
+@pytest.mark.parametrize("replacement", [False, True])
+def test_device_remove_listener(replacement: bool) -> None:
+    collection = Collection(Mock())
+    collection.handle_event(inventory())
+    device = collection.devices[DESCRIPTOR.dev_eui]
+    removed = Mock()
+
+    def on_remove() -> None:
+        assert device.closed
+        assert DESCRIPTOR.dev_eui not in collection.devices
+        removed()
+
+    device.add_remove_listener(on_remove)
+    event = (
+        inventory(replace(DESCRIPTOR, catalog_model_id="other"), EventType.UPDATED)
+        if replacement
+        else inventory(kind=EventType.REMOVED)
+    )
+    collection.handle_event(event)
+    collection.handle_event(event)
+    removed.assert_called_once_with()
+    collection.close()
+    removed.assert_called_once_with()
+
+
+def test_device_remove_listeners_unsubscribe_and_failures() -> None:
+    collection = Collection(Mock())
+    collection.handle_event(inventory())
+    device = collection.devices[DESCRIPTOR.dev_eui]
+    removed, remaining = Mock(), Mock()
+    unsubscribe = device.add_remove_listener(removed)
+    unsubscribe()
+    unsubscribe()
+    device.add_remove_listener(Mock(side_effect=ValueError("bad observer")))
+    device.add_remove_listener(remaining)
+    collection.handle_event(inventory(kind=EventType.REMOVED))
+    removed.assert_not_called()
+    remaining.assert_called_once_with()
+    with pytest.raises(RuntimeError, match="closed"):
+        device.add_remove_listener(Mock())
+
+
+def test_collection_shutdown_does_not_report_device_removal() -> None:
+    collection = Collection(Mock())
+    collection.handle_event(inventory())
+    device = collection.devices[DESCRIPTOR.dev_eui]
+    removed = Mock()
+    device.add_remove_listener(removed)
+    collection.close()
+    assert device.closed
+    removed.assert_not_called()
+    assert not device._remove_listeners
+
+
+def test_device_remove_callback_can_close_collection() -> None:
+    collection = Collection(Mock())
+    collection.handle_event(inventory())
+    device = collection.devices[DESCRIPTOR.dev_eui]
+    device.add_remove_listener(collection.close)
+    other = Mock()
+    device.add_remove_listener(other)
+    collection.handle_event(inventory(kind=EventType.REMOVED))
+    other.assert_called_once_with()
+    assert not collection.devices

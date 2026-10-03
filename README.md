@@ -165,6 +165,8 @@ Pass a connection to the collection, then call `await devices.async_setup()`.
 The collection selects vendor IDs from its registered model classes and receives
 existing devices before setup returns. Later events reach models automatically.
 `devices.close()` unsubscribes and closes the models without closing the connection.
+Listen for a model's removal with `device.add_remove_listener(callback)`. It fires
+after removal or replacement closes that model, but not during ordinary shutdown.
 
 `Connection` exposes only `async_subscribe(*, vendor_ids, callback)`,
 `on_disconnect(callback)`, and `async_send_downlink(downlink)`.

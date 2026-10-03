@@ -89,10 +89,13 @@ class DeviceCollection[DeviceT: Device]:
             raise RuntimeError("Device collection is closed")
         return subscribe(self._removed, callback)
 
-    def _remove(self, dev_eui: str) -> None:
+    def _remove(self, dev_eui: str, *, removed: bool = True) -> None:
         if (device := self.devices.pop(dev_eui, None)) is not None:
             try:
-                device.close()
+                if removed:
+                    device._remove()
+                else:
+                    device.close()
             except Exception:
                 _LOGGER.exception("LoRaWAN device cleanup failed")
             notify(self._removed, device)
@@ -142,6 +145,6 @@ class DeviceCollection[DeviceT: Device]:
             self._unsubscribe()
             self._unsubscribe = None
         for eui in tuple(self.devices):
-            self._remove(eui)
+            self._remove(eui, removed=False)
         self._added.clear()
         self._removed.clear()

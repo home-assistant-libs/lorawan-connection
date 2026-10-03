@@ -86,7 +86,7 @@ transport recovery and credential reauthentication.
 
 ## Platform setup
 
-Listen for library device additions and removals. Put this in `sensor.py`, together
+Listen for library device additions. Each entity listens for its own model's removal. Put this in `sensor.py`, together
 with the `SenseCapTemperature` entity from the next section. It imports
 `SenseCapConfigEntry` from the integration's `__init__.py` shown above.
 
@@ -103,29 +103,16 @@ async def async_setup_entry(
     entry: SenseCapConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    entities: dict[str, SenseCapTemperature] = {}
-
     @callback
     def added(device: S2101) -> None:
-        entity = entities[device.descriptor.dev_eui] = SenseCapTemperature(device)
-        async_add_entities([entity])
-
-    @callback
-    def removed(device: S2101) -> None:
-        entity = entities.pop(device.descriptor.dev_eui, None)
-        if entity is not None and entity.hass is not None:
-            entity.async_write_ha_state()
-            entry.async_create_task(
-                hass, entity.async_remove(force_remove=True), "Remove LoRaWAN entity"
-            )
+        async_add_entities([SenseCapTemperature(device)])
 
     entry.async_on_unload(entry.runtime_data.subscribe_device_added(added))
-    entry.async_on_unload(entry.runtime_data.subscribe_device_removed(removed))
 ```
 
-Removal happens after model `close()`. An entity that reads `device.closed` becomes
-unavailable even before its removal task finishes. Production integrations must
-also handle removal while an entity is still being added.
+The removal listener runs after the model closes. The entity becomes unavailable
+while its removal task runs. If removal arrives before entity setup finishes,
+the `device.closed` check removes the entity without registering listeners.
 
 The POC removes active entities but preserves registry records. This protects user
 customizations if a device returns. Permanent registry cleanup and manual exclusion
@@ -143,6 +130,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import UnitOfTemperature
+from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceInfo
 
 from sensecap_lorawan import S2101
@@ -177,8 +165,18 @@ class SenseCapTemperature(SensorEntity):
         return not self.device.closed
 
     async def async_added_to_hass(self) -> None:
-        unsubscribe = self.device.add_update_listener(self.async_write_ha_state)
-        self.async_on_remove(unsubscribe)
+        if self.device.closed:
+            self.hass.async_create_task(self.async_remove(force_remove=True))
+            return
+        self.async_on_remove(self.device.add_update_listener(self.async_write_ha_state))
+        self.async_on_remove(
+            self.device.add_remove_listener(self._async_device_removed)
+        )
+
+    @callback
+    def _async_device_removed(self) -> None:
+        self.async_write_ha_state()
+        self.hass.async_create_task(self.async_remove(force_remove=True))
 ```
 
 Add humidity the same way, using `SensorDeviceClass.HUMIDITY` and `PERCENTAGE`.

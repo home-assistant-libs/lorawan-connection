@@ -19,6 +19,16 @@ Register a synchronous `Callable[[], None]`. No initial callback is sent. Read
 model attributes directly for initial values. Each registration is independent;
 its unsubscribe function is idempotent. Registration after close raises `RuntimeError`.
 
+### add_remove_listener(listener) → Unsubscribe
+
+Register a synchronous callback with no arguments. It runs once when the collection
+removes or replaces this model, after closing it. There is no initial callback.
+The returned unsubscribe function is idempotent. Registration after close raises
+`RuntimeError`. Listener failures are logged without blocking other listeners.
+
+Calling `device.close()` or `collection.close()` clears these listeners without
+reporting removal. Disconnect and shutdown are separate from device removal.
+
 ### notify() → None
 
 Call current update listeners with no arguments. This method does not compare or
@@ -120,6 +130,8 @@ returns. A model retired during replay is skipped.
 
 The callback takes one `DeviceT` and returns `None`. It receives future retirements,
 after the model is removed and `close()` is called. There is no initial replay.
+This collection-level callback also reports models retired during collection shutdown.
+Use `device.add_remove_listener()` to observe only removal or replacement of one model.
 
 Both methods raise `RuntimeError` after the collection is closed. Their returned
 unsubscribe functions are idempotent. Callback exceptions are logged and isolated.

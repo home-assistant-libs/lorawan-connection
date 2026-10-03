@@ -21,6 +21,7 @@ class Device(ABC):
     def __init__(self, descriptor: DeviceDescriptor) -> None:
         self.descriptor = descriptor
         self._listeners: list[Callable[[None], None]] = []
+        self._remove_listeners: list[Callable[[None], None]] = []
         self._closed = False
         self._send_downlink: SendDownlink | None = None
         self._pending_acks: dict[str, asyncio.Future[bool]] = {}
@@ -37,6 +38,21 @@ class Device(ABC):
         if self._closed:
             raise RuntimeError("Device is closed")
         return subscribe(self._listeners, lambda _: listener())
+
+    def add_remove_listener(self, listener: Callable[[], None]) -> Unsubscribe:
+        """Listen for removal or replacement of this model in its collection."""
+        if self._closed:
+            raise RuntimeError("Device is closed")
+        return subscribe(self._remove_listeners, lambda _: listener())
+
+    def _remove(self) -> None:
+        """Close a removed model before notifying its observers."""
+        listeners, self._remove_listeners = self._remove_listeners, []
+        try:
+            self.close()
+        finally:
+            notify(listeners, None)
+            listeners.clear()
 
     def notify(self) -> None:
         """Notify listeners after a complete update, even if state is unchanged."""
@@ -99,6 +115,7 @@ class Device(ABC):
         """Retire the model and release listeners; repeated calls are harmless."""
         self._closed = True
         self._listeners.clear()
+        self._remove_listeners.clear()
         for result in self._pending_acks.values():
             if not result.done():
                 result.set_exception(DownlinkError("Device is closed"))
