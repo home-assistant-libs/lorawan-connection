@@ -31,6 +31,7 @@ DEVICE_MODELS: dict[tuple[int | None, str], type[Sensor]] = {
     (123, "known-model"): Sensor,
 }
 
+
 class Sensors(DeviceCollection[Sensor]):
     def _create_device(self, descriptor: DeviceDescriptor) -> Sensor | None:
         model_class = DEVICE_MODELS.get(
