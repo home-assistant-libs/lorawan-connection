@@ -5,46 +5,18 @@ import asyncio
 import json
 import os
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import asdict, is_dataclass
 from datetime import UTC, date, datetime
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Protocol
+from typing import TYPE_CHECKING, Any
 
-from . import Device, DeviceCollection, DeviceDescriptor, DeviceEventData, EventType
+from . import Device, DeviceCollection, DeviceEventData, EventType
 from .callbacks import Unsubscribe
 
 if TYPE_CHECKING:
     from .chirpstack import ChirpStackConnection
-
-
-class Model(Device, Protocol):
-    """Model constructor, catalog identity, and observable state for the CLI."""
-
-    vendor_id: ClassVar[int]
-    product_id: ClassVar[str]
-
-    def __init__(self, descriptor: DeviceDescriptor) -> None: ...
-
-    @property
-    def state(self) -> object: ...
-
-    def subscribe(self, callback: Callable[[object], None]) -> Unsubscribe: ...
-
-
-class _Models(DeviceCollection[Model]):
-    def __init__(self, network_id: str, models: Sequence[type[Model]]) -> None:
-        super().__init__(network_id)
-        self._models: dict[tuple[int | None, str], type[Model]] = {
-            (model.vendor_id, model.product_id): model for model in models
-        }
-        if len(self._models) != len(models):
-            raise ValueError("Each model must have a unique vendor_id/product_id pair")
-
-    def _create_device(self, descriptor: DeviceDescriptor) -> Model | None:
-        model = self._models.get((descriptor.vendor_id, descriptor.catalog_model_id))
-        return model(descriptor) if model else None
 
 
 def add_connection_args(parser: argparse.ArgumentParser) -> None:
@@ -74,7 +46,7 @@ async def connect_from_args(args: argparse.Namespace) -> "ChirpStackConnection":
         ) from error
 
     key = (
-        args.api_key_file.read_text().strip()
+        (await asyncio.to_thread(args.api_key_file.read_text)).strip()
         if args.api_key_file
         else os.environ.get("CHIRPSTACK_API_KEY", "").strip()
     )
@@ -124,49 +96,51 @@ def _json_default(value: object) -> object:
     return str(value)
 
 
-async def _watch(args: argparse.Namespace, models: Sequence[type[Model]]) -> None:
-    # Validate the registry before opening a channel.
-    collection = _Models(args.server, models)
+async def _watch(args: argparse.Namespace, models: Sequence[type[Device[Any]]]) -> None:
+    collection = DeviceCollection[Device[Any]](models, network_id=args.server)
     subscriptions: dict[str, Unsubscribe] = {}
+    finished: asyncio.Future[Exception] = asyncio.get_running_loop().create_future()
 
-    def output(kind: str, device: Model, state: object = None) -> None:
+    def on_disconnect(error: Exception) -> None:
+        if not finished.done():
+            finished.set_result(error)
+
+    def output(kind: str, device: Device[Any], state: object = None) -> None:
         descriptor = device.descriptor
         if args.json:
-            print(
-                json.dumps(
-                    {
-                        "type": kind,
-                        "dev_eui": descriptor.dev_eui,
-                        "name": descriptor.name,
-                        "model": type(device).__name__,
-                        "state": state,
-                    },
-                    default=_json_default,
-                ),
-                flush=True,
+            line = json.dumps(
+                {
+                    "type": kind,
+                    "dev_eui": descriptor.dev_eui,
+                    "name": descriptor.name,
+                    "model": type(device).__name__,
+                    "state": state,
+                },
+                default=_json_default,
             )
         else:
             suffix = f" {state}" if state is not None else ""
-            print(
+            line = (
                 f"{kind}: {descriptor.name} "
-                f"({descriptor.dev_eui}, {type(device).__name__}){suffix}",
-                flush=True,
+                f"({descriptor.dev_eui}, {type(device).__name__}){suffix}"
             )
+        print(line, flush=True)
 
-    def added(device: Model) -> None:
+    def added(device: Device[Any]) -> None:
         output("added", device, device.state)
-        subscriptions[device.descriptor.dev_eui] = device.subscribe(
-            lambda state: output("state", device, state)
+        subscriptions[device.descriptor.dev_eui] = device.add_update_listener(
+            lambda: output("state", device, device.state)
         )
 
-    def removed(device: Model) -> None:
+    def removed(device: Device[Any]) -> None:
         subscriptions.pop(device.descriptor.dev_eui)()
         output("removed", device)
 
     collection.subscribe_device_added(added)
     stop_removed = collection.subscribe_device_removed(removed)
-    connection = await connect_from_args(args)
+    connection = None
     try:
+        connection = await connect_from_args(args)
         if args.list:
             for descriptor in await connection.inventory():
                 collection.handle_event(
@@ -179,29 +153,22 @@ async def _watch(args: argparse.Namespace, models: Sequence[type[Model]]) -> Non
                     )
                 )
             return
-        disconnected: asyncio.Future[Exception] = (
-            asyncio.get_running_loop().create_future()
-        )
-
-        def on_disconnect(error: Exception) -> None:
-            if not disconnected.done():
-                disconnected.set_result(error)
-
         stop = await connection.async_subscribe(collection.handle_event, on_disconnect)
         try:
-            raise await disconnected
+            error = await finished
         finally:
             stop()
+        raise error
     finally:
-        # Local cleanup is not a server-side removal.
         stop_removed()
         for stop_model in subscriptions.values():
             stop_model()
         collection.close()
-        await connection.close()
+        if connection is not None:
+            await connection.close()
 
 
-def run(models: Sequence[type[Model]], argv: Sequence[str] | None = None) -> None:
+def run(models: Sequence[type[Device[Any]]], argv: Sequence[str] | None = None) -> None:
     """Discover supported devices and print state until interrupted or disconnected."""
     parser = argparse.ArgumentParser(
         description="Discover devices and watch their state."

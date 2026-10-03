@@ -2,7 +2,7 @@
 
 from lorawan_connection.cli_helper import run
 
-from . import SUPPORTED_MODELS
+from . import SenseCapDeviceCollection
 
 if __name__ == "__main__":
-    run(SUPPORTED_MODELS)
+    run(SenseCapDeviceCollection.DEVICES)

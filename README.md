@@ -12,44 +12,34 @@ supported models and reports them through device-added callbacks. Consumers then
 observe model state. The caller owns the network connection.
 
 ```python
-from lorawan_connection import DeviceCollection, DeviceDescriptor, DeviceEvent
+from lorawan_connection import Device, DeviceCollection, DeviceDescriptor, DeviceEvent
 
 
-class Sensor:
+class Sensor(Device[float | None]):
     vendor_id = 123
-    product_id = "known-model"
+    catalog_model_id = "known-model"
 
     def __init__(self, descriptor: DeviceDescriptor) -> None:
-        self.descriptor = descriptor
+        super().__init__(descriptor, state=None)
 
     def handle_event(self, event: DeviceEvent) -> None:
-        # Interpret events and update typed state here.
+        # Decode an event, assign self.state, then call self.notify().
         pass
-
-    def close(self) -> None:
-        # Release model listeners and other model resources here.
-        pass
-
-
-SUPPORTED_MODELS = [Sensor]
-DEVICE_MODELS: dict[tuple[int | None, str], type[Sensor]] = {
-    (model.vendor_id, model.product_id): model for model in SUPPORTED_MODELS
-}
 
 
 class Sensors(DeviceCollection[Sensor]):
-    def _create_device(self, descriptor: DeviceDescriptor) -> Sensor | None:
-        model_class = DEVICE_MODELS.get(
-            (descriptor.vendor_id, descriptor.catalog_model_id)
-        )
-        return model_class(descriptor) if model_class is not None else None
+    DEVICES = (Sensor,)
 
 
-sensors = Sensors("my-network")
+sensors = Sensors(network_id="my-network")
 stop = sensors.subscribe_device_added(lambda device: print(device.descriptor.name))
-# Feed all matching events into sensors.handle_event(event).
-# Supported devices appear automatically when their inventory events arrive.
+# Feed inventory and live events into sensors.handle_event(event).
 ```
+
+The collection builds its catalog lookup from `DEVICES`. You can also pass classes
+at construction: `DeviceCollection([Sensor], network_id="my-network")`.
+The `Device` base supplies typed state, `add_update_listener()`, `notify()`, and cleanup.
+Listeners take no arguments and read the model's state after a complete update.
 
 ## Install
 
@@ -64,6 +54,7 @@ replays a SenseCAP S2101 capture and prints 21.4 °C and 31.4% humidity.
 
 - Read-only event and payload `Protocol`s. Generated payloads can pass by reference.
 - Immutable descriptors and fixture dataclasses for every supported event payload.
+- A typed `Device` base with synchronous update listeners and explicit notifications.
 - A generic `DeviceCollection` with inventory replay, model replacement, and retirement.
 - Synchronous callback helpers with independent, idempotent unsubscribe functions.
 - Typed exports (`py.typed`), a tested SenseCAP example, and Astro/Starlight documentation.
@@ -82,13 +73,13 @@ Pass the library's supported model classes to the shared helper:
 
 ```python
 from lorawan_connection.cli_helper import run
-from my_sensors import SUPPORTED_MODELS
+from my_sensors import Sensors
 
-run(SUPPORTED_MODELS)
+run(Sensors.DEVICES)
 ```
 
 The helper discovers supported devices and prints their state. Models supply catalog
-identity, a `state` property, and `subscribe(callback)` alongside their event lifecycle.
+identity, state, and update listeners through the shared `Device` base.
 Use `--list` for inventory or `--json` for machine-readable output.
 
 ```sh
@@ -98,6 +89,18 @@ python -m my_sensors --server https://chirpstack.example.com:443 --api-key-file 
 
 See the [CLI guide](https://home-assistant-libs.github.io/lorawan-connection/patterns/cli/)
 and [ChirpStack backend](https://home-assistant-libs.github.io/lorawan-connection/connection/chirpstack/).
+
+## Migrating from 0.2
+
+Rename model `product_id` to `catalog_model_id`. Replace state callbacks with
+`add_update_listener(callback)`; callbacks take no arguments and read `device.state`.
+Models can inherit `Device[StateT]`, initialize it with `super().__init__(descriptor,
+state=initial_state)`, and call `self.notify()` after updating state.
+Declare `DEVICES` on the collection to replace manual lookup dictionaries.
+
+Models now inherit `Device[StateT]`. Pass the network ID by keyword when constructing
+a collection: `Sensors(network_id="my-network")`. Existing `_create_device()`
+overrides remain available for custom matching.
 
 ## Home Assistant
 

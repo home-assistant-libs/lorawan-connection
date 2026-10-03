@@ -1,38 +1,52 @@
 """Create and retire device models from an inventory and live event feed."""
 
 import logging
-from collections.abc import Callable
-from typing import Protocol
+from collections.abc import Callable, Sequence
+from typing import Any, cast
 
 from .callbacks import Unsubscribe, notify, subscribe
+from .device import Device
 from .events import DeviceDescriptor, DeviceEvent, EventType
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class Device(Protocol):
-    """Minimal model lifecycle required by a collection."""
-
-    descriptor: DeviceDescriptor
-
-    def handle_event(self, event: DeviceEvent) -> None: ...
-
-    def close(self) -> None: ...
-
-
-class DeviceCollection[DeviceT: Device]:
+class DeviceCollection[DeviceT: Device[Any]]:
     """Create vendor models from inventory, then route their live events."""
 
-    def __init__(self, network_id: str) -> None:
-        """Own models for exactly one logical network."""
+    DEVICES: Sequence[type[DeviceT]] = ()
+
+    def __init__(
+        self,
+        models: Sequence[type[DeviceT]] | None = None,
+        *,
+        network_id: str,
+    ) -> None:
+        """Own one network; use explicit model classes or the subclass's DEVICES."""
         self.network_id = network_id
         self.devices: dict[str, DeviceT] = {}
+        self._models: dict[tuple[int, str], type[DeviceT]] = {}
+        for model in self.DEVICES if models is None else models:
+            identity = (model.vendor_id, model.catalog_model_id)
+            if identity in self._models:
+                raise ValueError(
+                    f"Duplicate catalog identity: vendor_id={identity[0]}, "
+                    f"catalog_model_id={identity[1]!r}"
+                )
+            self._models[identity] = model
         self._added: list[Callable[[DeviceT], None]] = []
         self._removed: list[Callable[[DeviceT], None]] = []
         self._closed = False
 
     def _create_device(self, descriptor: DeviceDescriptor) -> DeviceT | None:
-        raise NotImplementedError
+        """Construct a registered model, or leave an unknown identity unsupported."""
+        if descriptor.vendor_id is None:
+            return None
+        model = self._models.get((descriptor.vendor_id, descriptor.catalog_model_id))
+        if model is None:
+            return None
+        # Model constructors supply their own initial state to Device.__init__.
+        return cast(Callable[[DeviceDescriptor], DeviceT], model)(descriptor)
 
     def subscribe_device_added(
         self, callback: Callable[[DeviceT], None]

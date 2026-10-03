@@ -7,11 +7,11 @@ from sensecap_lorawan import S2101, SenseCapDeviceCollection
 
 
 def main() -> None:
-    devices = SenseCapDeviceCollection("home")
+    devices = SenseCapDeviceCollection(network_id="home")
 
     def device_added(device: S2101) -> None:
         print(f"Device: {device.descriptor.name}")
-        device.subscribe(lambda state: print(f"State: {state}"))
+        device.add_update_listener(lambda: print(f"State: {device.state}"))
 
     devices.subscribe_device_added(device_added)
     descriptor = DeviceDescriptor(
@@ -20,7 +20,7 @@ def main() -> None:
         name="Greenhouse",
         application_id="sensors",
         profile_id="s2101-profile",
-        catalog_model_id=S2101.product_id,
+        catalog_model_id=S2101.catalog_model_id,
         vendor_id=S2101.vendor_id,
         manufacturer="Seeed Studio",
         model="SenseCAP S2101",

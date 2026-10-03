@@ -7,6 +7,7 @@ from lorawan_connection import (
     AckData,
     Coordinates,
     CoordinatesData,
+    DeviceCollection,
     DeviceEvent,
     DeviceEventData,
     EventType,
@@ -23,6 +24,7 @@ from lorawan_connection import (
     Uplink,
     UplinkData,
 )
+from sensecap_lorawan import S2101, SenseCapDeviceCollection
 
 uplink: Uplink = UplinkData(b"\x00")
 join: Join = JoinData("01234567")
@@ -35,3 +37,15 @@ location: Location = LocationData(coordinates)
 event: DeviceEvent = DeviceEventData(
     "network", "0000000000000001", EventType.UPLINK, datetime.now(UTC), data=uplink
 )
+
+
+# The class registry preserves the concrete model type for callers.
+
+model_class: type[S2101] = S2101
+collection: DeviceCollection[S2101] = DeviceCollection([S2101], network_id="network")
+declared: DeviceCollection[S2101] = SenseCapDeviceCollection(network_id="network")
+
+
+def observe(model: S2101) -> None:
+    model.add_update_listener(lambda: print(model.state.temperature))
+    model.close()

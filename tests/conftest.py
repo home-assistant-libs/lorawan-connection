@@ -4,7 +4,13 @@ from datetime import UTC, datetime
 
 import pytest
 
-from lorawan_connection import DeviceDescriptor, DeviceEvent, DeviceEventData, EventType
+from lorawan_connection import (
+    Device,
+    DeviceDescriptor,
+    DeviceEvent,
+    DeviceEventData,
+    EventType,
+)
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 DESCRIPTOR = DeviceDescriptor(
@@ -20,9 +26,12 @@ def inventory(
     )
 
 
-class DeviceModel:
+class DeviceModel(Device[None]):
+    vendor_id = 744
+    catalog_model_id = "model"
+
     def __init__(self, descriptor: DeviceDescriptor) -> None:
-        self.descriptor = descriptor
+        super().__init__(descriptor, state=None)
         self.events: list[DeviceEvent] = []
         self.close_count = 0
 
@@ -31,6 +40,7 @@ class DeviceModel:
 
     def close(self) -> None:
         self.close_count += 1
+        super().close()
 
 
 @pytest.fixture

@@ -13,8 +13,8 @@ Start with this structure as the library grows:
 
 ```text
 sensecap_lorawan/
-  collection.py     # supported catalog identities and model factory
-  device.py         # shared state subscriptions and lifecycle
+  collection.py     # DEVICES declaration
+  device.py         # optional vendor-specific Device subclass
   models/           # typed models and state
   decoders/         # byte-level vendor formats
 examples/           # standalone capture replay
@@ -31,9 +31,9 @@ The collection recognizes vendor `744` (`0x02E8`) and S2101 model
 ChirpStack catalog in the POC. The server profile UUID is a separate field.
 
 Only reviewed models qualify. A custom profile called “S2101” does not establish
-that identity. Declare `vendor_id` and `product_id` on each model class, then add
-the class to `SUPPORTED_MODELS`. The collection builds `DEVICE_MODELS` from that
-list. A model's `product_id` matches the descriptor's `catalog_model_id`.
+that identity. Subclass `Device[StateT]` and declare `vendor_id` and `catalog_model_id`
+on each model. Add the class to the collection's `DEVICES` tuple. The collection builds
+the lookup automatically; a custom `_create_device()` is only needed for special rules.
 Do not infer a model from payload length or a user-supplied device name.
 
 ## Keep event interpretation in the model
@@ -43,7 +43,9 @@ supported port, decodes the bytes, and merges state. It ignores other events.
 A model that supports battery status can consume `STATUS` in the same method.
 
 The application listens for new models and then subscribes to model state. It does
-not decode payloads or create models itself. Model `close()` releases listeners.
+not decode payloads or create models itself. Models call `notify()` after committing
+state; `add_update_listener()` callbacks take no arguments. The shared `Device` base
+owns subscriptions and releases them in `close()`.
 
 <Code code={library} lang="python" title="examples/sensecap_lorawan/__init__.py" />
 

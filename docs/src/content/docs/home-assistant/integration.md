@@ -52,7 +52,9 @@ PLATFORMS = [Platform.SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: SenseCapConfigEntry) -> bool:
-    devices = entry.runtime_data = SenseCapDeviceCollection(entry.data["network_id"])
+    devices = entry.runtime_data = SenseCapDeviceCollection(
+        network_id=entry.data["network_id"]
+    )
 
     @callback
     def disconnected() -> None:
@@ -141,7 +143,7 @@ from homeassistant.const import UnitOfTemperature
 from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceInfo
 
-from sensecap_lorawan import S2101, S2101State
+from sensecap_lorawan import S2101
 
 
 class SenseCapTemperature(SensorEntity):
@@ -173,11 +175,7 @@ class SenseCapTemperature(SensorEntity):
         return not self.device.closed
 
     async def async_added_to_hass(self) -> None:
-        @callback
-        def updated(state: S2101State) -> None:
-            self.async_write_ha_state()
-
-        self.async_on_remove(self.device.subscribe(updated))
+        self.async_on_remove(self.device.add_update_listener(self.async_write_ha_state))
 ```
 
 Add humidity the same way, using `SensorDeviceClass.HUMIDITY` and `PERCENTAGE`.

@@ -1,7 +1,8 @@
 """Backend-neutral LoRaWAN events and device collections."""
 
 from .callbacks import Unsubscribe, notify, subscribe
-from .collection import Device, DeviceCollection
+from .collection import DeviceCollection
+from .device import Device
 from .events import DeviceDescriptor, DeviceEvent, DeviceEventData, EventType
 from .payloads import (
     Ack,

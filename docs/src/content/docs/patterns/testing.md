@@ -14,7 +14,7 @@ from sensecap_lorawan import S2101, SenseCapDeviceCollection
 
 
 def test_s2101():
-    devices = SenseCapDeviceCollection("network")
+    devices = SenseCapDeviceCollection(network_id="network")
     now = datetime.now(UTC)
     descriptor = DeviceDescriptor(
         "network",
@@ -22,7 +22,7 @@ def test_s2101():
         "Greenhouse",
         "application",
         "profile",
-        catalog_model_id=S2101.product_id,
+        catalog_model_id=S2101.catalog_model_id,
         vendor_id=S2101.vendor_id,
     )
     devices.handle_event(

@@ -3,29 +3,32 @@ title: Collections and models
 description: Model lifecycle belongs to the collection; decoding belongs to each device.
 ---
 
-Subclass `DeviceCollection[YourDevice]` and implement `_create_device(descriptor)`.
-Return a model for a supported catalog identity, or `None` for an unsupported one.
-Models declare `vendor_id` and `product_id` as class attributes. `product_id` matches
-the descriptor's `catalog_model_id`. Build the lookup from a list of supported classes:
+Define each model with `Device[StateT]`, then declare the supported classes on your
+collection. The base collection builds the catalog lookup and creates models:
 
 ```python
-from lorawan_connection import DeviceCollection, DeviceDescriptor
+from lorawan_connection import DeviceCollection
 from .models import S2101
 
 
-SUPPORTED_MODELS = [S2101]
-DEVICE_MODELS: dict[tuple[int | None, str], type[S2101]] = {
-    (model.vendor_id, model.product_id): model for model in SUPPORTED_MODELS
-}
-
-
 class SenseCapDeviceCollection(DeviceCollection[S2101]):
-    def _create_device(self, descriptor: DeviceDescriptor) -> S2101 | None:
-        model_class = DEVICE_MODELS.get(
-            (descriptor.vendor_id, descriptor.catalog_model_id)
-        )
-        return model_class(descriptor) if model_class is not None else None
+    DEVICES = (S2101,)
+
+
+models = SenseCapDeviceCollection(network_id="my-network")
 ```
+
+For a one-off collection, pass the classes directly:
+
+```python
+models = DeviceCollection([S2101], network_id="my-network")
+```
+
+Models declare `vendor_id` and `catalog_model_id` as class attributes. The collection
+matches both against the descriptor and rejects duplicate pairs at construction.
+`vendor_id` is the numeric LoRa Alliance VendorID. `catalog_model_id` currently holds
+the ChirpStack catalog model UUID; it is distinct from a QR VendorProfileID.
+Override `_create_device(descriptor)` only when you need additional matching rules.
 
 The caller feeds all events to `collection.handle_event(event)`. It never checks
 whether a model exists or calls an `add_device` method.
@@ -47,9 +50,18 @@ retires all models and clears collection listeners.
 
 ## Model state
 
-Each model has a writable `descriptor` attribute, a `handle_event(event)` method,
-and a `close()` method. Other state and methods belong to the vendor library.
-Use frozen state dataclasses and notify listeners only when values change.
+The `Device[StateT]` base stores `descriptor` and typed `state`. Initialize it with
+`super().__init__(descriptor, state=initial_state)`. Implement `handle_event(event)`
+to decode data, commit state, and call `self.notify()` when consumers need an update.
+
+```python
+stop = device.add_update_listener(lambda: print(device.state))
+```
+
+Listeners take no arguments. Registration does not replay state; read `device.state`
+for initial values. `notify()` calls listeners even if state is unchanged, so the
+model decides whether a repeated reading needs notification. Commit a complete update
+before notifying. The base `close()` clears listeners and prevents further notifications.
 
 Use `None` for an unobserved measurement. Preserve zero readings. A partial uplink
 updates only the measurements it contains. Device models interpret ports, status,

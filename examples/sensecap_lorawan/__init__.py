@@ -1,19 +1,16 @@
 """SenseCAP models consuming transport-independent LoRaWAN events."""
 
-from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import ClassVar, cast, override
 
 from lorawan_connection import (
+    Device,
     DeviceCollection,
     DeviceDescriptor,
     DeviceEvent,
     EventType,
-    Unsubscribe,
     Uplink,
-    notify,
-    subscribe,
 )
 
 VENDOR_ID = 0x02E8
@@ -53,24 +50,18 @@ def decode_s2101(data: bytes) -> dict[str, float]:
     return result
 
 
-class S2101:
+class S2101(Device[S2101State]):
     """S2101 model with typed state and state subscriptions."""
 
     vendor_id: ClassVar[int] = VENDOR_ID
-    product_id: ClassVar[str] = "fc455aa2-01cf-492b-9359-a5d8c9a0e1b3"
+    catalog_model_id: ClassVar[str] = "fc455aa2-01cf-492b-9359-a5d8c9a0e1b3"
 
     def __init__(self, descriptor: DeviceDescriptor) -> None:
         """Initialize an unobserved model."""
-        self.descriptor = descriptor
-        self.state = S2101State()
-        self._listeners: list[Callable[[S2101State], None]] = []
+        super().__init__(descriptor, state=S2101State())
         self._updated: dict[str, datetime] = {}
-        self.closed = False
 
-    def subscribe(self, callback: Callable[[S2101State], None]) -> Unsubscribe:
-        """Listen for state changes; read state directly for initial values."""
-        return subscribe(self._listeners, callback)
-
+    @override
     def handle_event(self, event: DeviceEvent) -> None:
         """Merge a valid partial measurement without clearing other values."""
         if self.closed or event.type != EventType.UPLINK or event.data is None:
@@ -93,26 +84,10 @@ class S2101:
         state = replace(self.state, **values)
         if state != self.state:
             self.state = state
-            notify(self._listeners, state)
-
-    def close(self) -> None:
-        """Stop emitting state when a device is removed."""
-        self.closed = True
-        self._listeners.clear()
-
-
-SUPPORTED_MODELS = [S2101]
-DEVICE_MODELS: dict[tuple[int | None, str], type[S2101]] = {
-    (model.vendor_id, model.product_id): model for model in SUPPORTED_MODELS
-}
+            self.notify()
 
 
 class SenseCapDeviceCollection(DeviceCollection[S2101]):
     """A collection automatically admitting reviewed SenseCAP catalog models."""
 
-    @override
-    def _create_device(self, descriptor: DeviceDescriptor) -> S2101 | None:
-        model_class = DEVICE_MODELS.get(
-            (descriptor.vendor_id, descriptor.catalog_model_id)
-        )
-        return model_class(descriptor) if model_class is not None else None
+    DEVICES = (S2101,)

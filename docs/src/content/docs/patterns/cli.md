@@ -9,10 +9,10 @@ Put this in the library's `__main__.py`:
 ```python
 from lorawan_connection.cli_helper import run
 
-from . import SUPPORTED_MODELS
+from . import SenseCapDeviceCollection
 
 if __name__ == "__main__":
-    run(SUPPORTED_MODELS)
+    run(SenseCapDeviceCollection.DEVICES)
 ```
 
 The helper builds the catalog lookup, discovers devices, and feeds events into their
@@ -20,17 +20,17 @@ models. It subscribes to each model's state and prints updates. The model owns d
 
 ## Model contract
 
-Each class implements the `cli_helper.Model` protocol:
+Models inheriting `Device[StateT]` provide the listener API. Each model supplies:
 
-- `vendor_id` and `product_id` identify its catalog model.
+- `vendor_id` and `catalog_model_id` identify its catalog model.
 - Its constructor accepts a `DeviceDescriptor`.
 - `descriptor`, `handle_event(event)`, and `close()` provide the usual device lifecycle.
 - `state` returns its current state.
-- `subscribe(callback)` reports each new state and returns an unsubscribe function.
+- `add_update_listener(callback)` reports updates and returns an unsubscribe function.
 
-The callback receives the state object. `subscribe()` does not need to replay state;
-the helper reads `state` when the model is added. Duplicate catalog identities are rejected.
-The tested SenseCAP example already implements this contract.
+Callbacks take no arguments; the helper reads `device.state` when notified. It also
+reads state when a device is added. The shared collection rejects duplicate catalog
+identities. The tested SenseCAP example inherits this behavior from `Device`.
 
 ## Run it
 
@@ -76,3 +76,9 @@ applications selected. The caller must await `connection.close()`.
 
 `run(models, argv=None)` owns argument parsing, the event loop, output, and cleanup.
 Call it from a synchronous script entry point. `argv` is useful when testing a command.
+
+## I/O and callbacks
+
+Network operations are async. API-key file reads run in a worker thread.
+Model event handling, update listeners, and CLI printing are synchronous.
+Callbacks decode data and update model state; they must not perform network I/O.

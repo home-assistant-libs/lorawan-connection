@@ -3,38 +3,58 @@ title: Collection reference
 description: Collection lifecycle, callback order, and cleanup behavior.
 ---
 
-## Device
+## Device[StateT]
 
-A structural Protocol. Implement these members in a vendor model:
+An abstract model base. Declare class attributes `vendor_id: int` and
+`catalog_model_id: str`, then implement `handle_event(event)`.
 
-```python
-descriptor: DeviceDescriptor
+`Device(descriptor, *, state)` initializes `descriptor`, typed `state`, and listeners.
+A model constructor accepts a descriptor and supplies its initial state to `super()`.
+The collection replaces `descriptor` on metadata updates.
 
+### add_update_listener(listener) → Unsubscribe
 
-def handle_event(self, event: DeviceEvent) -> None: ...
-def close(self) -> None: ...
-```
+Register a synchronous `Callable[[], None]`. No initial callback is sent. Read
+`device.state` directly for initial values. Each registration is independent;
+its unsubscribe function is idempotent. Registration after close raises `RuntimeError`.
 
-The collection replaces `descriptor` on metadata updates. `close()` releases model
-resources and state listeners. The collection calls it once for each retirement.
+### notify() → None
+
+Call current update listeners with no arguments. This method does not compare or
+modify state. Notify after committing a complete model update. Removed listeners
+are skipped, new listeners wait for the next notification, and failures are logged
+without stopping other listeners. Closed devices ignore notifications.
+
+### close() → None
+
+Set `closed` to `True` and clear listeners. Repeated calls are harmless. Models with
+additional resources can override this method and call `super().close()`.
 
 ## DeviceCollection[DeviceT]
 
 ### Construction and attributes
 
-`DeviceCollection(network_id: str)` creates an empty collection for one logical
-network. `DeviceT` must satisfy `Device`.
+`DeviceCollection(models=None, *, network_id)` creates a collection for one logical
+network. `models` is a sequence of model classes; when omitted, the collection uses
+its `DEVICES` declaration. An explicit empty sequence accepts no models.
 
+- `DEVICES` is a sequence of supported model classes, usually declared as a tuple.
 - `network_id: str` identifies the network accepted by this collection.
 - `devices: dict[str, DeviceT]` contains current models, keyed by canonical DevEUI.
   Treat it as a read-only view; only the collection changes its contents.
 
+The collection copies the registry at construction. Duplicate
+`(vendor_id, catalog_model_id)` pairs raise `ValueError`. A subclass inherits `DEVICES`
+unless it replaces that declaration. Explicit constructor models override it.
+Pass `network_id` by keyword. Registered models inherit `Device` and accept a
+descriptor as their constructor argument.
+
 ### _create_device(descriptor)
 
-Override this synchronous factory. Return `DeviceT` for a supported descriptor,
-or `None` otherwise. The base method raises `NotImplementedError`.
-The returned model must use the supplied descriptor. Do not perform network I/O
-or feed events back into the collection from the factory.
+The default factory matches `(vendor_id, catalog_model_id)` and constructs the
+registered class with the descriptor. An unknown identity returns `None`.
+Override this method for custom matching. Return a model with the supplied descriptor,
+or `None`. Do not perform I/O or feed events back into the collection from the factory.
 
 ### handle_event(event: DeviceEvent) → None
 

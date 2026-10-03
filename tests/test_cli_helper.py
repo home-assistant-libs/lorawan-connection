@@ -11,15 +11,14 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from lorawan_connection import DeviceEventData, EventType, UplinkData
+from lorawan_connection import DeviceCollection, DeviceEventData, EventType, UplinkData
 from lorawan_connection.cli_helper import (
-    _Models,
     _watch,
     add_connection_args,
     connect_from_args,
     run,
 )
-from sensecap_lorawan import S2101, SUPPORTED_MODELS
+from sensecap_lorawan import S2101, SenseCapDeviceCollection
 
 from .test_sensecap_example import DESCRIPTOR, PAYLOAD
 
@@ -164,8 +163,8 @@ async def test_missing_optional_backend() -> None:
 
 
 def test_duplicate_model_identity() -> None:
-    with pytest.raises(ValueError, match="unique"):
-        _Models("network", [S2101, S2101])
+    with pytest.raises(ValueError, match="Duplicate catalog identity"):
+        DeviceCollection([S2101, S2101], network_id="network")
 
 
 async def test_list_supported_models_only(
@@ -181,7 +180,7 @@ async def test_list_supported_models_only(
         "lorawan_connection.cli_helper.connect_from_args",
         AsyncMock(return_value=connection),
     ):
-        await _watch(parsed, SUPPORTED_MODELS)
+        await _watch(parsed, SenseCapDeviceCollection.DEVICES)
     rows = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
     assert rows == [
         {
@@ -235,7 +234,7 @@ async def test_live_state_removal_and_disconnect(
         ),
         pytest.raises(RuntimeError, match="offline"),
     ):
-        await _watch(parsed, SUPPORTED_MODELS)
+        await _watch(parsed, SenseCapDeviceCollection.DEVICES)
     rows = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
     assert [row["type"] for row in rows] == ["added", "state", "removed"]
     assert rows[1]["state"] == {"temperature": 21.4, "humidity": 31.4}
@@ -270,7 +269,7 @@ async def test_cancellation_closes_models_and_connection(connection: Mock) -> No
         ),
         patch.object(S2101, "close", autospec=True) as close_model,
     ):
-        task = asyncio.create_task(_watch(parsed, SUPPORTED_MODELS))
+        task = asyncio.create_task(_watch(parsed, SenseCapDeviceCollection.DEVICES))
         await subscribed.wait()
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
@@ -285,7 +284,7 @@ def test_help_does_not_connect(capsys: pytest.CaptureFixture[str]) -> None:
         patch("lorawan_connection.cli_helper.connect_from_args") as connect,
         pytest.raises(SystemExit) as result,
     ):
-        run(SUPPORTED_MODELS, ["--help"])
+        run(SenseCapDeviceCollection.DEVICES, ["--help"])
     assert result.value.code == 0
     assert "--list" in capsys.readouterr().out
     connect.assert_not_called()
@@ -301,18 +300,18 @@ def test_connection_error_does_not_print_credentials(
         ),
         pytest.raises(SystemExit) as result,
     ):
-        run(SUPPORTED_MODELS, ["--server", "http://localhost:8080"])
+        run(SenseCapDeviceCollection.DEVICES, ["--server", "http://localhost:8080"])
     assert result.value.code == 1
     output = capsys.readouterr().err
     assert "ChirpStack connection failed" in output
     assert "secret" not in output
 
 
-def test_models_can_share_product_ids_across_vendors() -> None:
+def test_models_can_share_catalog_ids_across_vendors() -> None:
     class OtherVendor(S2101):
         vendor_id = 123
 
-    collection = _Models("network", [S2101, OtherVendor])
+    collection = DeviceCollection([S2101, OtherVendor], network_id="network")
     descriptors = [
         DESCRIPTOR,
         replace(DESCRIPTOR, dev_eui="0000000000000002", vendor_id=123),
@@ -330,3 +329,25 @@ def test_models_can_share_product_ids_across_vendors() -> None:
     assert type(collection.devices[DESCRIPTOR.dev_eui]) is S2101
     assert type(collection.devices["0000000000000002"]) is OtherVendor
     collection.close()
+
+
+async def test_file_read_runs_off_event_loop(
+    connection: Mock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import threading
+
+    loop_thread = threading.get_ident()
+    threads = []
+
+    def read_key() -> str:
+        threads.append(threading.get_ident())
+        return "secret"
+
+    parsed = args("--tenant", "tenant")
+    parsed.api_key_file = Mock(read_text=read_key)
+    with patch(
+        "lorawan_connection.chirpstack.ChirpStackConnection", return_value=connection
+    ):
+        await connect_from_args(parsed)
+    assert len(threads) == 1
+    assert threads[0] != loop_thread
