@@ -1,54 +1,146 @@
 ---
-title: The device library
-description: Build a vendor collection and typed device models.
+title: Build a device library
+description: Start with a payload decoder, add device models, and expose a collection to applications.
 ---
 
 import { Code } from "@astrojs/starlight/components";
 import library from "../../../../../examples/sensecap_lorawan/__init__.py?raw";
 
-Build the collection, decoder, and device models in a Python library. Keep server
-credentials and application-specific code in the consuming application.
+A device library turns LoRaWAN events into a Python API for a vendor's devices.
+It contains payload decoders, device classes with values and commands, and a
+collection that manages those devices. Applications feed events into the collection
+and subscribe to device updates.
 
-Start with this structure as the library grows:
+This guide builds a small SenseCAP library for the S2101 temperature and humidity
+sensor. Start with one model and a captured payload. You can test the library
+before connecting it to a server.
 
-```text
-sensecap_lorawan/
-  collection.py     # DEVICES declaration
-  device.py         # optional vendor-specific Device subclass
-  models/           # typed models and state
-  decoders/         # byte-level vendor formats
-examples/           # standalone capture replay
-tests/              # decoder and event-sequence tests
+## 1. Create the package
+
+Create a Python package with `lorawan-connection` as a dependency in its
+`pyproject.toml`. Install the shared library and pytest for development:
+
+```sh
+pip install lorawan-connection pytest
 ```
 
-The S2101 example below fits in one file. It lives under `examples/` and is excluded
-from the `lorawan_connection` wheel.
+Start with a small layout:
 
-## Select models by catalog identity
+```text
+pyproject.toml
+sensecap_lorawan/
+  __init__.py       # decoder, device class, and collection
+tests/
+  test_s2101.py
+```
 
-The collection recognizes vendor `744` (`0x02E8`) and S2101 model
-`fc455aa2-01cf-492b-9359-a5d8c9a0e1b3`. These are the identities tested with the
-ChirpStack catalog in the POC. The server profile UUID is a separate field.
+Keep the first implementation in `__init__.py`. As you add models, move their
+classes and shared decoders into separate modules. Continue exporting the device
+classes and collection from the package so applications keep the same imports.
 
-Only reviewed models qualify. A custom profile called “S2101” does not establish
-that identity. Subclass `Device` and declare `vendor_id` and `catalog_model_id`
-on each model. Add the class to the collection's `DEVICES` tuple. The collection builds
-the lookup automatically; a custom `_create_device()` is only needed for special rules.
-Do not infer a model from payload length or a user-supplied device name.
+## 2. Write and test the decoder
 
-## Keep event interpretation in the model
+Start with the vendor's payload specification and a captured frame whose readings
+you know. Write a function that takes bytes and returns decoded values. For the
+S2101, `decode_s2101(data)` returns temperature in degrees Celsius and relative
+humidity in percent.
 
-The application forwards every event. The S2101 model accepts uplinks on its
-supported port, decodes the bytes, and merges state. It ignores other events.
-A model that supports battery status can consume `STATUS` in the same method.
+Test that function first:
 
-The application listens for new models and then subscribes to model state. It does
-not decode payloads or create models itself. Models call `notify()` after committing
-state; `add_update_listener()` callbacks take no arguments. The shared `Device` base
-owns subscriptions and releases them in `close()`.
+```python
+from sensecap_lorawan import decode_s2101
 
-<Code code={library} lang="python" title="examples/sensecap_lorawan/__init__.py" />
 
-See [decoding and state](/lorawan-connection/patterns/decoding/) for why the decoder
-handles frames this way. See [testing](/lorawan-connection/patterns/testing/) for
-fixture events and generated-message compatibility.
+def test_decode_s2101() -> None:
+    payload = bytes.fromhex("01011098530000010210A87A0000AF51")
+    assert decode_s2101(payload) == {"temperature": 21.4, "humidity": 31.4}
+```
+
+Add tests for partial readings and malformed frames. Decide how the decoder handles
+unknown measurements and vendor error values. The [decoding guide](/lorawan-connection/patterns/decoding/)
+explains the S2101 format and the sample decoder's validation limits.
+
+## 3. Wrap the decoder in a device class
+
+Create an `S2101` subclass of `Device`. Each instance represents one physical sensor.
+Its constructor accepts a `DeviceDescriptor` and passes it to
+`super().__init__(descriptor)` to initialize identity and subscriptions.
+
+Add `temperature` and `humidity` attributes, initially `None`. Implement
+`handle_event(event)` to accept the supported uplink port, call the decoder, and
+update the attributes present in the payload. Call `self.notify()` after an update
+so listeners can read the new values. A temperature-only reading preserves the
+previous humidity.
+
+Choose attributes and methods that fit each device. One event can update several
+attributes. A relay controller might expose relay states and an async
+`async_set_relay()` method. Keep event types, ports, parsing, and command encoding
+inside the library. See [commands and relays](/lorawan-connection/patterns/commands/)
+when adding a writable device.
+
+## 4. Declare the supported models
+
+Applications need one place to send events for all devices your library supports.
+Create a `DeviceCollection` subclass and list your device classes in `DEVICES`:
+
+```python
+from lorawan_connection import DeviceCollection
+
+
+class SenseCapDeviceCollection(DeviceCollection[S2101]):
+    DEVICES = (S2101,)
+```
+
+Each device class declares `vendor_id` and `catalog_model_id`. The base collection
+matches those against incoming device descriptors, creates the matching class,
+and routes later events to that instance. It also handles removal and cleanup.
+Adding another supported model means implementing its class and adding it to
+`DEVICES`.
+
+Use the device's catalog identity for those fields. A display name such as
+“Greenhouse” or “S2101” does not establish which model to create. The collection
+ignores unsupported models and raises an error for duplicate identity pairs.
+See [collections and models](/lorawan-connection/modelling/overview/) for the ID
+fields and lifecycle details.
+
+## Complete example
+
+Here are the decoder, device class, and collection together. Save this as
+`sensecap_lorawan/__init__.py` in the package above.
+
+<Code code={library} lang="python" title="sensecap_lorawan/__init__.py" />
+
+## 5. Feed events into the collection
+
+Test the public API next. Create a collection, subscribe to device additions, and
+feed it a descriptor event followed by an uplink. The collection creates the S2101
+instance automatically. Subscribe to that device's updates in the device-added
+callback, then read its attributes when notified.
+
+The [testing guide](/lorawan-connection/patterns/testing/) provides a collection
+fixture with an S2101 already added. Use it to test readings and notifications.
+The [quickstart](/lorawan-connection/getting-started/quickstart/) is a runnable replay
+that prints the readings from the sample payload.
+
+An application uses the same API with live events: forward them to
+`collection.handle_event(event)`. The application owns the connection, credentials,
+and reconnection. When stopping, it unsubscribes from the event source and calls
+`collection.close()`.
+
+## 6. Add a CLI for live devices
+
+Once replay tests pass, add `sensecap_lorawan/__main__.py`:
+
+```python
+from lorawan_connection.cli_helper import run
+
+from . import SenseCapDeviceCollection
+
+if __name__ == "__main__":
+    run(SenseCapDeviceCollection.DEVICES)
+```
+
+The shared helper connects to ChirpStack, discovers supported devices, feeds their
+events into the models, and prints updates. Install the optional
+`lorawan-connection[chirpstack]` dependency to run it. Follow the
+[command-line guide](/lorawan-connection/patterns/cli/) for server and API-key arguments.

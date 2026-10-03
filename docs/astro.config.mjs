@@ -43,7 +43,7 @@ export default defineConfig({
           { label: "Collection reference", slug: "modelling/reference" },
         ] },
         { label: "Building a library", items: [
-          { label: "The device library", slug: "patterns/library" },
+          { label: "Build a device library", slug: "patterns/library" },
           { label: "Decoding and state", slug: "patterns/decoding" },
           { label: "Commands and relays", slug: "patterns/commands" },
           { label: "Command-line helper", slug: "patterns/cli" },
