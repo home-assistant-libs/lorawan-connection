@@ -81,9 +81,8 @@ Use `wait_for_ack=False` to send an unconfirmed command and return after enqueue
 Callers can bound the wait with `asyncio.timeout()`. Device reports update model
 attributes; an ACK confirms delivery, not the resulting device state.
 
-The [Dragino relay example](https://home-assistant-libs.github.io/lorawan-connection/patterns/commands/)
-controls both LT-22222-L relays independently. It uses the existing ChirpStack catalog
-identity and preserves the other relay when sending a command.
+The [Dragino example](https://home-assistant-libs.github.io/lorawan-connection/patterns/commands/)
+models the LT-22222-L using its existing ChirpStack catalog identity.
 
 ## Device-library CLI
 

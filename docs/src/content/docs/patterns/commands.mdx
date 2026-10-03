@@ -1,5 +1,5 @@
 ---
-title: Commands and relays
+title: Sending commands
 description: Encode device commands in the library and send them through an async callback.
 ---
 
@@ -10,9 +10,8 @@ import source from '../../../../../examples/dragino_lorawan/__init__.py?raw';
 Command ACK waiting is available on `main` and is not yet released on PyPI.
 :::
 
-The Dragino LT-22222-L has two independent relays. Its model owns command encoding
-and reported relay states. Applications call `await device.async_set_relay(1, True)`
-and wait for the device's acknowledgement.
+The example below models a Dragino LT-22222-L. Its methods encode commands, send
+them through the connection, and wait for the device's acknowledgement.
 
 Save the complete Dragino example below as `dragino_lorawan.py`. In the
 [connection example](/lorawan-connection/connection/chirpstack/), replace the SenseCAP
@@ -51,8 +50,30 @@ for devices designed to receive commands infrequently.
 
 The command requests a confirmed downlink and waits for a matching positive `ACK`.
 The shared collection handles ACK correlation, including concurrent commands.
-Both relay attributes retain their reported values until an uplink arrives. A single
-report can update both relays, then the model calls `notify()` once.
+Model attributes retain their reported values until an uplink arrives. The model
+updates all values from that report before calling `notify()` once.
+
+### Model API
+
+Channel dictionaries use keys `1` and `2`. Values start as `None` and return to
+`None` when a working-mode change stops reporting them.
+
+| Attribute or method | Meaning |
+| --- | --- |
+| `voltages[channel]` | AVI readings in volts. |
+| `currents[channel]` | ACI readings in milliamperes. |
+| `digital_inputs[channel]` | DI levels in mode 1: `True` means high or floating. |
+| `digital_counts[channel]` | DI counts in counting modes. |
+| `voltage_count` | AVI1 count in mode 4. |
+| `relays[channel]` | RO state: `True` means closed. |
+| `digital_outputs[channel]` | DO state: `True` means enabled, pulling the output low. |
+| `mode` | Last reported working mode. |
+| `await async_set_relay(channel, on)` | Set an RO channel, leaving the other unchanged. |
+| `await async_set_digital_output(channel, on)` | Set a DO channel, leaving the other unchanged. |
+
+Mode 2 reports both DI counters; modes 3–5 report DI1. Mode 5 uses a 16-bit count;
+the other counting modes use 32 bits. Digital-output commands use prefix `02` and
+include the unused DO3 byte as `11` (no action).
 
 Given an `LT22222` model named `device` from the collection, call this inside an
 async function to wait up to 30 seconds:

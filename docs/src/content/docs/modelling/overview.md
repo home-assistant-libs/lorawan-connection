@@ -9,7 +9,7 @@ you subscribe to changes and, for writable devices, send commands.
 
 Create a subclass of `Device` for each supported model. An `S2101` instance represents
 one SenseCAP sensor, with `temperature` and `humidity` attributes. An `LT22222`
-instance represents one Dragino relay controller, with two relay states.
+instance represents one Dragino LT-22222-L.
 
 ## Model the device's data
 
@@ -76,7 +76,7 @@ The model encodes the command and sends it through the connection's downlink sen
 The method waits for a positive device acknowledgement and returns the queue ID.
 The timeout raises `TimeoutError` if the call takes longer than 30 seconds. This model updates
 its reported relay state when an uplink arrives. Subscribe to its updates to observe
-that change. See [commands and relays](/lorawan-connection/patterns/commands/) for
+that change. See [sending commands](/lorawan-connection/patterns/commands/) for
 sender setup and the complete example.
 
 ## Manage devices with a collection

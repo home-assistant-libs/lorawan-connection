@@ -35,7 +35,7 @@ Activity events describe messages and reports for those devices:
 A model handles the events it understands. For example, the S2101 model decodes
 `UPLINK` events into temperature and humidity. Another model might also read battery
 information from `STATUS`. Sending a command is a separate operation; see
-[commands and relays](/lorawan-connection/patterns/commands/) for downlinks.
+[sending commands](/lorawan-connection/patterns/commands/) for downlinks.
 
 ## What is inside an event?
 

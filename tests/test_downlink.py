@@ -24,15 +24,21 @@ from .test_chirpstack_connection import connection as connection
 
 
 @pytest.mark.parametrize(
-    "channel,on,payload",
+    "method,channel,on,payload",
     [
-        (1, True, "030111"),
-        (1, False, "030011"),
-        (2, True, "031101"),
-        (2, False, "031100"),
+        ("async_set_relay", 1, True, "030111"),
+        ("async_set_relay", 1, False, "030011"),
+        ("async_set_relay", 2, True, "031101"),
+        ("async_set_relay", 2, False, "031100"),
+        ("async_set_digital_output", 1, True, "02011111"),
+        ("async_set_digital_output", 1, False, "02001111"),
+        ("async_set_digital_output", 2, True, "02110111"),
+        ("async_set_digital_output", 2, False, "02110011"),
     ],
 )
-async def test_relay_commands(channel: int, on: bool, payload: str) -> None:
+async def test_output_commands(
+    method: str, channel: int, on: bool, payload: str
+) -> None:
     sender = AsyncMock(return_value="queue-id")
     descriptor = replace(
         DESCRIPTOR,
@@ -57,7 +63,8 @@ async def test_relay_commands(channel: int, on: bool, payload: str) -> None:
 
     sender.side_effect = send
     before = datetime.now(UTC)
-    assert await device.async_set_relay(channel, on) == "queue-id"
+    command = getattr(device, method)
+    assert await command(channel, on) == "queue-id"
     request = sender.call_args.args[0]
     assert request.dev_eui == descriptor.dev_eui
     assert request.data == bytes.fromhex(payload)
@@ -69,18 +76,21 @@ async def test_relay_commands(channel: int, on: bool, payload: str) -> None:
         <= datetime.now(UTC) + timedelta(seconds=30)
     )
     assert device.relays == {1: None, 2: None}
+    assert device.digital_outputs == {1: None, 2: None}
     collection.handle_event(inventory(descriptor, EventType.REMOVED))
     with pytest.raises(DownlinkError, match="closed"):
-        await device.async_set_relay(1, True)
+        await command(1, True)
     assert sender.await_count == 1
 
 
-async def test_missing_sender_and_invalid_channel() -> None:
+@pytest.mark.parametrize("method", ["async_set_relay", "async_set_digital_output"])
+async def test_missing_sender_and_invalid_channel(method: str) -> None:
     device = LT22222(DESCRIPTOR)
+    command = getattr(device, method)
     with pytest.raises(DownlinkError, match="sender"):
-        await device.async_set_relay(1, True)
+        await command(1, True)
     with pytest.raises(ValueError, match="channel"):
-        await device.async_set_relay(3, True)
+        await command(3, True)
 
 
 @pytest.mark.parametrize("port", [0, 224, 256])

@@ -45,7 +45,7 @@ export default defineConfig({
         { label: "Building a library", items: [
           { label: "Build a device library", slug: "patterns/library" },
           { label: "Decoding and state", slug: "patterns/decoding" },
-          { label: "Commands and relays", slug: "patterns/commands" },
+          { label: "Sending commands", slug: "patterns/commands" },
           { label: "Command-line helper", slug: "patterns/cli" },
           { label: "Testing", slug: "patterns/testing" },
         ] },
