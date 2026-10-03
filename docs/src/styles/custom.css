@@ -25,6 +25,7 @@
 /* Card icons: use one soft brand tone for every card rather than Starlight's
    rotating rainbow, so the landing grid reads as one system. */
 .sl-markdown-content .card .icon {
+  border: 0;
   background-color: var(--sl-color-accent-low);
   color: var(--sl-color-accent-high);
 }

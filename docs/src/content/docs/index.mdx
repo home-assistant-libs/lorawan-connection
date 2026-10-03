@@ -26,7 +26,7 @@ decodes its events and exposes state for your application to read.
 Provider: inventory + live events
     → Vendor collection: catalog matching and model lifecycle
         → Device model: decoding and typed state
-            → Consumer: application logic or Home Assistant entities
+            → Consumer: application logic
 ```
 
 <CardGrid>
@@ -40,26 +40,16 @@ Provider: inventory + live events
   </Card>
 </CardGrid>
 
-## Two author guides
+## Guides
 
 <CardGrid>
   <LinkCard title="Building a library"
     description="Match catalog identities, decode payloads, merge partial state, and test your models."
     href="/lorawan-connection/patterns/library/" />
-  <LinkCard title="Home Assistant"
-    description="Subscribe to the provider and turn library models into entities."
-    href="/lorawan-connection/home-assistant/integration/" />
+  <LinkCard title="Events and connections"
+    description="Deliver inventory and live events to device libraries."
+    href="/lorawan-connection/connection/events/" />
 </CardGrid>
 
 The [quickstart](/lorawan-connection/getting-started/quickstart/) replays a SenseCAP
 S2101 capture. It creates temperature and humidity state without a network server.
-
-## Release scope
-
-Version 0.1 contains event contracts, fixture payloads, collections, and callback
-helpers. The SenseCAP implementation is a tested example of a separate library.
-ChirpStack connections, QR onboarding, BLE provisioning, and downlink commands are
-outside this package's first release.
-
-The Home Assistant guide describes the working Core POC. Its provider API is not
-yet part of upstream Home Assistant.

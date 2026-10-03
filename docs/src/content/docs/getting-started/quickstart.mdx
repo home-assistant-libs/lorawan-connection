@@ -1,19 +1,23 @@
 ---
 title: Quickstart
-description: Replay an S2101 capture and observe a model without Home Assistant.
+description: Replay an S2101 capture and observe its measurements.
 ---
 
 import { Code } from "@astrojs/starlight/components";
 import replay from "../../../../../examples/replay.py?raw";
 
-This example uses the repository's SenseCAP library under `examples/`. It is not
-a module in the published `lorawan_connection` package.
-
-Run these commands from a source checkout:
+Install the shared library from PyPI:
 
 ```sh
-uv sync
-uv run python examples/replay.py
+pip install lorawan-connection
+```
+
+Save the code from [the device library guide](/lorawan-connection/patterns/library/)
+as `sensecap_lorawan.py`. Save the replay below as `replay.py` in the same directory,
+then run it:
+
+```sh
+python replay.py
 ```
 
 The output is:
@@ -27,7 +31,7 @@ The first event supplies catalog identity. The collection selects and creates th
 model, then calls `device_added`. The next event carries the captured uplink.
 The model decodes it and notifies its state listener.
 
-<Code code={replay} lang="python" title="examples/replay.py" />
+<Code code={replay} lang="python" title="replay.py" />
 
 The example closes the collection when finished. A real application also removes
 its provider subscription before closing its collection.

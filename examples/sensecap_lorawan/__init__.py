@@ -55,7 +55,7 @@ def decode_s2101(data: bytes) -> dict[str, float]:
 
 
 class S2101:
-    """S2101 model; HA never needs to inspect event types or FPorts."""
+    """S2101 model with typed state and state subscriptions."""
 
     def __init__(self, descriptor: DeviceDescriptor) -> None:
         """Initialize an unobserved model."""
@@ -99,14 +99,17 @@ class S2101:
         self._listeners.clear()
 
 
+DEVICE_MODELS: dict[tuple[int | None, str], type[S2101]] = {
+    (VENDOR_ID, S2101_MODEL_ID): S2101,
+}
+
+
 class SenseCapDeviceCollection(DeviceCollection[S2101]):
     """A collection automatically admitting reviewed SenseCAP catalog models."""
 
     @override
     def _create_device(self, descriptor: DeviceDescriptor) -> S2101 | None:
-        if (
-            descriptor.vendor_id == VENDOR_ID
-            and descriptor.catalog_model_id == S2101_MODEL_ID
-        ):
-            return S2101(descriptor)
-        return None
+        model_class = DEVICE_MODELS.get(
+            (descriptor.vendor_id, descriptor.catalog_model_id)
+        )
+        return model_class(descriptor) if model_class is not None else None

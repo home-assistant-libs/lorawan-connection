@@ -3,7 +3,7 @@ title: Testing
 description: Test device libraries using fixture events and real generated payloads.
 ---
 
-Test a device library without Home Assistant or a server. Feed inventory and
+Test a device library with local event fixtures. Feed inventory and
 activity fixtures into its collection, then inspect model state and callbacks.
 
 ```python
@@ -78,9 +78,8 @@ Tests cover uplinks, joins, status flags, acknowledgements, logs, and locations.
 In particular, an unavailable battery reading differs from a valid zero.
 
 ```sh
-uv sync --group compatibility
-uv run pytest --cov --cov-report=term-missing
-uv run mypy
+pip install lorawan-connection pytest chirpstack-api==4.19.0
+pytest
 ```
 
 Static conformance checks for fixture dataclasses live in `tests/typing/`.

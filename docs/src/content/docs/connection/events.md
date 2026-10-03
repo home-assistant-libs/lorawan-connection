@@ -4,7 +4,7 @@ description: How providers deliver descriptors and live events to device librari
 ---
 
 The application owns the network connection and forwards events to the vendor
-library. Keep endpoints, credentials, and Home Assistant objects in the application.
+library. Keep endpoints and credentials in the application.
 
 One collection contains the device models for a logical network. It can span
 several server applications.
@@ -72,8 +72,8 @@ missed events. `received_at` is a timezone-aware receipt timestamp. It is not a
 deduplication key; two updates can have the same timestamp.
 
 Connection loss belongs to the provider subscription. It is not a `REMOVED` event
-for every device. In the HA POC, loss reloads the consumer entry and closes the
-old collection. New setup receives inventory again.
+for every device. The application closes the old collection when its subscription
+ends. A new subscription supplies inventory to a new collection.
 
 Callbacks run synchronously on the caller's thread or event loop. Do not block,
 perform network I/O, or pass an async callback. The package is not thread-safe.

@@ -21,8 +21,6 @@ export default defineConfig({
             "- A caller owns the connection and forwards inventory and live events to a vendor DeviceCollection.",
             "- The collection creates supported models from catalog descriptors and notifies device-added listeners. Models interpret all events and expose typed state.",
             "- Payload Protocols accept matching generated messages by reference. Dispatch on EventType, not runtime Protocol checks.",
-            "- ChirpStack transport helpers belong to the HA integration, not this package.",
-            "- Building a library and Home Assistant integration are separate documentation sections. The HA provider API is currently a POC, not an upstream API.",
           ].join("\n"),
         }),
       ],

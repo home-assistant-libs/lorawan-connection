@@ -11,14 +11,17 @@ from lorawan_connection import DeviceCollection, DeviceDescriptor
 from .models import S2101
 
 
+DEVICE_MODELS: dict[tuple[int | None, str], type[S2101]] = {
+    (0x02E8, "fc455aa2-01cf-492b-9359-a5d8c9a0e1b3"): S2101,
+}
+
+
 class SenseCapDeviceCollection(DeviceCollection[S2101]):
     def _create_device(self, descriptor: DeviceDescriptor) -> S2101 | None:
-        if (
-            descriptor.vendor_id == 0x02E8
-            and descriptor.catalog_model_id == "fc455aa2-01cf-492b-9359-a5d8c9a0e1b3"
-        ):
-            return S2101(descriptor)
-        return None
+        model_class = DEVICE_MODELS.get(
+            (descriptor.vendor_id, descriptor.catalog_model_id)
+        )
+        return model_class(descriptor) if model_class is not None else None
 ```
 
 The caller feeds all events to `collection.handle_event(event)`. It never checks

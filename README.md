@@ -1,8 +1,7 @@
 # lorawan-connection
 
 [Documentation](https://home-assistant-libs.github.io/lorawan-connection/) ·
-[Building a device library](https://home-assistant-libs.github.io/lorawan-connection/patterns/library/) ·
-[Home Assistant integration](https://home-assistant-libs.github.io/lorawan-connection/home-assistant/integration/)
+[Building a device library](https://home-assistant-libs.github.io/lorawan-connection/patterns/library/)
 
 Backend-neutral LoRaWAN events and device collections for Python 3.12+.
 No runtime dependencies.
@@ -28,11 +27,16 @@ class Sensor:
         pass
 
 
+DEVICE_MODELS: dict[tuple[int | None, str], type[Sensor]] = {
+    (123, "known-model"): Sensor,
+}
+
 class Sensors(DeviceCollection[Sensor]):
     def _create_device(self, descriptor: DeviceDescriptor) -> Sensor | None:
-        if descriptor.vendor_id == 123 and descriptor.catalog_model_id == "known-model":
-            return Sensor(descriptor)
-        return None
+        model_class = DEVICE_MODELS.get(
+            (descriptor.vendor_id, descriptor.catalog_model_id)
+        )
+        return model_class(descriptor) if model_class is not None else None
 
 
 sensors = Sensors("my-network")
@@ -47,17 +51,8 @@ stop = sensors.subscribe_device_added(lambda device: print(device.descriptor.nam
 pip install lorawan-connection
 ```
 
-For development before the first PyPI publication:
-
-```sh
-git clone https://github.com/home-assistant-libs/lorawan-connection.git
-cd lorawan-connection
-uv sync --group compatibility
-uv run python examples/replay.py
-```
-
-The replay creates a SenseCAP S2101 model and prints 21.4 °C and 31.4% humidity.
-It uses captured bytes and needs no server or Home Assistant installation.
+The [quickstart](https://home-assistant-libs.github.io/lorawan-connection/getting-started/quickstart/)
+replays a SenseCAP S2101 capture and prints 21.4 °C and 31.4% humidity.
 
 ## What ships in 0.1
 
@@ -67,21 +62,17 @@ It uses captured bytes and needs no server or Home Assistant installation.
 - Synchronous callback helpers with independent, idempotent unsubscribe functions.
 - Typed exports (`py.typed`), a tested SenseCAP example, and Astro/Starlight documentation.
 
-ChirpStack API helpers belong to the Home Assistant LoRaWAN integration. This
-package has no ChirpStack, protobuf, MQTT, or Home Assistant dependency. It does
-not open connections, provision devices, parse QR codes, or provide vendor decoders.
+The application supplies the network connection. This package handles events and
+collections; provisioning, QR parsing, and vendor decoders belong in separate libraries.
 The SenseCAP implementation under `examples/` illustrates a separate device library.
 
 Events are live notifications. The package does not persist history, reconnect a
 transport, or request replay after a gap. Providers report inventory before activity.
 Collections select models from catalog identity, never from names or payload guesses.
 
-## Library authors and Home Assistant authors
+## Home Assistant
 
-The Building a library guide covers catalog matching, decoding, partial state,
-and model subscriptions. It uses no Home Assistant APIs.
-
-The Home Assistant guide covers provider subscriptions, discovery, config-entry
+The [Home Assistant guide](https://home-assistant-libs.github.io/lorawan-connection/home-assistant/integration/) covers provider subscriptions, discovery, config-entry
 lifecycle, and entities that observe library models. The provider API described
 there exists on the linked Core POC branch; it is not yet an upstream HA API.
 

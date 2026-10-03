@@ -1,4 +1,4 @@
-"""Replay an S2101 capture without Home Assistant or a network server."""
+"""Replay an S2101 capture without a network server."""
 
 from datetime import UTC, datetime
 
