@@ -31,6 +31,7 @@ from lorawan_connection import DeviceEvent, Unsubscribe
 
 async def async_subscribe(
     hass: HomeAssistant,
+    *,
     provider_entry_id: str,
     vendor_ids: frozenset[int],
     callback: Callable[[DeviceEvent], None],

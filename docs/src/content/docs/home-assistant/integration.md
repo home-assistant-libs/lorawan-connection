@@ -66,10 +66,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: SenseCapConfigEntry) -> 
     try:
         unsubscribe = await lorawan.async_subscribe(
             hass,
-            entry.data["provider_entry_id"],
-            frozenset({VENDOR_ID}),
-            devices.handle_event,
-            disconnected,
+            provider_entry_id=entry.data["provider_entry_id"],
+            vendor_ids=frozenset({VENDOR_ID}),
+            callback=devices.handle_event,
+            on_disconnect=disconnected,
         )
     except ConnectionUnavailable as error:
         devices.close()
