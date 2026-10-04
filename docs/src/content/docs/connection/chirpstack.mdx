@@ -67,8 +67,13 @@ Newly observed devices receive an `ADDED` event before their activity is deliver
 The internal API is a compatibility dependency, tested against ChirpStack 4.19.2 and
 Python bindings 4.19.0. It requires device event retention to be enabled. ChirpStack can
 send retained events when a stream opens, followed by live events. The backend
-forwards both with their server timestamps. It does not request historical data
-or guarantee recovery of missed events.
+records the local time before opening each device stream and drops events with
+an earlier server receipt timestamp. This also applies to devices discovered later.
+
+Keep the client and ChirpStack clocks synchronized. The filter uses the Redis event
+ID's timestamp, not the sensor's clock. Clock differences can drop new events or
+admit retained ones. There is no startup delay or historical recovery. A server-side
+live-only option would remove this clock assumption.
 
 ## API reference
 

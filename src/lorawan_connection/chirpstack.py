@@ -418,6 +418,7 @@ class ChirpStackConnection:
             self._failed(error)
 
     async def _stream(self, dev_eui: str) -> None:
+        started_at = datetime.now(UTC)
         try:
             async for item in self._internal_api.StreamDeviceEvents(
                 api.StreamDeviceEventsRequest(dev_eui=dev_eui), metadata=self.metadata
@@ -430,6 +431,8 @@ class ChirpStackConnection:
                     recorded_at = datetime.fromtimestamp(
                         int(item.id.split("-", 1)[0]) / 1000, UTC
                     )
+                    if recorded_at < started_at:
+                        continue
                     message = Parse(
                         item.body, message_class(), ignore_unknown_fields=True
                     )
