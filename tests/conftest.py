@@ -21,9 +21,7 @@ DESCRIPTOR = DeviceDescriptor(
 def inventory(
     descriptor: DeviceDescriptor = DESCRIPTOR, kind: EventType = EventType.ADDED
 ) -> DeviceEventData:
-    return DeviceEventData(
-        descriptor.network_id, descriptor.dev_eui, kind, NOW, descriptor
-    )
+    return DeviceEventData(type=kind, received_at=NOW, descriptor=descriptor)
 
 
 class DeviceModel(Device):

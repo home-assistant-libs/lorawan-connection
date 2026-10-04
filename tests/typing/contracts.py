@@ -26,6 +26,7 @@ from lorawan_connection import (
     UplinkData,
 )
 from lorawan_connection.chirpstack import ChirpStackConnection
+from lorawan_connection.mock import MockConnection
 from sensecap_lorawan import S2101, SenseCapDeviceCollection
 
 uplink: Uplink = UplinkData(b"\x00")
@@ -37,7 +38,11 @@ log: Log = LogData("message", 1, 1)
 coordinates: Coordinates = CoordinatesData(1, 2, 3)
 location: Location = LocationData(coordinates)
 event: DeviceEvent = DeviceEventData(
-    "network", "0000000000000001", EventType.UPLINK, datetime.now(UTC), data=uplink
+    network_id="network",
+    dev_eui="0000000000000001",
+    type=EventType.UPLINK,
+    received_at=datetime.now(UTC),
+    data=uplink,
 )
 
 
@@ -46,6 +51,7 @@ event: DeviceEvent = DeviceEventData(
 connection: Connection = ChirpStackConnection(
     "http://localhost:8080", "key", application_ids=[], network_id="network"
 )
+mock_connection: Connection = MockConnection()
 model_class: type[S2101] = S2101
 collection: DeviceCollection[S2101] = DeviceCollection(connection, [S2101])
 declared: DeviceCollection[S2101] = SenseCapDeviceCollection(connection)

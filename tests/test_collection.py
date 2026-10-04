@@ -2,6 +2,7 @@
 
 import asyncio
 from dataclasses import replace
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -13,6 +14,7 @@ from lorawan_connection import (
     DeviceEventData,
     EventType,
 )
+from lorawan_connection.mock import MockConnection
 
 from .conftest import DESCRIPTOR, NOW, DeviceModel, inventory
 
@@ -28,7 +30,7 @@ class Collection(DeviceCollection[DeviceModel]):
 
 
 def test_inventory_creates_models_and_replays() -> None:
-    collection = Collection(Mock(network_id="network"))
+    collection = Collection(MockConnection())
     event = inventory()
     collection.handle_event(event)
     added = Mock()
@@ -59,20 +61,30 @@ def test_inventory_creates_models_and_replays() -> None:
     ],
 )
 def test_all_activity_routes_by_identity(kind: EventType) -> None:
-    collection = Collection(Mock(network_id="network"))
+    collection = Collection(MockConnection())
     collection.handle_event(inventory())
     other = replace(DESCRIPTOR, dev_eui="0000000000000002")
     collection.handle_event(inventory(other))
-    event = DeviceEventData("network", "02:01:01:01:01:01:01:01", kind, NOW)
+    event = DeviceEventData(
+        network_id="network",
+        dev_eui="02:01:01:01:01:01:01:01",
+        type=kind,
+        received_at=NOW,
+    )
     collection.handle_event(event)
     assert collection.devices[DESCRIPTOR.dev_eui].events[-1] is event
     assert len(collection.devices[other.dev_eui].events) == 1
 
 
 def test_unknown_activity_never_creates_a_device() -> None:
-    collection = Collection(Mock(network_id="network"))
+    collection = Collection(MockConnection())
     collection.handle_event(
-        DeviceEventData("network", DESCRIPTOR.dev_eui, EventType.UPLINK, NOW)
+        DeviceEventData(
+            network_id="network",
+            dev_eui=DESCRIPTOR.dev_eui,
+            type=EventType.UPLINK,
+            received_at=NOW,
+        )
     )
     assert not collection.devices
 
@@ -80,22 +92,31 @@ def test_unknown_activity_never_creates_a_device() -> None:
 @pytest.mark.parametrize(
     "event",
     [
-        replace(inventory(), network_id="other"),
+        SimpleNamespace(
+            network_id="other",
+            dev_eui=DESCRIPTOR.dev_eui,
+            type=EventType.ADDED,
+            descriptor=DESCRIPTOR,
+        ),
         replace(inventory(), descriptor=None),
-        replace(inventory(), descriptor=replace(DESCRIPTOR, network_id="other")),
-        replace(inventory(), dev_eui="0000000000000002"),
+        SimpleNamespace(
+            network_id="network",
+            dev_eui="0000000000000002",
+            type=EventType.ADDED,
+            descriptor=DESCRIPTOR,
+        ),
         inventory(replace(DESCRIPTOR, vendor_id=42)),
         inventory(replace(DESCRIPTOR, catalog_model_id="unsupported")),
     ],
 )
 def test_unusable_identity_is_ignored(event: DeviceEventData) -> None:
-    collection = Collection(Mock(network_id="network"))
+    collection = Collection(MockConnection())
     collection.handle_event(event)
     assert not collection.devices
 
 
 def test_identity_change_retires_before_replacement() -> None:
-    collection = Collection(Mock(network_id="network"))
+    collection = Collection(MockConnection())
     collection.handle_event(inventory())
     original = collection.devices[DESCRIPTOR.dev_eui]
     order: list[str] = []
@@ -117,7 +138,7 @@ def test_identity_change_retires_before_replacement() -> None:
 
 
 def test_remove_and_close_are_idempotent() -> None:
-    collection = Collection(Mock(network_id="network"))
+    collection = Collection(MockConnection())
     collection.handle_event(inventory())
     first = collection.devices[DESCRIPTOR.dev_eui]
     removed = Mock()
@@ -144,7 +165,7 @@ def test_remove_and_close_are_idempotent() -> None:
 def test_listener_failure_does_not_block_others(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    collection = Collection(Mock(network_id="network"))
+    collection = Collection(MockConnection())
     collection.subscribe_device_added(Mock(side_effect=ValueError("consumer error")))
     good = Mock()
     collection.subscribe_device_added(good)
@@ -156,7 +177,7 @@ def test_listener_failure_does_not_block_others(
 def test_close_failure_does_not_leak_other_models(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    collection = Collection(Mock(network_id="network"))
+    collection = Collection(MockConnection())
     collection.handle_event(inventory())
     collection.handle_event(inventory(replace(DESCRIPTOR, dev_eui="0000000000000002")))
     first, second = collection.devices.values()
@@ -171,7 +192,7 @@ def test_close_failure_does_not_leak_other_models(
 
 
 def test_added_callback_can_close_collection() -> None:
-    collection = Collection(Mock(network_id="network"))
+    collection = Collection(MockConnection())
     seen: list[DeviceModel] = []
 
     def added(device: DeviceModel) -> None:
@@ -186,7 +207,7 @@ def test_added_callback_can_close_collection() -> None:
 
 
 def test_replay_skips_models_removed_by_a_callback() -> None:
-    collection = Collection(Mock(network_id="network"))
+    collection = Collection(MockConnection())
     collection.handle_event(inventory())
     collection.handle_event(inventory(replace(DESCRIPTOR, dev_eui="0000000000000002")))
     seen: list[DeviceModel] = []
@@ -200,13 +221,13 @@ def test_replay_skips_models_removed_by_a_callback() -> None:
 
 
 def test_empty_registry_ignores_unknown_devices() -> None:
-    collection = DeviceCollection[DeviceModel](Mock(network_id="network"))
+    collection = DeviceCollection[DeviceModel](MockConnection())
     collection.handle_event(inventory())
     assert not collection.devices
 
 
 def test_removed_callback_can_close_during_model_replacement() -> None:
-    collection = Collection(Mock(network_id="network"))
+    collection = Collection(MockConnection())
     collection.handle_event(inventory())
     original = collection.devices[DESCRIPTOR.dev_eui]
     collection.subscribe_device_removed(lambda device: collection.close())
@@ -222,17 +243,20 @@ async def test_setup_subscribes_to_registered_vendors() -> None:
         vendor_id = 744
         catalog_model_id = "model"
 
+    connection = MockConnection([DESCRIPTOR])
+    original_subscribe = connection.async_subscribe
     unsubscribe = Mock()
-    connection = Mock(async_subscribe=AsyncMock(return_value=unsubscribe))
     collection = DeviceCollection(connection, [Sensor])
     added = Mock()
     collection.subscribe_device_added(added)
 
     async def subscribe(*, vendor_ids, callback):
-        callback(inventory())
+        unsubscribe.side_effect = await original_subscribe(
+            vendor_ids=vendor_ids, callback=callback
+        )
         return unsubscribe
 
-    connection.async_subscribe.side_effect = subscribe
+    connection.async_subscribe = AsyncMock(side_effect=subscribe)
     await collection.async_setup()
     connection.async_subscribe.assert_awaited_once_with(
         vendor_ids=frozenset({744}), callback=collection.handle_event
@@ -245,12 +269,13 @@ async def test_setup_subscribes_to_registered_vendors() -> None:
     collection.close()
     unsubscribe.assert_called_once()
     assert device.closed
-    connection.close.assert_not_called()
+    connection.emit(inventory())
+    assert not collection.devices
 
 
 @pytest.mark.parametrize("error", [ConnectionUnavailable(), asyncio.CancelledError()])
 async def test_setup_failure_closes_created_models(error: BaseException) -> None:
-    connection = Mock(async_subscribe=AsyncMock())
+    connection = MockConnection()
     collection = Collection(connection)
     device = Mock()
     collection.subscribe_device_added(device)
@@ -259,25 +284,26 @@ async def test_setup_failure_closes_created_models(error: BaseException) -> None
         kwargs["callback"](inventory())
         raise error
 
-    connection.async_subscribe.side_effect = subscribe
+    connection.async_subscribe = AsyncMock(side_effect=subscribe)
     with pytest.raises(type(error)):
         await collection.async_setup()
     assert device.call_args.args[0].closed
     assert not collection.devices
-    connection.close.assert_not_called()
+    connection.emit(inventory())
 
 
 async def test_close_during_setup_releases_subscription() -> None:
     unsubscribe = Mock()
-    connection = Mock(async_subscribe=AsyncMock())
-    collection = Collection(connection)
+    connection = MockConnection([DESCRIPTOR])
+    original_subscribe = connection.async_subscribe
+    collection = Collection(connection, [DeviceModel])
     collection.subscribe_device_added(lambda _: collection.close())
 
     async def subscribe(**kwargs):
-        kwargs["callback"](inventory())
+        unsubscribe.side_effect = await original_subscribe(**kwargs)
         return unsubscribe
 
-    connection.async_subscribe.side_effect = subscribe
+    connection.async_subscribe = AsyncMock(side_effect=subscribe)
     with pytest.raises(RuntimeError, match="closed during setup"):
         await collection.async_setup()
     unsubscribe.assert_called_once()
@@ -286,7 +312,7 @@ async def test_close_during_setup_releases_subscription() -> None:
 
 @pytest.mark.parametrize("replacement", [False, True])
 def test_device_remove_listener(replacement: bool) -> None:
-    collection = Collection(Mock())
+    collection = Collection(MockConnection())
     collection.handle_event(inventory())
     device = collection.devices[DESCRIPTOR.dev_eui]
     removed = Mock()
@@ -310,7 +336,7 @@ def test_device_remove_listener(replacement: bool) -> None:
 
 
 def test_device_remove_listeners_unsubscribe_and_failures() -> None:
-    collection = Collection(Mock())
+    collection = Collection(MockConnection())
     collection.handle_event(inventory())
     device = collection.devices[DESCRIPTOR.dev_eui]
     removed, remaining = Mock(), Mock()
@@ -327,7 +353,7 @@ def test_device_remove_listeners_unsubscribe_and_failures() -> None:
 
 
 def test_collection_shutdown_does_not_report_device_removal() -> None:
-    collection = Collection(Mock())
+    collection = Collection(MockConnection())
     collection.handle_event(inventory())
     device = collection.devices[DESCRIPTOR.dev_eui]
     removed = Mock()
@@ -339,7 +365,7 @@ def test_collection_shutdown_does_not_report_device_removal() -> None:
 
 
 def test_device_remove_callback_can_close_collection() -> None:
-    collection = Collection(Mock())
+    collection = Collection(MockConnection())
     collection.handle_event(inventory())
     device = collection.devices[DESCRIPTOR.dev_eui]
     device.add_remove_listener(collection.close)

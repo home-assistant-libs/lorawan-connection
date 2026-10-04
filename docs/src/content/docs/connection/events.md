@@ -47,9 +47,25 @@ An `ADDED` or `UPDATED` event also carries a `DeviceDescriptor`. This describes 
 device's name, server application, profile, and catalog identity. The collection
 uses the catalog identity to choose a device class.
 
+Pass the descriptor when constructing that event. The event takes its `dev_eui`
+and `network_id` from the descriptor:
+
+```python
+from datetime import UTC, datetime
+
+from lorawan_connection import DeviceEventData, EventType
+
+added = DeviceEventData(
+    type=EventType.ADDED,
+    received_at=datetime.now(UTC),
+    descriptor=descriptor,
+)
+```
+
 An activity event carries its payload in `data`. For an uplink, that payload
 contains raw application bytes and an FPort. The FPort is the application port;
 the device library decides how to interpret it and the bytes.
+Without a descriptor, supply the network and device identifiers explicitly.
 
 Here is an uplink event built without a server:
 

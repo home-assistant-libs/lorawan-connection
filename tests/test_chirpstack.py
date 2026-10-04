@@ -29,7 +29,11 @@ def test_uplink_protocol() -> None:
     assert payload.data == b"\x00\xff"
     assert payload.f_port == 42
     event = DeviceEventData(
-        "network", DESCRIPTOR.dev_eui, EventType.UPLINK, NOW, data=payload
+        network_id="network",
+        dev_eui=DESCRIPTOR.dev_eui,
+        type=EventType.UPLINK,
+        received_at=NOW,
+        data=payload,
     )
     assert event.data is message
 

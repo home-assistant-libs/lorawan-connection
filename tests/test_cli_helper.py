@@ -18,6 +18,7 @@ from lorawan_connection.cli_helper import (
     connect_from_args,
     run,
 )
+from lorawan_connection.mock import MockConnection
 from sensecap_lorawan import S2101, SenseCapDeviceCollection
 
 from .test_sensecap_example import DESCRIPTOR, PAYLOAD
@@ -162,7 +163,7 @@ async def test_missing_optional_backend() -> None:
 
 def test_duplicate_model_identity() -> None:
     with pytest.raises(ValueError, match="Duplicate catalog identity"):
-        DeviceCollection(Mock(network_id="network"), [S2101, S2101])
+        DeviceCollection(MockConnection(), [S2101, S2101])
 
 
 async def test_list_supported_models_only(
@@ -213,21 +214,21 @@ async def test_live_state_removal_and_disconnect(
         now = datetime.now(UTC)
         callback(
             DeviceEventData(
-                "network", DESCRIPTOR.dev_eui, EventType.ADDED, now, DESCRIPTOR
+                type=EventType.ADDED, received_at=now, descriptor=DESCRIPTOR
             )
         )
         callback(
             DeviceEventData(
-                "network",
-                DESCRIPTOR.dev_eui,
-                EventType.UPLINK,
-                now,
+                network_id="network",
+                dev_eui=DESCRIPTOR.dev_eui,
+                type=EventType.UPLINK,
+                received_at=now,
                 data=UplinkData(PAYLOAD, 1),
             )
         )
         callback(
             DeviceEventData(
-                "network", DESCRIPTOR.dev_eui, EventType.REMOVED, now, DESCRIPTOR
+                type=EventType.REMOVED, received_at=now, descriptor=DESCRIPTOR
             )
         )
         connection.error = RuntimeError("offline")
@@ -286,11 +287,9 @@ async def test_warn_unmapped_devices_from_supported_vendors(
             for descriptor in descriptors:
                 callback(
                     DeviceEventData(
-                        "network",
-                        descriptor.dev_eui,
-                        event_type,
-                        datetime.now(UTC),
-                        descriptor,
+                        type=event_type,
+                        received_at=datetime.now(UTC),
+                        descriptor=descriptor,
                     )
                 )
         connection.error = RuntimeError("offline")
@@ -338,11 +337,9 @@ async def test_cancellation_closes_models_and_connection(connection: Mock) -> No
     async def subscribe(*, vendor_ids, callback):
         callback(
             DeviceEventData(
-                "network",
-                DESCRIPTOR.dev_eui,
-                EventType.ADDED,
-                datetime.now(UTC),
-                DESCRIPTOR,
+                type=EventType.ADDED,
+                received_at=datetime.now(UTC),
+                descriptor=DESCRIPTOR,
             )
         )
         subscribed.set()
@@ -400,7 +397,7 @@ def test_models_can_share_catalog_ids_across_vendors() -> None:
     class OtherVendor(S2101):
         vendor_id = 123
 
-    collection = DeviceCollection(Mock(network_id="network"), [S2101, OtherVendor])
+    collection = DeviceCollection(MockConnection(), [S2101, OtherVendor])
     descriptors = [
         DESCRIPTOR,
         replace(DESCRIPTOR, dev_eui="0000000000000002", vendor_id=123),
@@ -408,11 +405,9 @@ def test_models_can_share_catalog_ids_across_vendors() -> None:
     for descriptor in descriptors:
         collection.handle_event(
             DeviceEventData(
-                "network",
-                descriptor.dev_eui,
-                EventType.ADDED,
-                datetime.now(UTC),
-                descriptor,
+                type=EventType.ADDED,
+                received_at=datetime.now(UTC),
+                descriptor=descriptor,
             )
         )
     assert type(collection.devices[DESCRIPTOR.dev_eui]) is S2101

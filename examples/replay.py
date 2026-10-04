@@ -1,14 +1,15 @@
 """Replay an S2101 capture without a network server."""
 
+import asyncio
 from datetime import UTC, datetime
-from unittest.mock import Mock
 
 from lorawan_connection import DeviceDescriptor, DeviceEventData, EventType, UplinkData
+from lorawan_connection.mock import MockConnection
 from sensecap_lorawan import S2101, SenseCapDeviceCollection
 
 
-def main() -> None:
-    connection = Mock()
+async def main() -> None:
+    connection = MockConnection()
     devices = SenseCapDeviceCollection(connection)
 
     def device_added(device: S2101) -> None:
@@ -33,17 +34,18 @@ def main() -> None:
     )
     now = datetime.now(UTC)
     try:
-        devices.handle_event(
+        await devices.async_setup()
+        connection.emit(
             DeviceEventData(
-                "home", descriptor.dev_eui, EventType.ADDED, now, descriptor
+                type=EventType.ADDED, received_at=now, descriptor=descriptor
             )
         )
-        devices.handle_event(
+        connection.emit(
             DeviceEventData(
-                "home",
-                descriptor.dev_eui,
-                EventType.UPLINK,
-                now,
+                network_id="home",
+                dev_eui=descriptor.dev_eui,
+                type=EventType.UPLINK,
+                received_at=now,
                 data=UplinkData(bytes.fromhex("01011098530000010210A87A0000AF51")),
             )
         )
@@ -55,4 +57,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

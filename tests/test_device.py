@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from lorawan_connection import Device, DeviceCollection, DeviceDescriptor, DeviceEvent
+from lorawan_connection.mock import MockConnection
 
 from .conftest import DESCRIPTOR, inventory
 
@@ -105,7 +106,7 @@ def test_declarative_collection_and_inheritance() -> None:
         pass
 
     for collection_class in (Sensors, Inherited):
-        collection = collection_class(Mock(network_id="network"))
+        collection = collection_class(MockConnection())
         collection.handle_event(inventory())
         assert isinstance(collection.devices[DESCRIPTOR.dev_eui], Sensor)
         collection.close()
@@ -115,8 +116,8 @@ def test_subclass_registry_override_does_not_modify_parent() -> None:
     class Others(Sensors):
         DEVICES = (OtherSensor,)
 
-    parent = Sensors(Mock(network_id="network"))
-    child = Others(Mock(network_id="network"))
+    parent = Sensors(MockConnection())
+    child = Others(MockConnection())
     for descriptor in (
         DESCRIPTOR,
         replace(DESCRIPTOR, dev_eui="0000000000000002", catalog_model_id="other"),
@@ -129,13 +130,13 @@ def test_subclass_registry_override_does_not_modify_parent() -> None:
 
 def test_explicit_registry_overrides_declaration_and_is_copied() -> None:
     models = [OtherSensor]
-    collection = Sensors(Mock(network_id="network"), models)
+    collection = Sensors(MockConnection(), models)
     models.clear()
     collection.handle_event(inventory())
     assert not collection.devices
     collection.handle_event(inventory(replace(DESCRIPTOR, catalog_model_id="other")))
     assert isinstance(collection.devices[DESCRIPTOR.dev_eui], OtherSensor)
-    empty = Sensors(Mock(network_id="network"), [])
+    empty = Sensors(MockConnection(), [])
     empty.handle_event(inventory())
     assert not empty.devices
 
@@ -145,17 +146,17 @@ def test_duplicate_identity_rejected_before_any_events() -> None:
         pass
 
     with pytest.raises(ValueError, match="Duplicate catalog identity"):
-        DeviceCollection(Mock(network_id="network"), [Sensor, Duplicate])
+        DeviceCollection(MockConnection(), [Sensor, Duplicate])
 
     class Duplicates(DeviceCollection[Sensor]):
         DEVICES = (Sensor, Duplicate)
 
     with pytest.raises(ValueError, match="Duplicate catalog identity"):
-        Duplicates(Mock(network_id="network"))
+        Duplicates(MockConnection())
 
 
 def test_missing_vendor_and_model_are_unsupported() -> None:
-    collection = Sensors(Mock(network_id="network"))
+    collection = Sensors(MockConnection())
     collection.handle_event(inventory(replace(DESCRIPTOR, vendor_id=None)))
     collection.handle_event(inventory(replace(DESCRIPTOR, catalog_model_id="unknown")))
     assert not collection.devices

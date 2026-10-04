@@ -53,19 +53,15 @@ async def test_connection_example(
         now = datetime.now(UTC)
         callback(
             DeviceEventData(
-                descriptor.network_id,
-                descriptor.dev_eui,
-                EventType.ADDED,
-                now,
-                descriptor,
+                type=EventType.ADDED, received_at=now, descriptor=descriptor
             )
         )
         callback(
             DeviceEventData(
-                descriptor.network_id,
-                descriptor.dev_eui,
-                EventType.UPLINK,
-                now,
+                network_id=descriptor.network_id,
+                dev_eui=descriptor.dev_eui,
+                type=EventType.UPLINK,
+                received_at=now,
                 data=UplinkData(PAYLOAD),
             )
         )

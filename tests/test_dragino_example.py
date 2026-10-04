@@ -14,10 +14,10 @@ from .conftest import DESCRIPTOR
 
 def event(data: bytes, port: int = 2) -> DeviceEventData:
     return DeviceEventData(
-        "network",
-        DESCRIPTOR.dev_eui,
-        EventType.UPLINK,
-        datetime.now(UTC),
+        network_id="network",
+        dev_eui=DESCRIPTOR.dev_eui,
+        type=EventType.UPLINK,
+        received_at=datetime.now(UTC),
         data=UplinkData(data, port),
     )
 

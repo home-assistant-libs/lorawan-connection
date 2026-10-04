@@ -3,7 +3,7 @@
 import asyncio
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import grpc
 import pytest
@@ -18,6 +18,7 @@ from lorawan_connection import (
     EventType,
 )
 from lorawan_connection.chirpstack import ChirpStackConnection
+from lorawan_connection.mock import MockConnection
 
 from .conftest import DESCRIPTOR, inventory
 from .test_chirpstack_connection import connection as connection
@@ -39,33 +40,30 @@ from .test_chirpstack_connection import connection as connection
 async def test_output_commands(
     method: str, channel: int, on: bool, payload: str
 ) -> None:
-    sender = AsyncMock(return_value="queue-id")
     descriptor = replace(
         DESCRIPTOR,
         vendor_id=LT22222.vendor_id,
         catalog_model_id=LT22222.catalog_model_id,
     )
-    collection = DraginoDevices(Mock(network_id="network", async_send_downlink=sender))
-    collection.handle_event(inventory(descriptor))
+    mock_connection = MockConnection([descriptor])
+    collection = DraginoDevices(mock_connection)
+    await collection.async_setup()
     device = collection.devices[descriptor.dev_eui]
 
-    async def send(downlink: Downlink) -> str:
-        collection.handle_event(
-            DeviceEventData(
-                "network",
-                descriptor.dev_eui,
-                EventType.ACK,
-                datetime.now(UTC),
-                data=AckData("queue-id", True),
-            )
-        )
-        return "queue-id"
-
-    sender.side_effect = send
     before = datetime.now(UTC)
     command = getattr(device, method)
-    assert await command(channel, on) is None
-    request = sender.call_args.args[0]
+    pending = asyncio.create_task(command(channel, on))
+    await asyncio.sleep(0)
+    queue_id, request = next(iter(mock_connection.downlinks.items()))
+    mock_connection.emit(
+        DeviceEventData(
+            type=EventType.ACK,
+            received_at=datetime.now(UTC),
+            descriptor=descriptor,
+            data=AckData(queue_id, True),
+        )
+    )
+    assert await pending is None
     assert request.dev_eui == descriptor.dev_eui
     assert request.data == bytes.fromhex(payload)
     assert request.f_port == 2
@@ -77,10 +75,11 @@ async def test_output_commands(
     )
     assert device.relays == {1: None, 2: None}
     assert device.digital_outputs == {1: None, 2: None}
-    collection.handle_event(inventory(descriptor, EventType.REMOVED))
+    mock_connection.emit(inventory(descriptor, EventType.REMOVED))
     with pytest.raises(DownlinkError, match="closed"):
         await command(1, True)
-    assert sender.await_count == 1
+    assert len(mock_connection.downlinks) == 1
+    collection.close()
 
 
 @pytest.mark.parametrize("method", ["async_set_relay", "async_set_digital_output"])

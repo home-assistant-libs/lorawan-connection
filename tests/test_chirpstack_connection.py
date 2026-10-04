@@ -50,10 +50,10 @@ async def test_inventory_and_unknown_order(connection: ChirpStackConnection) -> 
             AsyncMock(return_value={DESCRIPTOR.dev_eui: DESCRIPTOR}),
         ) as snapshot:
             event = DeviceEventData(
-                "network",
-                DESCRIPTOR.dev_eui,
-                EventType.UPLINK,
-                datetime.now(UTC),
+                network_id="network",
+                dev_eui=DESCRIPTOR.dev_eui,
+                type=EventType.UPLINK,
+                received_at=datetime.now(UTC),
                 data=integration.UplinkEvent(data=PAYLOAD, f_port=1),
             )
             await asyncio.gather(
@@ -333,10 +333,10 @@ async def test_all_tenants_subscription(connection: ChirpStackConnection) -> Non
             for dev_eui in device_ids.values():
                 await connection.handle_activity(
                     DeviceEventData(
-                        "network",
-                        dev_eui,
-                        EventType.UPLINK,
-                        datetime.now(UTC),
+                        network_id="network",
+                        dev_eui=dev_eui,
+                        type=EventType.UPLINK,
+                        received_at=datetime.now(UTC),
                         data=integration.UplinkEvent(data=PAYLOAD, f_port=1),
                     )
                 )
@@ -525,7 +525,10 @@ async def test_vendor_filters_and_identity_changes(
         assert second.call_args.args[0].type == EventType.UPDATED
         await connection.handle_activity(
             DeviceEventData(
-                "network", changed.dev_eui, EventType.UPLINK, datetime.now(UTC)
+                network_id="network",
+                dev_eui=changed.dev_eui,
+                type=EventType.UPLINK,
+                received_at=datetime.now(UTC),
             )
         )
         assert first.call_count == 2

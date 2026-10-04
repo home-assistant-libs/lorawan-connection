@@ -38,11 +38,57 @@ def test_normalized_frozen_descriptor() -> None:
 def test_payload_borrowed_without_copying() -> None:
     payload = UplinkData(b"\x01", 10)
     event = DeviceEventData(
-        "network", DESCRIPTOR.dev_eui, EventType.UPLINK, NOW, data=payload
+        network_id="network",
+        dev_eui=DESCRIPTOR.dev_eui,
+        type=EventType.UPLINK,
+        received_at=NOW,
+        data=payload,
     )
     assert event.data is payload
     with pytest.raises(FrozenInstanceError):
         event.data = None  # type: ignore[misc]
+
+
+def test_event_derives_identity_without_copying_descriptor() -> None:
+    event = DeviceEventData(
+        type=EventType.ADDED, received_at=NOW, descriptor=DESCRIPTOR
+    )
+    assert event.network_id == DESCRIPTOR.network_id
+    assert event.dev_eui == DESCRIPTOR.dev_eui
+    assert event.descriptor is DESCRIPTOR
+    assert replace(event, type=EventType.UPDATED).descriptor is DESCRIPTOR
+    with pytest.raises(FrozenInstanceError):
+        event.dev_eui = "0000000000000002"  # type: ignore[misc]
+
+
+def test_event_accepts_matching_explicit_identity() -> None:
+    descriptor = replace(DESCRIPTOR, dev_eui="aabbccddeeff0011")
+    event = DeviceEventData(
+        type=EventType.ADDED,
+        received_at=NOW,
+        descriptor=descriptor,
+        network_id=descriptor.network_id,
+        dev_eui="AA:BB:CC:DD:EE:FF:00:11",
+    )
+    assert event.dev_eui == descriptor.dev_eui
+
+
+@pytest.mark.parametrize(
+    "identity", [{"network_id": "other"}, {"dev_eui": "0000000000000002"}]
+)
+def test_event_rejects_conflicting_identity(identity: dict[str, str]) -> None:
+    with pytest.raises(ValueError, match="conflicts with descriptor"):
+        DeviceEventData(
+            type=EventType.ADDED, received_at=NOW, descriptor=DESCRIPTOR, **identity
+        )
+
+
+@pytest.mark.parametrize(
+    "identity", [{}, {"network_id": "network"}, {"dev_eui": DESCRIPTOR.dev_eui}]
+)
+def test_event_requires_identity_without_descriptor(identity: dict[str, str]) -> None:
+    with pytest.raises(ValueError, match="required without a descriptor"):
+        DeviceEventData(type=EventType.UPLINK, received_at=NOW, **identity)
 
 
 def test_fixture_defaults_and_nested_ownership() -> None:

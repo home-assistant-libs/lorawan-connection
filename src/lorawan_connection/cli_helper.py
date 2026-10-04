@@ -191,11 +191,9 @@ async def _watch(args: argparse.Namespace, models: Sequence[type[Device]]) -> No
             for descriptor in await connection.inventory():
                 collection.handle_event(
                     DeviceEventData(
-                        connection.network_id,
-                        descriptor.dev_eui,
-                        EventType.ADDED,
-                        datetime.now(UTC),
-                        descriptor,
+                        type=EventType.ADDED,
+                        received_at=datetime.now(UTC),
+                        descriptor=descriptor,
                     )
                 )
             return

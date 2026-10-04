@@ -43,8 +43,8 @@ unsubscribe = sensors.subscribe_device_added(
 
 The collection builds its catalog lookup from `DEVICES`. You can also pass classes
 at construction: `DeviceCollection(connection, [Sensor])`.
-The collection takes the network ID and downlink sender from the connection.
-The application owns event subscription and connection cleanup.
+Call `await sensors.async_setup()` to subscribe through the supplied connection.
+The collection owns its subscription; the application owns connection cleanup.
 The `Device` base supplies identity, `add_update_listener()`, `notify()`, and cleanup.
 Models define their own attributes, including multiple measurements or channels.
 Listeners take no arguments and read model attributes after a complete update.
@@ -64,6 +64,7 @@ replays a SenseCAP S2101 capture and prints 21.4 °C and 31.4% humidity.
 
 - Read-only event and payload `Protocol`s. Generated payloads can pass by reference.
 - Immutable descriptors and fixture dataclasses for every supported event payload.
+- An in-memory `MockConnection` for device replay, event delivery, and command tests.
 - A `Device` base with synchronous update listeners and explicit notifications.
 - A generic `DeviceCollection` with inventory replay, model replacement, and retirement.
 - Synchronous callback helpers with independent, idempotent unsubscribe functions.
@@ -88,6 +89,19 @@ attributes; an ACK confirms delivery, not the resulting device state.
 
 The [Dragino example](https://home-assistant-libs.github.io/lorawan-connection/modelling/overview/#complete-device-example)
 models the LT-22222-L using its existing ChirpStack catalog identity.
+
+## Testing device libraries
+
+Use `MockConnection` from `lorawan_connection.mock` in place of a server connection.
+Seed it with device descriptors, then call the collection's `async_setup()`.
+`connection.emit(event)` delivers events to subscribed collections. Queued commands
+are recorded in `connection.downlinks`, keyed by queue ID. Send ACK events explicitly
+to test command completion; `connection.disconnect()` simulates connection loss.
+See the [testing guide](https://home-assistant-libs.github.io/lorawan-connection/patterns/testing/).
+
+Construct `DeviceEventData` with keyword arguments. Supply `descriptor=...` to derive
+`network_id` and `dev_eui`, or pass both identifiers explicitly for an event without
+a descriptor. Conflicting explicit identifiers raise `ValueError`.
 
 ## Device-library CLI
 

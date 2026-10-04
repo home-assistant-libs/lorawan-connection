@@ -32,12 +32,17 @@ fixture and envelope implementation.
 
 | Field | Type | Dataclass default |
 | --- | --- | --- |
-| `network_id` | `str` | Required |
-| `dev_eui` | `str` | Required |
+| `network_id` | `str` | From `descriptor`; otherwise required |
+| `dev_eui` | `str` | From `descriptor`; otherwise required |
 | `type` | `EventType` | Required |
 | `received_at` | `datetime` | Required |
 | `descriptor` | `DeviceDescriptor \| None` | `None` |
 | `data` | `Payload \| None` | `None` |
+
+Pass constructor arguments by keyword. When `descriptor` is supplied, the event
+derives `network_id` and `dev_eui` from it. Explicit identifiers must match that
+descriptor; conflicting values raise `ValueError`. DevEUI comparisons ignore
+colons and letter case. Without a descriptor, both identifiers are required.
 
 Providers use timezone-aware timestamps and canonical DevEUIs. The envelope
 retains its inputs without copying or runtime payload validation. Supply a

@@ -3,7 +3,7 @@
 import asyncio
 from collections.abc import Iterator
 from dataclasses import replace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
 from chirpstack_api import integration
@@ -16,6 +16,7 @@ from lorawan_connection import (
     EventType,
     TxAckData,
 )
+from lorawan_connection.mock import MockConnection
 
 from .conftest import DESCRIPTOR, NOW, DeviceModel, inventory
 
@@ -27,9 +28,9 @@ def sender() -> AsyncMock:
 
 @pytest.fixture
 def devices(sender: AsyncMock) -> Iterator[DeviceCollection[DeviceModel]]:
-    collection = DeviceCollection(
-        Mock(network_id="network", async_send_downlink=sender), [DeviceModel]
-    )
+    connection = MockConnection([DESCRIPTOR])
+    connection.async_send_downlink = sender
+    collection = DeviceCollection(connection, [DeviceModel])
     collection.handle_event(inventory())
     yield collection
     collection.close()
@@ -43,10 +44,10 @@ def ack(
 ) -> None:
     devices.handle_event(
         DeviceEventData(
-            "network",
-            dev_eui,
-            EventType.ACK,
-            NOW,
+            network_id="network",
+            dev_eui=dev_eui,
+            type=EventType.ACK,
+            received_at=NOW,
             data=AckData(queue_id, acknowledged),
         )
     )
@@ -62,10 +63,10 @@ async def test_waits_for_matching_device_ack(devices, sender) -> None:
     ack(devices, dev_eui="0000000000000002")
     devices.handle_event(
         DeviceEventData(
-            "network",
-            DESCRIPTOR.dev_eui,
-            EventType.TX_ACK,
-            NOW,
+            network_id="network",
+            dev_eui=DESCRIPTOR.dev_eui,
+            type=EventType.TX_ACK,
+            received_at=NOW,
             data=TxAckData("gateway", 1),
         )
     )
@@ -81,10 +82,10 @@ async def test_ack_before_enqueue_returns(devices, sender, acknowledged) -> None
     async def send(downlink):
         devices.handle_event(
             DeviceEventData(
-                "network",
-                DESCRIPTOR.dev_eui,
-                EventType.ACK,
-                NOW,
+                network_id="network",
+                dev_eui=DESCRIPTOR.dev_eui,
+                type=EventType.ACK,
+                received_at=NOW,
                 data=integration.AckEvent(
                     queue_item_id="queue-id", acknowledged=acknowledged
                 ),

@@ -67,7 +67,7 @@ class DeviceEvent(Protocol):
     def data(self) -> Payload | None: ...
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class DeviceEventData:
     """Lightweight envelope for generated payloads and test fixtures."""
 
@@ -77,3 +77,34 @@ class DeviceEventData:
     received_at: datetime
     descriptor: DeviceDescriptor | None = None
     data: Payload | None = None
+
+    def __init__(
+        self,
+        *,
+        type: EventType,
+        received_at: datetime,
+        descriptor: DeviceDescriptor | None = None,
+        data: Payload | None = None,
+        network_id: str | None = None,
+        dev_eui: str | None = None,
+    ) -> None:
+        """Derive identity from a descriptor, or require explicit identifiers."""
+        if descriptor is not None:
+            if network_id is not None and network_id != descriptor.network_id:
+                raise ValueError("network_id conflicts with descriptor")
+            if (
+                dev_eui is not None
+                and dev_eui.replace(":", "").lower() != descriptor.dev_eui
+            ):
+                raise ValueError("dev_eui conflicts with descriptor")
+            network_id = descriptor.network_id
+            dev_eui = descriptor.dev_eui
+        elif network_id is None or dev_eui is None:
+            raise ValueError("network_id and dev_eui are required without a descriptor")
+
+        object.__setattr__(self, "network_id", network_id)
+        object.__setattr__(self, "dev_eui", dev_eui)
+        object.__setattr__(self, "type", type)
+        object.__setattr__(self, "received_at", received_at)
+        object.__setattr__(self, "descriptor", descriptor)
+        object.__setattr__(self, "data", data)

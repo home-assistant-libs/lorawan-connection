@@ -319,7 +319,7 @@ class ChirpStackConnection:
         self, kind: EventType, descriptor: DeviceDescriptor
     ) -> DeviceEventData:
         return DeviceEventData(
-            self.network_id, descriptor.dev_eui, kind, datetime.now(UTC), descriptor
+            type=kind, received_at=datetime.now(UTC), descriptor=descriptor
         )
 
     async def refresh(self) -> None:
@@ -445,10 +445,10 @@ class ChirpStackConnection:
                     continue
                 await self.handle_activity(
                     DeviceEventData(
-                        self.network_id,
-                        dev_eui,
-                        EventType(item.description),
-                        recorded_at,
+                        network_id=self.network_id,
+                        dev_eui=dev_eui,
+                        type=EventType(item.description),
+                        received_at=recorded_at,
                         data=message,
                     )
                 )
