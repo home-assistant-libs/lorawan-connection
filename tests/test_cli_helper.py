@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from lorawan_connection import DeviceCollection, DeviceEventData, EventType, UplinkData
+from lorawan_connection.chirpstack import ChirpStackConnection
 from lorawan_connection.cli_helper import (
     _watch,
     add_connection_args,
@@ -35,6 +36,7 @@ def args(*extra: str) -> argparse.Namespace:
 @pytest.fixture
 def connection() -> Mock:
     return Mock(
+        spec=ChirpStackConnection,
         network_id="network",
         tenants=AsyncMock(return_value={"tenant": "Tenant"}),
         applications=AsyncMock(return_value={"app": "App", "app2": "Second"}),
@@ -389,7 +391,7 @@ def test_connection_error_does_not_print_credentials(
         run(SenseCapDeviceCollection.DEVICES, ["--server", "http://localhost:8080"])
     assert result.value.code == 1
     output = capsys.readouterr().err
-    assert "ChirpStack connection failed" in output
+    assert "RuntimeError: Bearer <redacted>" in output
     assert "secret" not in output
 
 
@@ -451,3 +453,43 @@ def test_cli_reports_vendor_attributes_and_properties() -> None:
         "humidity": None,
         "channels": {1: {"temperature": 20.0, "humidity": 40.0}},
     }
+
+
+async def test_removed_after_initial_output_failure(
+    connection: Mock, capsys, caplog
+) -> None:
+    """A model property that is not ready cannot break later removal cleanup."""
+
+    class Sensor(S2101):
+        @property
+        def unobserved(self):
+            raise ValueError("No reading yet")
+
+    async def subscribe(*, vendor_ids, callback):
+        callback(
+            DeviceEventData(
+                type=EventType.ADDED,
+                received_at=datetime.now(UTC),
+                descriptor=DESCRIPTOR,
+            )
+        )
+        callback(
+            DeviceEventData(
+                type=EventType.REMOVED,
+                received_at=datetime.now(UTC),
+                descriptor=DESCRIPTOR,
+            )
+        )
+        connection.on_disconnect.call_args.args[0]()
+        return Mock()
+
+    connection.async_subscribe.side_effect = subscribe
+    with (
+        patch(
+            "lorawan_connection.cli_helper.connect_from_args", return_value=connection
+        ),
+        pytest.raises(Exception, match="Disconnected"),
+    ):
+        await _watch(args(), [Sensor])
+    assert "removed: Greenhouse" in capsys.readouterr().out
+    assert "KeyError" not in caplog.text

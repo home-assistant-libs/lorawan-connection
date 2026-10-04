@@ -30,12 +30,12 @@ def test_relay_reports(mode: int) -> None:
     report = event(bytes(8) + bytes((0x80, 0, 0x40 | mode)))
     model.handle_event(report)
     model.handle_event(report)
-    assert states == [{1: True, 2: False}]
+    assert states == [{1: True, 2: False}] * 2
     model.handle_event(event(bytes(8) + bytes((0x40, 0, 0x40 | mode))))
     assert model.relays == {1: False, 2: True}
     model.close()
     model.handle_event(report)
-    assert len(states) == 2
+    assert len(states) == 3
 
 
 @pytest.mark.parametrize(
@@ -45,7 +45,6 @@ def test_relay_reports(mode: int) -> None:
         (bytes(10), 2),
         (bytes(12), 2),
         (bytes(10) + b"\x46", 2),
-        (bytes(10) + b"\x01", 2),
         (bytes(10) + b"\x41", 3),
     ],
 )
@@ -162,3 +161,22 @@ def test_inputs_notify_without_output_change() -> None:
     assert model.voltages[1] == 1.196
     assert model.digital_inputs == {1: False, 2: True}
     listener.assert_called_once_with()
+
+
+@pytest.mark.parametrize("mode_byte", [0x01, 0x41])
+def test_manual_mode_one(mode_byte: int) -> None:
+    """The vendor MOD1 example decodes regardless of hardware label bits."""
+    model = LT22222(DESCRIPTOR)
+    model.handle_event(
+        event(bytes.fromhex("04ab04ac13101300aaff") + bytes([mode_byte]))
+    )
+    assert model.voltages == {1: 1.195, 2: 1.196}
+    assert model.digital_inputs == {1: True, 2: False}
+    assert model.digital_outputs == {1: False, 2: True}
+    assert model.relays == {1: True, 2: False}
+
+
+def test_first_counter_report() -> None:
+    model = LT22222(DESCRIPTOR)
+    model.handle_event(event(bytes.fromhex("0000000100000002200042")))
+    assert model.digital_counts == {1: 1, 2: 2}

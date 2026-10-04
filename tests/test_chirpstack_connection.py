@@ -35,38 +35,41 @@ def connection() -> ChirpStackConnection:
     )
 
 
-async def test_inventory_and_unknown_order(connection: ChirpStackConnection) -> None:
-    """Unknown activity triggers one refresh and descriptors precede activity."""
+async def test_activity_does_not_wait_for_snapshot(
+    connection: ChirpStackConnection,
+) -> None:
+    """Live events remain usable while a slow snapshot is in flight."""
     callback = Mock()
+    connection.devices = {DESCRIPTOR.dev_eui: DESCRIPTOR}
+    connection.available = True
+    await connection.async_subscribe(vendor_ids=None, callback=callback)
+    started, finish = asyncio.Event(), asyncio.Event()
+
+    async def snapshot():
+        started.set()
+        await finish.wait()
+        return {DESCRIPTOR.dev_eui: DESCRIPTOR}
+
     with (
-        patch.object(connection, "_snapshot", AsyncMock(return_value={})),
+        patch.object(connection, "_snapshot", snapshot),
         patch.object(connection, "_stream", AsyncMock()),
     ):
-        await connection.async_connect()
-        stop = await connection.async_subscribe(vendor_ids=None, callback=callback)
-        with patch.object(
-            connection,
-            "_snapshot",
-            AsyncMock(return_value={DESCRIPTOR.dev_eui: DESCRIPTOR}),
-        ) as snapshot:
-            event = DeviceEventData(
-                network_id="network",
-                dev_eui=DESCRIPTOR.dev_eui,
-                type=EventType.UPLINK,
-                received_at=datetime.now(UTC),
-                data=integration.UplinkEvent(data=PAYLOAD, f_port=1),
-            )
-            await asyncio.gather(
-                connection.handle_activity(event), connection.handle_activity(event)
-            )
-            snapshot.assert_awaited_once()
-        assert [call.args[0].type for call in callback.call_args_list] == [
-            EventType.ADDED,
-            EventType.UPLINK,
-            EventType.UPLINK,
-        ]
-        stop()
-        stop()
+        task = asyncio.create_task(connection.refresh())
+        await started.wait()
+        event = DeviceEventData(
+            network_id="network",
+            dev_eui=DESCRIPTOR.dev_eui,
+            type=EventType.UPLINK,
+            received_at=datetime.now(UTC),
+            data=integration.UplinkEvent(data=PAYLOAD, f_port=1),
+        )
+        await connection.handle_activity(event)
+        assert callback.call_args.args[0] == event
+        assert not task.done()
+        await connection.handle_activity(replace(event, dev_eui="0000000000000001"))
+        assert callback.call_count == 2
+        finish.set()
+        await task
     await connection.close()
 
 
@@ -166,6 +169,8 @@ async def test_stream_decode_replay_and_disconnect(
     async def stream() -> object:
         for item in (
             old,
+            api.LogItem(id="x-0", description=kind, body=live.body),
+            api.LogItem(id="100000000000000000000-0", description=kind, body=live.body),
             boundary,
             recent,
             api.LogItem(id=live.id, description=kind, body="bad json"),
@@ -181,7 +186,9 @@ async def test_stream_decode_replay_and_disconnect(
     connection._internal_api.StreamDeviceEvents = Mock(return_value=stream())
     with patch("lorawan_connection.chirpstack.datetime", wraps=datetime) as clock:
         clock.now.return_value = now
-        await connection._stream(DESCRIPTOR.dev_eui)
+        with pytest.raises(ConnectionUnavailable, match="stream closed"):
+            async for event in connection._read_stream(DESCRIPTOR.dev_eui):
+                await connection.handle_activity(event)
     assert callback.call_count == 3
     assert [call.args[0].received_at for call in callback.call_args_list] == [
         now - timedelta(seconds=5),
@@ -194,8 +201,8 @@ async def test_stream_decode_replay_and_disconnect(
     assert event.received_at == datetime.fromtimestamp(
         int(live.id.split("-", 1)[0]) / 1000, UTC
     )
-    assert not connection.available
-    disconnected.assert_called_once()
+    assert connection.available
+    disconnected.assert_not_called()
     connection._failed(ConnectionUnavailable())
     disconnected.assert_called_once()
     await connection.close()
@@ -426,12 +433,12 @@ def test_endpoint_validation(endpoint: str) -> None:
     ("code", "expected"),
     [
         (grpc.StatusCode.UNAUTHENTICATED, AuthenticationError),
-        (grpc.StatusCode.PERMISSION_DENIED, ConnectionUnavailable),
+        (grpc.StatusCode.PERMISSION_DENIED, AuthenticationError),
         (grpc.StatusCode.UNAVAILABLE, ConnectionUnavailable),
     ],
 )
 def test_error_classification(code: grpc.StatusCode, expected: type[Exception]) -> None:
-    """Missing scope must not trigger a false invalid-credential claim."""
+    """Rejected credentials or access require reauthentication."""
     error = grpc.aio.AioRpcError(code, (), (), "test")
     assert isinstance(connection_error(error), expected)
 
@@ -456,6 +463,10 @@ async def test_no_false_removal_when_page_count_changes(
     """Reject a visibly inconsistent multi-page snapshot."""
     method = AsyncMock(
         side_effect=[
+            api.ListDevicesResponse(
+                total_count=2, result=[api.DeviceListItem(dev_eui="1")]
+            ),
+            api.ListDevicesResponse(total_count=1),
             api.ListDevicesResponse(
                 total_count=2, result=[api.DeviceListItem(dev_eui="1")]
             ),

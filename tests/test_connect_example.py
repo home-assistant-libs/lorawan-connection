@@ -10,7 +10,7 @@ import pytest
 
 import connect_sensors
 from lorawan_connection import DeviceEvent, DeviceEventData, EventType, UplinkData
-from lorawan_connection.chirpstack import ConnectionUnavailable
+from lorawan_connection.chirpstack import ChirpStackConnection, ConnectionUnavailable
 from sensecap_lorawan import S2101
 
 from .test_sensecap_example import DESCRIPTOR, PAYLOAD
@@ -22,6 +22,7 @@ def connection(monkeypatch: pytest.MonkeyPatch) -> Mock:
     monkeypatch.setenv("CHIRPSTACK_API_KEY", "test-key")
     monkeypatch.setenv("CHIRPSTACK_TENANT_ID", "tenant")
     connection = Mock(
+        spec=ChirpStackConnection,
         network_id="my-network",
         applications=AsyncMock(return_value={"application": "Sensors"}),
         async_subscribe=AsyncMock(),

@@ -44,7 +44,7 @@ Returns `None` on success. The collection correlates ACKs before forwarding them
 model's `handle_event()`. The model does not need to call a base event handler.
 
 Set `wait_for_ack=False` to send an unconfirmed downlink and return when queued.
-There is no separate `confirmed` or timeout argument. Use `asyncio.timeout()` to
+Use `asyncio.timeout()` to
 bound the operation. Cancellation ends the wait without removing a queued command.
 `expires_at` is a separate server queue expiry.
 

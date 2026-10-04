@@ -1,5 +1,6 @@
 """SenseCAP models consuming transport-independent LoRaWAN events."""
 
+import logging
 from datetime import datetime
 from typing import ClassVar, cast, override
 
@@ -12,10 +13,12 @@ from lorawan_connection import (
     Uplink,
 )
 
+_LOGGER = logging.getLogger(__name__)
+
 VENDOR_ID = 0x02E8
 
 
-def decode_s2101(data: bytes) -> dict[str, float]:
+def decode_s2101(data: bytes) -> dict[str, float | None]:
     """Decode channel-one measurements using Seeed's seven-byte records.
 
     The two-byte trailer is retained in the wire format. Seeed's reference
@@ -23,7 +26,7 @@ def decode_s2101(data: bytes) -> dict[str, float]:
     """
     if len(data) < 9 or (len(data) - 2) % 7:
         raise ValueError("Invalid SenseCAP frame length")
-    result = {}
+    result: dict[str, float | None] = {}
     for offset in range(0, len(data) - 2, 7):
         channel = data[offset]
         measurement = int.from_bytes(data[offset + 1 : offset + 3], "little")
@@ -33,6 +36,10 @@ def decode_s2101(data: bytes) -> dict[str, float]:
         value = (
             int.from_bytes(data[offset + 3 : offset + 7], "little", signed=True) / 1000
         )
+        if value >= 2_000_000:
+            _LOGGER.warning("SenseCAP %s sensor fault: %s", key, value)
+            result[key] = None
+            continue
         if key == "humidity" and not 0 <= value <= 100:
             raise ValueError("Humidity outside valid range")
         if key == "temperature" and not -40 <= value <= 85:
@@ -74,13 +81,9 @@ class S2101(Device):
         if not values:
             return
         self._updated.update(dict.fromkeys(values, event.received_at))
-        changed = False
         for key, value in values.items():
-            if getattr(self, key) != value:
-                setattr(self, key, value)
-                changed = True
-        if changed:
-            self.notify()
+            setattr(self, key, value)
+        self.notify()
 
 
 class SenseCapDeviceCollection(DeviceCollection[S2101]):

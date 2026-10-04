@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import sys
 from collections.abc import Sequence
 from dataclasses import asdict, is_dataclass
@@ -174,13 +175,14 @@ async def _watch(args: argparse.Namespace, models: Sequence[type[Device]]) -> No
         print(line, flush=True)
 
     def added(device: Device) -> None:
-        output("added", device, _model_data(device))
         subscriptions[device.descriptor.dev_eui] = device.add_update_listener(
             lambda: output("state", device, _model_data(device))
         )
+        output("added", device, _model_data(device))
 
     def removed(device: Device) -> None:
-        subscriptions.pop(device.descriptor.dev_eui)()
+        if unsubscribe := subscriptions.pop(device.descriptor.dev_eui, None):
+            unsubscribe()
         output("removed", device)
 
     try:
@@ -229,10 +231,6 @@ def run(models: Sequence[type[Device]], argv: Sequence[str] | None = None) -> No
         return
     except (ValueError, OSError) as error:
         parser.exit(1, f"{error}\n")
-    except Exception:
-        # gRPC details may contain server data; keep credentials out of diagnostics.
-        print(
-            "ChirpStack connection failed. Check the endpoint, key, and access scope.",
-            file=sys.stderr,
-        )
-        raise SystemExit(1) from None
+    except Exception as error:
+        message = re.sub(r"(?i)Bearer\s+\S+", "Bearer <redacted>", str(error))
+        parser.exit(1, f"{type(error).__name__}: {message}\n")

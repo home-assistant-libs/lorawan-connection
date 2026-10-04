@@ -1,5 +1,6 @@
 """Dragino device models consuming shared LoRaWAN events."""
 
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import ClassVar, cast, override
 
@@ -11,6 +12,8 @@ from lorawan_connection import (
     EventType,
     Uplink,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 VENDOR_ID = 676
 
@@ -42,7 +45,8 @@ class LT22222(Device):
         if uplink.f_port != 2 or len(data) != 11:
             return
         # Trigger reports contain flags, not input measurements or output states.
-        if data[10] >> 6 != 1 or not 1 <= (data[10] & 0x3F) <= 5:
+        if not 1 <= (data[10] & 0x3F) <= 5:
+            _LOGGER.debug("Ignoring LT-22222-L report mode %s", data[10] & 0x3F)
             return
         mode = data[10] & 0x3F
         relays: dict[int, bool | None] = {
@@ -79,37 +83,15 @@ class LT22222(Device):
         if mode == 5:
             digital_counts[1] = int.from_bytes(data[6:8])
 
-        state = (
-            mode,
-            relays,
-            digital_outputs,
-            digital_inputs,
-            voltages,
-            currents,
-            digital_counts,
-            voltage_count,
-        )
-        if state != (
-            self.mode,
-            self.relays,
-            self.digital_outputs,
-            self.digital_inputs,
-            self.voltages,
-            self.currents,
-            self.digital_counts,
-            self.voltage_count,
-        ):
-            (
-                self.mode,
-                self.relays,
-                self.digital_outputs,
-                self.digital_inputs,
-                self.voltages,
-                self.currents,
-                self.digital_counts,
-                self.voltage_count,
-            ) = state
-            self.notify()
+        self.mode = mode
+        self.relays = relays
+        self.digital_outputs = digital_outputs
+        self.digital_inputs = digital_inputs
+        self.voltages = voltages
+        self.currents = currents
+        self.digital_counts = digital_counts
+        self.voltage_count = voltage_count
+        self.notify()
 
     async def async_set_relay(self, channel: int, on: bool) -> None:
         """Await command acknowledgement; telemetry updates reported state."""

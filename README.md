@@ -136,45 +136,6 @@ python -m my_sensors --server https://chirpstack.example.com:443 --api-key-file 
 See the [CLI guide](https://home-assistant-libs.github.io/lorawan-connection/patterns/cli/)
 and [Connecting to ChirpStack](https://home-assistant-libs.github.io/lorawan-connection/connection/chirpstack/).
 
-## Migrating from 0.2
-
-Rename model `product_id` to `catalog_model_id`. Replace state callbacks with
-`add_update_listener(callback)`; callbacks take no arguments and read model attributes.
-Models inherit `Device`, initialize it with `super().__init__(descriptor)`,
-and call `self.notify()` after updating their data.
-Declare `DEVICES` on the collection to replace manual lookup dictionaries.
-
-Models now inherit `Device`. Pass the connection when constructing
-a collection: `Sensors(connection)`. Existing `_create_device()`
-overrides remain available for custom matching.
-
-## Migrating from 0.3
-
-Inherit `Device` without a state type parameter. Call `super().__init__(descriptor)`
-without `state=`. Define your model's data as attributes or properties. An existing
-state object can remain a vendor-defined attribute, but the base does not require it.
-The CLI's JSON `state` field now contains the model's public attributes and properties.
-
-## Migrating from 0.6
-
-Construct collections with `Sensors(connection)` or `DeviceCollection(connection, models)`.
-The connection replaces the separate `network_id` and `send_downlink` arguments.
-The connection implements the backend-neutral `Connection` protocol for subscriptions,
-disconnect notifications, and command delivery.
-
-`ChirpStackConnection` accepts `tenant_id=None` by default to discover applications
-across all accessible tenants. Pass connection options after `endpoint` and
-`api_key` by keyword: `application_ids=...`, `network_id=...`, and an optional
-`tenant_id=...`.
-
-`Device.async_send_downlink()` now returns `None` and waits for a device ACK by default. Replace its
-`confirmed` argument with `wait_for_ack`: waiting automatically requests confirmation.
-Use `wait_for_ack=False` for the previous enqueue-only behavior. The low-level
-`Downlink.confirmed` field and backend sender still describe the transport request.
-Feed ACK events through the collection and close it on disconnect to end pending waits.
-Use `asyncio.timeout()` where the caller needs a deadline. Cancelling a wait does
-not remove a command already queued on the server.
-
 ## Collection subscriptions
 
 Pass a connection to the collection, then call `await devices.async_setup()`.
@@ -186,12 +147,12 @@ after removal or replacement closes that model, but not during ordinary shutdown
 
 `Connection` exposes only `async_subscribe(*, vendor_ids, callback)`,
 `on_disconnect(callback)`, and `async_send_downlink(downlink)`.
-Applications own connection startup, recovery, and shutdown.
+Applications own connection startup, recovery, and shutdown. The ChirpStack backend
+retries transient polling and device-stream failures before reporting connection loss.
 
 For ChirpStack, call `await connection.async_connect()` before setting up collections.
 Register disconnect notifications with `connection.on_disconnect(callback)`;
-the callback takes no arguments. Replace manual event forwarding with
-`await devices.async_setup()`. Several collections can share one connection.
+the callback takes no arguments. Use `await devices.async_setup()` to deliver events to models. Several collections can share one connection.
 
 ## Home Assistant
 
@@ -220,4 +181,4 @@ The documentation build validates internal links and produces `llms.txt`.
 The repository follows the packaging, documentation, and release approach of
 [modbus-connection](https://github.com/home-assistant-libs/modbus-connection).
 The source version stays `0.0.0`; the publish workflow sets the version from the
-release tag. See [releasing](RELEASING.md) for the first PyPI release setup.
+release tag. See [releasing](RELEASING.md) for release instructions.

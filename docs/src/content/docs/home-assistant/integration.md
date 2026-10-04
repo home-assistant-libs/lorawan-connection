@@ -1,6 +1,6 @@
 ---
 title: Integration structure
-description: Share device updates through a coordinator and handle removal with a common entity base.
+description: Share device updates through a coordinator and keep device and entity registries in sync.
 ---
 
 :::note[Proposal]
@@ -52,15 +52,17 @@ version used by all vendor libraries.
 
 Declare one or more vendor IDs in the proposed `lorawan` manifest field. The
 provider matches those IDs against recognized catalog identities to discover the
-integration. For example, a SenseCAP manifest with an illustrative library requirement:
+integration. These discovery fields belong in a SenseCAP manifest:
 
 ```json
 {
   "dependencies": ["lorawan"],
-  "lorawan": [744],
-  "requirements": ["sensecap-lorawan==0.1.0"]
+  "lorawan": [744]
 }
 ```
+
+Add a `requirements` entry for your published vendor package. The SenseCAP package
+on this page is an example, not a published package.
 
 Use numeric LoRa Alliance VendorIDs; a match on any listed ID selects the integration.
 
@@ -81,29 +83,40 @@ The `sensecap_lorawan` import refers to the
 ```python
 from dataclasses import dataclass, field
 
-from sensecap_lorawan import S2101, SenseCapDeviceCollection
-
-from homeassistant.components.lorawan import ConnectionUnavailable, get_connection
+from homeassistant.components.lorawan import (
+    ConnectionUnavailable,
+    ProviderNotFound,
+    get_connection,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryError, ConfigEntryNotReady
+from homeassistant.helpers import config_validation as cv, device_registry as dr
 
+from sensecap_lorawan import S2101, SenseCapDeviceCollection
 from .coordinator import SenseCapCoordinator
 
+DOMAIN = "sensecap"
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 type SenseCapConfigEntry = ConfigEntry[SenseCapData]
 PLATFORMS = [Platform.SENSOR]
 
 
 @dataclass
 class SenseCapData:
+    """Keep the collection and its shared device coordinators."""
+
     collection: SenseCapDeviceCollection
     coordinators: dict[str, SenseCapCoordinator] = field(default_factory=dict)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: SenseCapConfigEntry) -> bool:
+    """Forward all vendor events to one library collection."""
     try:
         connection = get_connection(hass, entry.data["provider_entry_id"])
+    except ProviderNotFound as error:
+        raise ConfigEntryError("The selected LoRaWAN provider was removed") from error
     except ConnectionUnavailable as error:
         raise ConfigEntryNotReady("LoRaWAN provider is not connected") from error
     entry.async_on_unload(
@@ -118,11 +131,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: SenseCapConfigEntry) -> 
     devices = SenseCapDeviceCollection(connection)
     entry.runtime_data = SenseCapData(devices)
 
+    device_registry = dr.async_get(hass)
+
     @callback
     def added(device: S2101) -> None:
         entry.runtime_data.coordinators[device.descriptor.dev_eui] = (
             SenseCapCoordinator(hass, device)
         )
+
+        descriptor = device.descriptor
+        registered = device_registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, f"{descriptor.network_id}:{descriptor.dev_eui}")},
+            name=descriptor.name,
+            manufacturer="Seeed Studio",
+            model="SenseCAP S2101",
+        )
+
+        @callback
+        def update_name() -> None:
+            device_registry.async_update_device(
+                registered.id, name=device.descriptor.name
+            )
+
+        @callback
+        def remove_device() -> None:
+            device_registry.async_remove_device(registered.id)
+
+        device.add_update_listener(update_name)
+        device.add_remove_listener(remove_device)
 
     @callback
     def removed(device: S2101) -> None:
@@ -133,16 +170,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: SenseCapConfigEntry) -> 
 
     entry.async_on_unload(devices.subscribe_device_added(added))
     entry.async_on_unload(devices.subscribe_device_removed(removed))
+    # Unload runs in reverse order: retire models before removing collection listeners.
     entry.async_on_unload(devices.close)
     try:
         await devices.async_setup()
     except ConnectionUnavailable as error:
         raise ConfigEntryNotReady("LoRaWAN provider is not connected") from error
+    current = {
+        (DOMAIN, f"{device.descriptor.network_id}:{device.descriptor.dev_eui}")
+        for device in devices.devices.values()
+    }
+    for registered in dr.async_entries_for_config_entry(
+        device_registry, entry.entry_id
+    ):
+        if not registered.identifiers.intersection(current):
+            device_registry.async_remove_device(registered.id)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: SenseCapConfigEntry) -> bool:
+    """Unload entities; entry callbacks release collection and subscription."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 ```
 
@@ -152,8 +200,9 @@ The collection owns its event subscription. Setup creates a coordinator before
 platform callbacks run. Removal drops that coordinator and schedules its shutdown.
 
 If the provider disconnects, the integration schedules a reload. Setup fails with
-`ConfigEntryNotReady` while the provider remains unavailable. The provider owns
-transport recovery and credential reauthentication.
+`ConfigEntryNotReady` while the provider remains unavailable. A deleted provider raises
+`ProviderNotFound`; report this with `ConfigEntryError` instead of retrying. The provider
+owns transport recovery and credential reauthentication.
 
 ## Share updates through a coordinator
 
@@ -198,16 +247,33 @@ The collection callbacks own the coordinator's lifetime. Passing `config_entry=N
 avoids retaining each coordinator until entry unload. The removal callback shuts
 it down when its model leaves the collection, including when the collection closes.
 
+## Remove devices and entities
+
+Register each model in the device registry when the collection announces it.
+Attach an `add_remove_listener()` callback that calls `async_remove_device()`.
+Home Assistant then removes the device's entity registry records and active entities,
+including disabled entities. A metadata update also updates the device's name.
+
+After `await devices.async_setup()` succeeds, compare the collection with devices
+registered to the config entry. Remove registry devices absent from the collection.
+This catches devices deleted while Home Assistant was offline. Do not run this
+cleanup after a failed subscription or an incomplete device-list read.
+
+Ordinary collection shutdown does not call a model's removal listeners. Entry
+unload therefore preserves registry records and user customizations.
+
 ## A shared entity base
 
-The proposed `lorawan.LoRaWANEntity` is a base for device entities. It extends Home
-Assistant's `CoordinatorEntity` and handles model removal for every platform.
-The provider would export this class for vendor integrations:
+The proposed `lorawan.LoRaWANEntity` extends `CoordinatorEntity`. Device removal
+usually happens through the collection callbacks above. The base also handles an
+entity whose queued addition completes after its model was removed:
 
 ```python
+from typing import override
+
 from lorawan_connection import Device
 
-from homeassistant.core import callback
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
@@ -215,45 +281,37 @@ from homeassistant.helpers.update_coordinator import (
 
 
 class LoRaWANEntity[DeviceT: Device](CoordinatorEntity[DataUpdateCoordinator[DeviceT]]):
+    """Share model updates; the collection owns device registry cleanup."""
+
     _attr_has_entity_name = True
 
     @property
     def device(self) -> DeviceT:
+        """Return the model shared by this device's entities."""
         return self.coordinator.data
 
     @property
+    @override
     def available(self) -> bool:
         return super().available and not self.device.closed
 
+    @override
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        self.async_on_remove(
-            self.device.add_remove_listener(self._async_device_removed)
-        )
+        # Removal can race with an entity queued for addition by its platform.
+        if self.device.closed and self.registry_entry and self.registry_entry.device_id:
+            registry = dr.async_get(self.hass)
+            if registry.async_get(self.registry_entry.device_id):
+                registry.async_remove_device(self.registry_entry.device_id)
 
-    @callback
-    def _async_device_removed(self) -> None:
-        self.async_write_ha_state()
-        self.hass.async_create_task(self.async_remove(force_remove=True))
-
+    @override
     async def async_update(self) -> None:
-        """Values arrive through the library's subscription."""
+        """Make update_entity a no-op; values arrive through the subscription."""
 ```
 
-`CoordinatorEntity` manages the entity's update subscription. `LoRaWANEntity`
-adds a removal listener and unregisters it when the entity unloads. The model
-closes before notifying removal, so the entity becomes unavailable while its
-removal task runs.
-
-The callback is synchronous, so it schedules `self.async_remove()` as a task.
-This removes the active entity and preserves its registry record, including user
-customizations. Permanent registry cleanup needs a separate policy.
-
-Closing a collection during entry unload clears model listeners without reporting
-device removal. Home Assistant unloads the entities through their platforms.
-The `async_update()` override does not request a fresh reading; data arrives
-through the subscription. Provider disconnection uses the config-entry reload
-path shown above.
+`CoordinatorEntity` manages each entity's update subscription. The `async_update()`
+override makes `homeassistant.update_entity` a no-op because readings arrive
+through the connection. Provider disconnection uses the config-entry reload path.
 
 ## Map device values to entities
 
@@ -413,8 +471,9 @@ events through it into the real vendor collection. Assert discovery confirmation
 later additions, removal, unload, and reload after disconnect.
 
 Check that one model update reaches every entity through their shared coordinator.
-Check device removal and listener cleanup when an entity unloads. Collection
-shutdown must not report device removal.
+Check live removal, startup cleanup of devices removed while offline, and disabled
+entity cleanup. A failed setup and ordinary collection shutdown must preserve
+registry records.
 
 Decoder tests belong to the vendor library. The HA suite tests entity mapping and
 lifecycle without a real network server. Keep tests against a real ChirpStack

@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
@@ -62,14 +62,20 @@ class _Subscriber:
 
 def connection_error(error: Exception) -> Exception:
     """Classify authentication/access rejection separately from connection loss."""
-    if (
-        isinstance(error, grpc.RpcError)
-        and error.code() == grpc.StatusCode.UNAUTHENTICATED
-    ):
-        return AuthenticationError(
-            "ChirpStack rejected the credentials or access scope"
+    if isinstance(error, (ConnectionUnavailable, AuthenticationError)):
+        return error
+    if isinstance(error, grpc.RpcError):
+        message = f"ChirpStack RPC {error.code().name}: {error.details()}"
+        failure: Exception = (
+            AuthenticationError(message)
+            if error.code()
+            in (grpc.StatusCode.UNAUTHENTICATED, grpc.StatusCode.PERMISSION_DENIED)
+            else ConnectionUnavailable(message)
         )
-    return ConnectionUnavailable("ChirpStack connection or access failed")
+    else:
+        failure = ConnectionUnavailable(f"{type(error).__name__}: {error}")
+    failure.__cause__ = error
+    return failure
 
 
 class ChirpStackConnection:
@@ -122,10 +128,8 @@ class ChirpStackConnection:
         self._connecting = False
         self._streams: dict[str, asyncio.Task[None]] = {}
         self._poller: asyncio.Task[None] | None = None
-        self._refresh: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
         self._closed = False
-        self._pending_unknown = 0
         self._device_api = api.DeviceServiceStub(self.channel)
         self._profile_api = api.DeviceProfileServiceStub(self.channel)
         self._application_api = api.ApplicationServiceStub(self.channel)
@@ -143,20 +147,22 @@ class ChirpStackConnection:
         request_class: type[Message],
         **kwargs: object,
     ) -> list[T]:
-        items: list[T] = []
-        total = None
-        while True:
-            page = await self._call(
-                method, request_class(limit=100, offset=len(items), **kwargs)
-            )
-            if total is not None and total != page.total_count:
-                raise ConnectionUnavailable("Inventory changed during pagination")
-            total = page.total_count
-            items.extend(page.result)
-            if len(items) >= page.total_count:
-                return items
-            if not page.result:
-                raise ConnectionUnavailable("Incomplete inventory page")
+        for _ in range(2):
+            items: list[T] = []
+            total = None
+            while True:
+                page = await self._call(
+                    method, request_class(limit=100, offset=len(items), **kwargs)
+                )
+                if total is not None and total != page.total_count:
+                    break
+                total = page.total_count
+                items.extend(page.result)
+                if len(items) >= page.total_count:
+                    return items
+                if not page.result:
+                    raise ConnectionUnavailable("Incomplete inventory page")
+        raise ConnectionUnavailable("Inventory changed during pagination")
 
     async def tenants(self) -> dict[str, str]:
         """Discover tenants with a global key; scoped keys require a tenant ID."""
@@ -322,7 +328,7 @@ class ChirpStackConnection:
         )
 
     async def refresh(self) -> None:
-        """Commit only complete snapshots; serialize inventory before activity."""
+        """Commit complete snapshots without blocking live activity during reads."""
         async with self._lock:
             snapshot = await self._snapshot()
             if self._closed:
@@ -331,7 +337,9 @@ class ChirpStackConnection:
             self.devices = snapshot
             for eui, descriptor in old.items():
                 if eui not in snapshot:
-                    if task := self._streams.pop(eui, None):
+                    if (
+                        task := self._streams.pop(eui, None)
+                    ) is not None and task is not asyncio.current_task():
                         task.cancel()
                     self._emit(self._inventory_event(EventType.REMOVED, descriptor))
             for eui, descriptor in snapshot.items():
@@ -407,85 +415,113 @@ class ChirpStackConnection:
             if task is not None and task is not asyncio.current_task():
                 task.cancel()
         self.error = connection_error(error)
+        _LOGGER.warning("ChirpStack connection failed: %s", self.error)
         self._notify_disconnect()
 
     async def _poll(self) -> None:
-        try:
-            while True:
-                await asyncio.sleep(self.poll_interval)
+        failures = 0
+        while not self._closed:
+            await asyncio.sleep(self.poll_interval)
+            try:
                 await self.refresh()
-        except (grpc.RpcError, ConnectionUnavailable) as error:
-            self._failed(error)
+            except (grpc.RpcError, ConnectionUnavailable) as error:
+                failures += 1
+                if (
+                    isinstance(connection_error(error), AuthenticationError)
+                    or failures >= 3
+                ):
+                    self._failed(error)
+                    return
+                _LOGGER.warning(
+                    "ChirpStack inventory refresh failed (%s/3): %s",
+                    failures,
+                    connection_error(error),
+                )
+            except Exception as error:
+                self._failed(error)
+                return
+            else:
+                failures = 0
 
     async def _stream(self, dev_eui: str) -> None:
+        failures = 0
+        while not self._closed and dev_eui in self.devices:
+            try:
+                async for event in self._read_stream(dev_eui):
+                    failures = 0
+                    await self.handle_activity(event)
+            except (grpc.RpcError, ConnectionUnavailable) as error:
+                if (
+                    isinstance(error, grpc.RpcError)
+                    and error.code() == grpc.StatusCode.NOT_FOUND
+                ):
+                    try:
+                        await self.refresh()
+                    except Exception as refresh_error:
+                        self._failed(refresh_error)
+                        return
+                    if dev_eui not in self.devices:
+                        return
+                failures += 1
+                if (
+                    isinstance(connection_error(error), AuthenticationError)
+                    or failures >= 3
+                ):
+                    self._failed(error)
+                    return
+                _LOGGER.warning(
+                    "ChirpStack device stream %s failed (%s/3): %s",
+                    dev_eui,
+                    failures,
+                    connection_error(error),
+                )
+                await asyncio.sleep(1)
+            except Exception as error:
+                self._failed(error)
+                return
+            else:
+                return
+
+    async def _read_stream(self, dev_eui: str) -> AsyncIterator[DeviceEventData]:
         # Remove this filter when ChirpStack supports disabling retained events.
         cutoff = datetime.now(UTC) - timedelta(seconds=5)
-        try:
-            async for item in self._internal_api.StreamDeviceEvents(
-                api.StreamDeviceEventsRequest(dev_eui=dev_eui), metadata=self.metadata
-            ):
-                message_class = _MESSAGES.get(item.description)
-                if message_class is None:
-                    continue
-                # Redis IDs reflect receipt at the server, unlike sensor clocks.
-                try:
-                    recorded_at = datetime.fromtimestamp(
-                        int(item.id.split("-", 1)[0]) / 1000, UTC
-                    )
-                    if recorded_at < cutoff:
-                        continue
-                    message = Parse(
-                        item.body, message_class(), ignore_unknown_fields=True
-                    )
-                except (ValueError, ParseError):
-                    _LOGGER.warning(
-                        "Ignoring malformed ChirpStack event for %s", dev_eui
-                    )
-                    continue
-                if message.device_info.dev_eui.lower() != dev_eui.lower():
-                    continue
-                await self.handle_activity(
-                    DeviceEventData(
-                        network_id=self.network_id,
-                        dev_eui=dev_eui,
-                        type=EventType(item.description),
-                        received_at=recorded_at,
-                        data=message,
-                    )
+        async for item in self._internal_api.StreamDeviceEvents(
+            api.StreamDeviceEventsRequest(dev_eui=dev_eui), metadata=self.metadata
+        ):
+            message_class = _MESSAGES.get(item.description)
+            if message_class is None:
+                continue
+            # Redis IDs reflect receipt at the server, unlike sensor clocks.
+            try:
+                recorded_at = datetime.fromtimestamp(
+                    int(item.id.split("-", 1)[0]) / 1000, UTC
                 )
-            if dev_eui in self.devices:
-                self._failed(ConnectionUnavailable("ChirpStack event stream closed"))
-        except grpc.aio.AioRpcError as error:
-            if error.code() == grpc.StatusCode.NOT_FOUND:
-                try:
-                    await self.refresh()
-                except (grpc.RpcError, ConnectionUnavailable) as refresh_error:
-                    self._failed(refresh_error)
-                else:
-                    if dev_eui in self.devices:
-                        self._failed(ConnectionUnavailable("Device stream disappeared"))
-                return
-            self._failed(error)
-        except ConnectionUnavailable as error:
-            self._failed(error)
+                if recorded_at < cutoff:
+                    continue
+                message = Parse(item.body, message_class(), ignore_unknown_fields=True)
+            except (ValueError, OverflowError, OSError, ParseError):
+                _LOGGER.warning("Ignoring malformed ChirpStack event for %s", dev_eui)
+                continue
+            if message.device_info.dev_eui.lower() != dev_eui.lower():
+                continue
+            yield DeviceEventData(
+                network_id=self.network_id,
+                dev_eui=dev_eui,
+                type=EventType(item.description),
+                received_at=recorded_at,
+                data=message,
+            )
+        if dev_eui in self.devices:
+            raise ConnectionUnavailable("ChirpStack event stream closed")
 
     async def handle_activity(self, event: DeviceEvent) -> None:
-        """Refresh unknown devices before delivery, coalescing concurrent misses."""
-        if self._closed or event.network_id != self.network_id:
-            return
-        if event.dev_eui not in self.devices:
-            if self._pending_unknown >= 64:
-                return
-            if self._refresh is None or self._refresh.done():
-                self._refresh = asyncio.create_task(self.refresh())
-            self._pending_unknown += 1
-            try:
-                await asyncio.shield(self._refresh)
-            finally:
-                self._pending_unknown -= 1
-        async with self._lock:
-            if event.dev_eui in self.devices and not self._closed:
-                self._emit(event)
+        """Deliver activity for known devices without waiting on inventory polling."""
+        if (
+            not self._closed
+            and event.network_id == self.network_id
+            and event.dev_eui in self.devices
+        ):
+            self._emit(event)
 
     async def close(self) -> None:
         """Cancel streams and polls, await cleanup, and close the channel."""
@@ -498,7 +534,7 @@ class ChirpStackConnection:
         self._disconnect_listeners.clear()
         tasks = [
             task
-            for task in (*self._streams.values(), self._poller, self._refresh)
+            for task in (*self._streams.values(), self._poller)
             if task is not None and task is not asyncio.current_task()
         ]
         for task in tasks:

@@ -100,7 +100,7 @@ def test_zero_copy_payload_and_partial_state(generated: bool) -> None:
     assert device.humidity == 31.4
     listener.assert_called_once()
     collection.handle_event(event)
-    listener.assert_called_once()
+    assert listener.call_count == 2
     partial = payload_type(data=bytes.fromhex("010110F0D8FFFF0000"), f_port=1)
     collection.handle_event(
         replace(event, received_at=NOW + timedelta(seconds=1), data=partial)
@@ -224,3 +224,33 @@ def test_temperature_range_and_unknown_channel() -> None:
             + b"\x00\x00"
         )
     assert decode_s2101(bytes.fromhex("020110000000000000")) == {}
+
+
+@pytest.mark.parametrize("prefix", [b"", bytes.fromhex("00070064000500")])
+def test_vendor_guide_measurements(prefix: bytes) -> None:
+    assert decode_s2101(prefix + bytes.fromhex("010110b068000001021088f400008cff")) == {
+        "temperature": 26.8,
+        "humidity": 62.6,
+    }
+
+
+def test_fault_does_not_discard_other_measurement() -> None:
+    collection = SenseCapDeviceCollection(MockConnection())
+    collection.handle_event(inventory())
+    device = collection.devices[DESCRIPTOR.dev_eui]
+    data = (
+        bytes.fromhex("010110")
+        + (2000001000).to_bytes(4, "little")
+        + bytes.fromhex("01021088f400000000")
+    )
+    collection.handle_event(
+        DeviceEventData(
+            network_id="network",
+            dev_eui=DESCRIPTOR.dev_eui,
+            type=EventType.UPLINK,
+            received_at=NOW,
+            data=UplinkData(data),
+        )
+    )
+    assert device.temperature is None
+    assert device.humidity == 62.6

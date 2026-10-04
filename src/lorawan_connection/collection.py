@@ -131,8 +131,9 @@ class DeviceCollection[DeviceT: Device]:
                 device._send_downlink = self._send_downlink
                 self.devices[eui] = device
                 notify(self._added, device)
-            else:
+            elif device.descriptor != descriptor:
                 device.descriptor = descriptor
+                device.notify()
         if device is not None and self.devices.get(eui) is device:
             if event.type == EventType.ACK and event.data is not None:
                 device._handle_ack(cast(Ack, event.data))

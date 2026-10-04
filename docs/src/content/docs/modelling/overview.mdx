@@ -39,7 +39,8 @@ previous values intact. A partial reading updates only the values it contains,
 unless the device protocol says an omitted value is no longer available.
 
 One message can update several values. Update them all before calling `notify()`
-so listeners see the complete update. Models choose their own timestamp ordering
+so listeners see the complete update. Notify for valid reports even when values
+are unchanged. Models choose their own timestamp ordering
 and stale-data rules; the collection does not impose them.
 
 ## Read values and observe changes
@@ -129,12 +130,19 @@ The `DraginoDevices` class at the end of the complete example declares its suppo
 models in `DEVICES`. The base collection uses each class's `vendor_id` and
 `catalog_model_id` to select a model for an incoming descriptor.
 
-This function creates the collection and registers the `device_added` callback
-from above. It accepts a connection:
+This function creates a collection and prints each model update:
 
 ```python
-from dragino_lorawan import DraginoDevices
+from dragino_lorawan import DraginoDevices, LT22222
 from lorawan_connection import Connection, DeviceCollection
+
+
+def device_added(device: LT22222) -> None:
+    def show_values() -> None:
+        print(device.descriptor.name, device.voltages, device.relays)
+
+    device.add_update_listener(show_values)
+    show_values()
 
 
 def create_collection(connection: Connection) -> DeviceCollection[LT22222]:
@@ -169,7 +177,8 @@ as they arrive. The collection announces a model before passing its first event
 to it, so the callback can attach listeners before readings arrive.
 Current instances are available in `collection.devices`, keyed by DevEUI.
 
-A metadata update replaces the descriptor on the existing instance. A change to its
+A metadata update replaces the descriptor on the existing instance and notifies
+its update listeners. A change to its
 vendor or catalog identity replaces the model. Removal closes the model and calls
 listeners registered with `subscribe_device_removed()`.
 
