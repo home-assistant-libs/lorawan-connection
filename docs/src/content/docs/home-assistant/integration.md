@@ -273,6 +273,7 @@ from typing import override
 
 from lorawan_connection import Device
 
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
@@ -297,12 +298,14 @@ class LoRaWANEntity[DeviceT: Device](CoordinatorEntity[DataUpdateCoordinator[Dev
 
     @override
     async def async_added_to_hass(self) -> None:
+        # Abort a queued addition if registry removal already retired its model.
+        if self.device.closed:
+            if self.registry_entry and self.registry_entry.device_id:
+                registry = dr.async_get(self.hass)
+                if registry.async_get(self.registry_entry.device_id):
+                    registry.async_remove_device(self.registry_entry.device_id)
+            raise HomeAssistantError("LoRaWAN device was removed during entity setup")
         await super().async_added_to_hass()
-        # Removal can race with an entity queued for addition by its platform.
-        if self.device.closed and self.registry_entry and self.registry_entry.device_id:
-            registry = dr.async_get(self.hass)
-            if registry.async_get(self.registry_entry.device_id):
-                registry.async_remove_device(self.registry_entry.device_id)
 
     @override
     async def async_update(self) -> None:
