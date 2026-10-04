@@ -137,7 +137,7 @@ async def test_stream_decode_replay_and_disconnect(
     message: Message,
     stream_start_delay: int,
 ) -> None:
-    """Drop older records at each stream start; preserve live payloads and EOF."""
+    """Allow five seconds of history at each stream start; drop older records."""
     now = datetime.now(UTC).replace(microsecond=0) + timedelta(
         seconds=stream_start_delay
     )
@@ -148,12 +148,17 @@ async def test_stream_decode_replay_and_disconnect(
         body=MessageToJson(message),
     )
     old = api.LogItem(
-        id=f"{int(now.timestamp() * 1000) - 1}-0",
+        id=f"{int(now.timestamp() * 1000) - 5001}-0",
         description=kind,
         body=MessageToJson(message),
     )
     boundary = api.LogItem(
-        id=f"{int(now.timestamp() * 1000)}-0",
+        id=f"{int(now.timestamp() * 1000) - 5000}-0",
+        description=kind,
+        body=MessageToJson(message),
+    )
+    recent = api.LogItem(
+        id=f"{int(now.timestamp() * 1000) - 1}-0",
         description=kind,
         body=MessageToJson(message),
     )
@@ -162,6 +167,7 @@ async def test_stream_decode_replay_and_disconnect(
         for item in (
             old,
             boundary,
+            recent,
             api.LogItem(id=live.id, description=kind, body="bad json"),
             live,
         ):
@@ -176,8 +182,12 @@ async def test_stream_decode_replay_and_disconnect(
     with patch("lorawan_connection.chirpstack.datetime", wraps=datetime) as clock:
         clock.now.return_value = now
         await connection._stream(DESCRIPTOR.dev_eui)
-    assert callback.call_count == 2
-    assert callback.call_args_list[0].args[0].received_at == now
+    assert callback.call_count == 3
+    assert [call.args[0].received_at for call in callback.call_args_list] == [
+        now - timedelta(seconds=5),
+        now - timedelta(milliseconds=1),
+        now + timedelta(milliseconds=1),
+    ]
     event = callback.call_args.args[0]
     assert event.type == kind
     assert event.data == message

@@ -71,8 +71,8 @@ replays a SenseCAP S2101 capture and prints 21.4 °C and 31.4% humidity.
 - Typed exports (`py.typed`), a tested SenseCAP example, and Astro/Starlight documentation.
 
 The optional `lorawan_connection.chirpstack` backend supplies inventory and live events.
-The backend drops events whose server receipt timestamps precede the start of each
-device stream. Keep the client and ChirpStack clocks synchronized.
+The backend drops events whose server receipt timestamps are more than five seconds
+before each device stream starts. Keep the client and ChirpStack clocks synchronized.
 The application owns its connection lifecycle; provisioning, QR parsing, and vendor decoders belong in separate libraries.
 The SenseCAP implementation under `examples/` illustrates a separate device library.
 

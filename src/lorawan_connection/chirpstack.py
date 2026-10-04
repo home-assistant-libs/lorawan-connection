@@ -4,7 +4,7 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
 from urllib.parse import urlsplit
 
@@ -418,7 +418,8 @@ class ChirpStackConnection:
             self._failed(error)
 
     async def _stream(self, dev_eui: str) -> None:
-        started_at = datetime.now(UTC)
+        # Remove this filter when ChirpStack supports disabling retained events.
+        cutoff = datetime.now(UTC) - timedelta(seconds=5)
         try:
             async for item in self._internal_api.StreamDeviceEvents(
                 api.StreamDeviceEventsRequest(dev_eui=dev_eui), metadata=self.metadata
@@ -431,7 +432,7 @@ class ChirpStackConnection:
                     recorded_at = datetime.fromtimestamp(
                         int(item.id.split("-", 1)[0]) / 1000, UTC
                     )
-                    if recorded_at < started_at:
+                    if recorded_at < cutoff:
                         continue
                     message = Parse(
                         item.body, message_class(), ignore_unknown_fields=True
