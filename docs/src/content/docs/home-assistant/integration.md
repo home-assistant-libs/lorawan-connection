@@ -19,14 +19,34 @@ models' attributes and call their command methods.
 Use one vendor config entry per provider network. That entry owns one collection
 for all supported devices on that network. Store it in `entry.runtime_data`.
 
+## Config flow
+
+The user first configures the `lorawan` integration. This creates a Home Assistant
+config entry for the server connection. That entry stores the endpoint and API key.
+
+Your vendor integration's config flow selects which LoRaWAN entry to use.
+For automatic discovery, the provider supplies its entry ID in the discovery data.
+For manual setup, select the entry automatically when only one exists. Show a
+chooser when several exist. If none exists, ask the user to set up LoRaWAN first.
+
+After confirmation, store these fields in the vendor entry's `data`:
+
+| Field | Meaning |
+| --- | --- |
+| `provider_entry_id` | The selected LoRaWAN config entry's `entry_id`. Setup passes this to `lorawan.get_connection()` to obtain the shared connection. |
+| `network_id` | The provider's stable identifier for the logical network, supplied through discovery or read from the selected entry. |
+
+Use `network_id` as the vendor entry's unique ID to prevent duplicate entries for
+the same network. It stays unchanged when server credentials change. Connection
+credentials remain in the LoRaWAN entry.
+
+Users provision devices in the existing LoRaWAN stack in the first version.
+
 ## Dependencies and discovery
 
 In `manifest.json`, put the HA `lorawan` integration in `dependencies`. Put your
 Python vendor library in `requirements`, pinned to an exact published version.
 The vendor library declares `lorawan-connection` in its own package dependencies.
-
-Store `provider_entry_id` and the stable `network_id` in the vendor config entry.
-The provider keeps the endpoint and API key.
 
 Declare one or more vendor IDs in the proposed `lorawan` manifest field. The
 provider matches those IDs against recognized catalog identities to discover the
@@ -41,13 +61,6 @@ integration. For example, a SenseCAP manifest with an illustrative library requi
 ```
 
 Use numeric LoRa Alliance VendorIDs; a match on any listed ID selects the integration.
-The discovery flow confirms one entry for that network. Its unique ID must remain
-stable when the server key changes.
-
-In a manual config flow, select the LoRaWAN provider automatically when there is
-only one. Show a chooser when several exist. Prevent a second vendor entry for
-the same provider. Users provision devices in the existing LoRaWAN stack in the
-first version.
 
 ## Config-entry setup
 
