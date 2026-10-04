@@ -62,18 +62,3 @@ representation.
 Add `--list` to read the device list once and exit. Live mode stops on a
 connection failure with exit code 1. Ctrl+C closes models and the connection.
 The helper does not reconnect. `--help` works without the optional backend installed.
-
-## Compose a custom command
-
-`add_connection_args(parser)` adds the connection arguments to an `ArgumentParser`.
-`await connect_from_args(args)` returns a `ChirpStackConnection` with its application
-selection and optional tenant filter. The caller must await `connection.close()`.
-
-`run(models, argv=None)` owns argument parsing, the event loop, output, and cleanup.
-Call it from a synchronous script entry point. `argv` is useful when testing a command.
-
-## I/O and callbacks
-
-Network operations are async. API-key file reads run in a worker thread.
-Model event handling, update listeners, and CLI printing are synchronous.
-Callbacks decode data and update model state; they must not perform network I/O.
