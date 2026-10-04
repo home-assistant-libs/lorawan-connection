@@ -297,76 +297,24 @@ through `entry.runtime_data`. Each device still has its own coordinator.
 
 ## Writable devices
 
-Use the config-entry setup above with `DraginoDevices` and `Platform.SWITCH`.
-The [Dragino device library](/lorawan-connection/modelling/overview/) supplies the
-model and command methods. This `switch.py` shares one coordinator between the
-relay entities and uses the same `LoRaWANEntity` base for removal:
+Use the same coordinator and entity setup pattern for writable devices. The
+[Dragino device library](/lorawan-connection/modelling/overview/) supplies the
+model and command methods. Entity setup assigns `self.channel` to the relay
+number. The command methods call the model:
 
 ```python
 from asyncio import timeout
-import logging
 from typing import Any
 
-from dragino_lorawan import DraginoDevices, LT22222
+from dragino_lorawan import LT22222
 from lorawan_connection import DownlinkError
 
 from homeassistant.components.lorawan import LoRaWANEntity
 from homeassistant.components.switch import SwitchEntity
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-
-_LOGGER = logging.getLogger(__name__)
-
-
-class DraginoCoordinator(DataUpdateCoordinator[LT22222]):
-    def __init__(
-        self, hass: HomeAssistant, entry: ConfigEntry[DraginoDevices], device: LT22222
-    ) -> None:
-        super().__init__(hass, _LOGGER, config_entry=entry, name=device.descriptor.name)
-        self.async_set_updated_data(device)
-        entry.async_on_unload(device.add_update_listener(self._async_device_updated))
-
-    @callback
-    def _async_device_updated(self) -> None:
-        self.async_set_updated_data(self.data)
-
-
-async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry[DraginoDevices],
-    async_add_entities: AddConfigEntryEntitiesCallback,
-) -> None:
-    @callback
-    def added(device: LT22222) -> None:
-        coordinator = DraginoCoordinator(hass, entry, device)
-        async_add_entities(DraginoRelay(coordinator, channel) for channel in (1, 2))
-
-    entry.async_on_unload(entry.runtime_data.subscribe_device_added(added))
 
 
 class DraginoRelay(LoRaWANEntity[LT22222], SwitchEntity):
-    def __init__(self, coordinator: DraginoCoordinator, channel: int) -> None:
-        super().__init__(coordinator)
-        self.channel = channel
-        descriptor = self.device.descriptor
-        identity = f"{descriptor.network_id}:{descriptor.dev_eui}"
-        self._attr_unique_id = f"{identity}:relay_{channel}"
-        self._attr_name = f"Relay {channel}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={("dragino", identity)},
-            name=descriptor.name,
-            manufacturer="Dragino",
-            model="LT-22222-L",
-        )
-
-    @property
-    def is_on(self) -> bool | None:
-        return self.device.relays[self.channel]
-
     async def async_turn_on(self, **kwargs: Any) -> None:
         await self._async_set_relay(True)
 
