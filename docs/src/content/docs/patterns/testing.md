@@ -160,14 +160,3 @@ reconnection.
 
 Each mock represents one network. Add a device before emitting its activity;
 unknown devices and events from another network raise `ValueError`.
-
-## Test with ChirpStack payloads
-
-To test with generated ChirpStack messages, install the `chirpstack` extra.
-Pass a generated message as `DeviceEventData.data`, just as you pass `UplinkData`
-in the example above.
-
-```sh
-pip install "lorawan-connection[chirpstack]" pytest pytest-asyncio
-pytest
-```
