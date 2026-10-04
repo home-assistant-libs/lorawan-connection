@@ -168,9 +168,6 @@ class LoRaWANEntity[DeviceT: Device](CoordinatorEntity[DataUpdateCoordinator[Dev
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        if self.device.closed:
-            self.hass.async_create_task(self.async_remove(force_remove=True))
-            return
         self.async_on_remove(
             self.device.add_remove_listener(self._async_device_removed)
         )
@@ -187,8 +184,7 @@ class LoRaWANEntity[DeviceT: Device](CoordinatorEntity[DataUpdateCoordinator[Dev
 `CoordinatorEntity` manages the entity's update subscription. `LoRaWANEntity`
 adds a removal listener and unregisters it when the entity unloads. The model
 closes before notifying removal, so the entity becomes unavailable while its
-removal task runs. The `device.closed` check also handles removal before entity
-setup finishes.
+removal task runs.
 
 The callback is synchronous, so it schedules `self.async_remove()` as a task.
 This removes the active entity and preserves its registry record, including user
@@ -404,8 +400,8 @@ events through it into the real vendor collection. Assert discovery confirmation
 later additions, removal, unload, and reload after disconnect.
 
 Check that one model update reaches every entity through their shared coordinator.
-Check removal before entity setup finishes and listener cleanup when an entity
-unloads. Collection shutdown must not report device removal.
+Check device removal and listener cleanup when an entity unloads. Collection
+shutdown must not report device removal.
 
 Decoder tests belong to the vendor library. The HA suite tests entity mapping and
 lifecycle without a real network server. Keep tests against a real ChirpStack
