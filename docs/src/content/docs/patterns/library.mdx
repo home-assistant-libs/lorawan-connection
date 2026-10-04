@@ -25,8 +25,7 @@ Keep each model and its decoder together. For a SenseCAP library, the layout cou
 ```text
 pyproject.toml
 sensecap_lorawan/
-  __init__.py       # public exports
-  collection.py     # supported device models
+  __init__.py       # collection and public exports
   __main__.py       # command-line entry point
   devices/
     __init__.py
@@ -43,7 +42,7 @@ Move decoders shared by several models into a separate module.
 
 ## Expose a collection
 
-Declare the library's supported models in `collection.py`:
+Define the collection in `__init__.py`, alongside the public model exports:
 
 ```python
 from lorawan_connection import DeviceCollection
@@ -53,6 +52,9 @@ from .devices.s2101 import S2101
 
 class SenseCapDeviceCollection(DeviceCollection[S2101]):
     DEVICES = (S2101,)
+
+
+__all__ = ["S2101", "SenseCapDeviceCollection"]
 ```
 
 The collection is the application's entry point for all supported devices on a
@@ -60,18 +62,10 @@ network. It creates models, routes their events, and reports additions and
 removals. A device-added callback receives a model ready for the application to
 observe.
 
-Export the collection and model classes from `__init__.py`:
-
-```python
-from .collection import SenseCapDeviceCollection
-from .devices.s2101 import S2101
-
-__all__ = ["S2101", "SenseCapDeviceCollection"]
-```
-
 This gives callers stable imports as the package grows. With several device
 classes, use their union as the collection's type parameter and list them all
-in `DEVICES`.
+in `DEVICES`. Move the collection to `collection.py` if it grows substantial
+custom logic, and keep exporting it from `__init__.py`.
 
 ## Keep the application boundary clear
 
