@@ -130,16 +130,18 @@ async def test_inventory_changes(connection: ChirpStackConnection) -> None:
         (EventType.LOCATION, integration.LocationEvent()),
     ],
 )
+@pytest.mark.parametrize("server_offset", [-60, 60])
 async def test_stream_decode_replay_and_disconnect(
     connection: ChirpStackConnection,
     kind: EventType,
     message: Message,
+    server_offset: int,
 ) -> None:
-    """Keep generated payloads, drop backlog, and fail once after EOF."""
+    """Keep server payloads and timestamps, and fail once after EOF."""
     now = datetime.now(UTC)
     message.device_info.dev_eui = DESCRIPTOR.dev_eui
     live = api.LogItem(
-        id=f"{int((now + timedelta(seconds=1)).timestamp() * 1000)}-0",
+        id=f"{int((now + timedelta(seconds=server_offset)).timestamp() * 1000)}-0",
         description=kind,
         body=MessageToJson(message),
     )
@@ -160,10 +162,16 @@ async def test_stream_decode_replay_and_disconnect(
     connection.devices = {DESCRIPTOR.dev_eui: DESCRIPTOR}
     connection._internal_api.StreamDeviceEvents = Mock(return_value=stream())
     await connection._stream(DESCRIPTOR.dev_eui)
-    callback.assert_called_once()
+    assert callback.call_count == 2
+    assert callback.call_args_list[0].args[0].received_at == datetime.fromtimestamp(
+        0.001, UTC
+    )
     event = callback.call_args.args[0]
     assert event.type == kind
     assert event.data == message
+    assert event.received_at == datetime.fromtimestamp(
+        int(live.id.split("-", 1)[0]) / 1000, UTC
+    )
     assert not connection.available
     disconnected.assert_called_once()
     connection._failed(ConnectionUnavailable())

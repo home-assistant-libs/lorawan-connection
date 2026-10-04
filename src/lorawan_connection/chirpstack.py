@@ -125,7 +125,6 @@ class ChirpStackConnection:
         self._refresh: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
         self._closed = False
-        self._since = datetime.now(UTC)
         self._pending_unknown = 0
         self._device_api = api.DeviceServiceStub(self.channel)
         self._profile_api = api.DeviceProfileServiceStub(self.channel)
@@ -431,8 +430,6 @@ class ChirpStackConnection:
                     recorded_at = datetime.fromtimestamp(
                         int(item.id.split("-", 1)[0]) / 1000, UTC
                     )
-                    if recorded_at < self._since:
-                        continue
                     message = Parse(
                         item.body, message_class(), ignore_unknown_fields=True
                     )

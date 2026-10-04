@@ -64,36 +64,75 @@ integration. For example, a SenseCAP manifest with an illustrative library requi
 
 Use numeric LoRa Alliance VendorIDs; a match on any listed ID selects the integration.
 
+Expose the library's supported models in a `lorawan.py` platform. The provider uses
+this declaration to explain whether a device's model is supported:
+
+```python
+from sensecap_lorawan import SenseCapDeviceCollection
+
+DEVICE_MODELS = SenseCapDeviceCollection.DEVICES
+```
+
 ## Config-entry setup
 
 The `sensecap_lorawan` import refers to the
 [example device library](/lorawan-connection/getting-started/quickstart/#example-library).
 
 ```python
-from homeassistant.components import lorawan
-from homeassistant.components.lorawan import ConnectionUnavailable
+from dataclasses import dataclass, field
+
+from sensecap_lorawan import S2101, SenseCapDeviceCollection
+
+from homeassistant.components.lorawan import ConnectionUnavailable, get_connection
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
 
-from sensecap_lorawan import SenseCapDeviceCollection
+from .coordinator import SenseCapCoordinator
 
-type SenseCapConfigEntry = ConfigEntry[SenseCapDeviceCollection]
+type SenseCapConfigEntry = ConfigEntry[SenseCapData]
 PLATFORMS = [Platform.SENSOR]
+
+
+@dataclass
+class SenseCapData:
+    collection: SenseCapDeviceCollection
+    coordinators: dict[str, SenseCapCoordinator] = field(default_factory=dict)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: SenseCapConfigEntry) -> bool:
     try:
-        connection = lorawan.get_connection(hass, entry.data["provider_entry_id"])
+        connection = get_connection(hass, entry.data["provider_entry_id"])
     except ConnectionUnavailable as error:
         raise ConfigEntryNotReady("LoRaWAN provider is not connected") from error
     entry.async_on_unload(
         connection.on_disconnect(
-            lambda: hass.config_entries.async_schedule_reload(entry.entry_id)
+            lambda: (
+                None
+                if hass.is_stopping
+                else hass.config_entries.async_schedule_reload(entry.entry_id)
+            )
         )
     )
-    devices = entry.runtime_data = SenseCapDeviceCollection(connection)
+    devices = SenseCapDeviceCollection(connection)
+    entry.runtime_data = SenseCapData(devices)
+
+    @callback
+    def added(device: S2101) -> None:
+        entry.runtime_data.coordinators[device.descriptor.dev_eui] = (
+            SenseCapCoordinator(hass, device)
+        )
+
+    @callback
+    def removed(device: S2101) -> None:
+        coordinator = entry.runtime_data.coordinators.pop(device.descriptor.dev_eui)
+        entry.async_create_task(
+            hass, coordinator.async_shutdown(), "Stop device coordinator"
+        )
+
+    entry.async_on_unload(devices.subscribe_device_added(added))
+    entry.async_on_unload(devices.subscribe_device_removed(removed))
     entry.async_on_unload(devices.close)
     try:
         await devices.async_setup()
@@ -109,7 +148,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: SenseCapConfigEntry) ->
 
 `devices.async_setup()` receives existing devices before returning. Models can therefore exist
 before platform setup. `subscribe_device_added` replays them to each platform.
-The collection owns its event subscription.
+The collection owns its event subscription. Setup creates a coordinator before
+platform callbacks run. Removal drops that coordinator and schedules its shutdown.
 
 If the provider disconnects, the integration schedules a reload. Setup fails with
 `ConfigEntryNotReady` while the provider remains unavailable. The provider owns
@@ -134,28 +174,29 @@ from sensecap_lorawan import S2101
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from . import SenseCapConfigEntry
-
 _LOGGER = logging.getLogger(__name__)
 
 
 class SenseCapCoordinator(DataUpdateCoordinator[S2101]):
-    def __init__(
-        self, hass: HomeAssistant, entry: SenseCapConfigEntry, device: S2101
-    ) -> None:
-        super().__init__(hass, _LOGGER, config_entry=entry, name=device.descriptor.name)
+    def __init__(self, hass: HomeAssistant, device: S2101) -> None:
+        super().__init__(hass, _LOGGER, config_entry=None, name=device.descriptor.name)
         self.async_set_updated_data(device)
-        entry.async_on_unload(device.add_update_listener(self._async_device_updated))
+        self._unsubscribe = device.add_update_listener(self._async_device_updated)
 
     @callback
     def _async_device_updated(self) -> None:
         self.async_set_updated_data(self.data)
+
+    async def async_shutdown(self) -> None:
+        self._unsubscribe()
+        await super().async_shutdown()
 ```
 
 `data` holds the model, whose attributes change in place. Each notification calls
 `async_set_updated_data()` with that model and updates the listening entities.
-Device removal clears the model's update listeners. Entry unload also unregisters
-the subscription and shuts down the coordinator.
+The collection callbacks own the coordinator's lifetime. Passing `config_entry=None`
+avoids retaining each coordinator until entry unload. The removal callback shuts
+it down when its model leaves the collection, including when the collection closes.
 
 ## A shared entity base
 
@@ -216,7 +257,7 @@ path shown above.
 
 ## Map device values to entities
 
-This `sensor.py` creates a coordinator for each device. Temperature and humidity
+This `sensor.py` uses the coordinators created during setup. Temperature and humidity
 entities share it and inherit removal handling from `LoRaWANEntity`. Entity
 descriptions select the model attributes to read.
 
@@ -243,6 +284,8 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import SenseCapConfigEntry
 from .coordinator import SenseCapCoordinator
+
+PARALLEL_UPDATES = 0
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -275,12 +318,12 @@ async def async_setup_entry(
 ) -> None:
     @callback
     def added(device: S2101) -> None:
-        coordinator = SenseCapCoordinator(hass, entry, device)
+        coordinator = entry.runtime_data.coordinators[device.descriptor.dev_eui]
         async_add_entities(
             SenseCapSensor(coordinator, description) for description in SENSORS
         )
 
-    entry.async_on_unload(entry.runtime_data.subscribe_device_added(added))
+    entry.async_on_unload(entry.runtime_data.collection.subscribe_device_added(added))
 
 
 class SenseCapSensor(LoRaWANEntity[S2101], SensorEntity):
@@ -309,9 +352,7 @@ class SenseCapSensor(LoRaWANEntity[S2101], SensorEntity):
         return self.entity_description.value_fn(self.device)
 ```
 
-Pass the same coordinator to the device's other sensor entities. If it serves
-several platforms, create coordinators in config-entry setup and share them
-through `entry.runtime_data`. Each device still has its own coordinator.
+Other platforms use the same coordinator from `entry.runtime_data`.
 
 ## Writable devices
 
@@ -345,16 +386,22 @@ class DraginoRelay(LoRaWANEntity[LT22222], SwitchEntity):
                 await self.device.async_set_relay(self.channel, on)
         except TimeoutError as error:
             raise HomeAssistantError(
-                "Timed out waiting for device acknowledgement"
+                translation_domain="dragino", translation_key="command_timeout"
             ) from error
         except DownlinkError as error:
-            raise HomeAssistantError(str(error)) from error
+            raise HomeAssistantError(
+                translation_domain="dragino", translation_key="command_failed"
+            ) from error
 ```
 
 The model encodes the command and waits for its device acknowledgement. The entity
 bounds that wait with a 30-second timeout and reports failures as `HomeAssistantError`.
 Its state comes from `device.relays`, which changes when the device reports new values.
 Command completion does not set the switch state optimistically.
+
+Define `command_timeout` and `command_failed` under `exceptions` in `strings.json`.
+Set `PARALLEL_UPDATES = 0` in `switch.py` so waiting for one device's acknowledgement
+does not block commands to other devices.
 
 Keep switches visible with a read-only API key. Attempted writes report a permission
 error without rejecting setup or marking the whole network offline.
