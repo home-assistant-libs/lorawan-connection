@@ -46,7 +46,9 @@ Users provision devices in the existing LoRaWAN stack in the first version.
 
 In `manifest.json`, put the HA `lorawan` integration in `dependencies`. Put your
 Python vendor library in `requirements`, pinned to an exact published version.
-The vendor library declares `lorawan-connection` in its own package dependencies.
+The vendor library declares `lorawan-connection` in its own package dependencies
+without a version constraint. Home Assistant's `lorawan` integration pins the
+version used by all vendor libraries.
 
 Declare one or more vendor IDs in the proposed `lorawan` manifest field. The
 provider matches those IDs against recognized catalog identities to discover the
