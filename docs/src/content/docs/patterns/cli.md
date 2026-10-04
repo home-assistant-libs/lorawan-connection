@@ -19,21 +19,6 @@ The helper connects a `DeviceCollection` to ChirpStack. The collection creates
 supported models and routes events to them. The helper subscribes to each model's
 state and prints updates. The model owns decoding.
 
-## Model contract
-
-Models inheriting `Device` provide the listener API. Each model supplies:
-
-- `vendor_id` and `catalog_model_id` identify its catalog model.
-- Its constructor accepts a `DeviceDescriptor`.
-- `descriptor`, `handle_event(event)`, and `close()` provide the usual device lifecycle.
-- `add_update_listener(callback)` reports updates and returns an unsubscribe function.
-
-Callbacks take no arguments. On addition and notification, the helper reads public
-model attributes and properties. It excludes methods, private attributes, and the
-base's identity and lifecycle fields. Keep internal bookkeeping in private attributes;
-public properties should return current data without I/O.
-The shared collection rejects duplicate catalog identities.
-
 ## Run it
 
 Install the optional backend:
@@ -66,9 +51,13 @@ Output types are `added`, `state`, and `removed`. Only supported models appear.
 If a device has a supported vendor ID but no matching model, the helper warns on
 stderr once per device per run. The warning includes its name, DevEUI, vendor ID,
 and catalog model ID. This also applies to `--list`; `--json` output stays on stdout.
-The JSON `state` field contains the model's public data. Dataclass values become JSON
-objects. Bytes become hex strings, dates use ISO format, and enums use their values.
-Other custom objects use their string representation.
+
+The helper prints public model attributes and properties, excluding methods,
+private attributes, and the base class's identity and lifecycle fields. Properties
+should return current data without I/O. In JSON output, these values appear in
+`state`. Dataclass values become JSON objects. Bytes become hex strings, dates use
+ISO format, and enums use their values. Other custom objects use their string
+representation.
 
 Add `--list` to read the device list once and exit. Live mode stops on a
 connection failure with exit code 1. Ctrl+C closes models and the connection.
