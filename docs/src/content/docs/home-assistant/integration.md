@@ -21,19 +21,22 @@ for all supported devices on that network. Store it in `entry.runtime_data`.
 
 ## Dependencies and discovery
 
-Declare the HA `lorawan` integration and your Python vendor library as dependencies.
-The vendor library depends on `lorawan-connection`. Store `provider_entry_id` and
-the stable `network_id` in the vendor config entry. The provider keeps the endpoint
-and API key.
+In `manifest.json`, put the HA `lorawan` integration in `dependencies`. Put your
+Python vendor library in `requirements`, pinned to an exact published version.
+The vendor library declares `lorawan-connection` in its own package dependencies.
+
+Store `provider_entry_id` and the stable `network_id` in the vendor config entry.
+The provider keeps the endpoint and API key.
 
 Declare one or more vendor IDs in the proposed `lorawan` manifest field. The
 provider matches those IDs against recognized catalog identities to discover the
-integration. For example, a SenseCAP manifest includes:
+integration. For example, a SenseCAP manifest with an illustrative library requirement:
 
 ```json
 {
   "dependencies": ["lorawan"],
-  "lorawan": [744]
+  "lorawan": [744],
+  "requirements": ["sensecap-lorawan==0.1.0"]
 }
 ```
 
