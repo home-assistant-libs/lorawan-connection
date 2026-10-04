@@ -30,6 +30,12 @@ Its site is <https://home-assistant-libs.github.io/lorawan-connection/>.
 A draft release does not trigger publication. The workflow also supports manual dispatch with an
 existing tag to retry a release that failed before uploading artifacts to PyPI.
 
+## Release notes
+
+Describe what changed. Give each feature a descriptive heading and group bug fixes
+under `Bug fixes`. Keep necessary migration instructions with the affected feature.
+Do not include validation details, test counts, coverage, or check results.
+
 ## Build release artifacts locally
 
 ```sh
