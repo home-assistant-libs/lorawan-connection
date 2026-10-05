@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from lorawan_connection import DeviceCollection, DeviceEventData, EventType, UplinkData
-from lorawan_connection.chirpstack import ChirpStackConnection
+from lorawan_connection.backend.chirpstack import ChirpStackConnection
 from lorawan_connection.cli_helper import (
     _watch,
     add_connection_args,
@@ -48,14 +48,16 @@ def connection() -> Mock:
     )
 
 
+@pytest.mark.parametrize("backend_args", [(), ("--backend", "chirpstack")])
 async def test_scope_autoselection(
-    connection: Mock, monkeypatch: pytest.MonkeyPatch
+    connection: Mock, monkeypatch: pytest.MonkeyPatch, backend_args: tuple[str, ...]
 ) -> None:
     monkeypatch.setenv("CHIRPSTACK_API_KEY", "secret")
     with patch(
-        "lorawan_connection.chirpstack.ChirpStackConnection", return_value=connection
+        "lorawan_connection.backend.chirpstack.ChirpStackConnection",
+        return_value=connection,
     ) as constructor:
-        result = await connect_from_args(args())
+        result = await connect_from_args(args(*backend_args))
     assert result is connection
     assert result.application_ids == ["app", "app2"]
     assert constructor.call_args.args[1] == "secret"
@@ -67,7 +69,8 @@ async def test_explicit_scope_and_key_file(connection: Mock, tmp_path: Path) -> 
     key = tmp_path / "key"
     key.write_text("from-file\n")
     with patch(
-        "lorawan_connection.chirpstack.ChirpStackConnection", return_value=connection
+        "lorawan_connection.backend.chirpstack.ChirpStackConnection",
+        return_value=connection,
     ) as constructor:
         result = await connect_from_args(
             args(
@@ -92,7 +95,8 @@ async def test_application_filter_without_tenant(
 ) -> None:
     monkeypatch.setenv("CHIRPSTACK_API_KEY", "secret")
     with patch(
-        "lorawan_connection.chirpstack.ChirpStackConnection", return_value=connection
+        "lorawan_connection.backend.chirpstack.ChirpStackConnection",
+        return_value=connection,
     ):
         result = await connect_from_args(args("--application", "app2"))
     assert result.application_ids == ["app2"]
@@ -106,7 +110,7 @@ async def test_scoped_key_cannot_list_tenants(
     connection.applications.side_effect = RuntimeError("denied")
     with (
         patch(
-            "lorawan_connection.chirpstack.ChirpStackConnection",
+            "lorawan_connection.backend.chirpstack.ChirpStackConnection",
             return_value=connection,
         ),
         pytest.raises(ValueError, match="supply --tenant"),
@@ -133,7 +137,7 @@ async def test_invalid_applications(
     connection.applications.return_value = applications
     with (
         patch(
-            "lorawan_connection.chirpstack.ChirpStackConnection",
+            "lorawan_connection.backend.chirpstack.ChirpStackConnection",
             return_value=connection,
         ),
         pytest.raises(ValueError, match=match),
@@ -152,7 +156,7 @@ async def test_missing_optional_backend() -> None:
     original_import = builtins.__import__
 
     def no_backend(name: str, *args: object, **kwargs: object) -> object:
-        if name == "chirpstack":
+        if name == "backend.chirpstack":
             raise ModuleNotFoundError("chirpstack_api")
         return original_import(name, *args, **kwargs)
 
@@ -380,6 +384,20 @@ def test_help_does_not_connect(capsys: pytest.CaptureFixture[str]) -> None:
     connect.assert_not_called()
 
 
+def test_unknown_backend_does_not_connect(capsys: pytest.CaptureFixture[str]) -> None:
+    with (
+        patch("lorawan_connection.cli_helper.connect_from_args") as connect,
+        pytest.raises(SystemExit) as result,
+    ):
+        run(
+            SenseCapDeviceCollection.DEVICES,
+            ["--backend", "unknown", "--server", "http://localhost:8080"],
+        )
+    assert result.value.code == 2
+    assert "invalid choice" in capsys.readouterr().err
+    connect.assert_not_called()
+
+
 def test_connection_error_does_not_print_credentials(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -434,7 +452,8 @@ async def test_file_read_runs_off_event_loop(
     parsed = args("--tenant", "tenant")
     parsed.api_key_file = Mock(read_text=read_key)
     with patch(
-        "lorawan_connection.chirpstack.ChirpStackConnection", return_value=connection
+        "lorawan_connection.backend.chirpstack.ChirpStackConnection",
+        return_value=connection,
     ):
         await connect_from_args(parsed)
     assert len(threads) == 1

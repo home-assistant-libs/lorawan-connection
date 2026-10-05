@@ -1,4 +1,4 @@
-"""Run a device library against ChirpStack with its supported model classes."""
+"""Run a device library against the selected optional server backend."""
 
 import argparse
 import asyncio
@@ -25,11 +25,17 @@ from . import (
 from .callbacks import Unsubscribe
 
 if TYPE_CHECKING:
-    from .chirpstack import ChirpStackConnection
+    from .backend.chirpstack import ChirpStackConnection
 
 
 def add_connection_args(parser: argparse.ArgumentParser) -> None:
     """Add server, key, tenant, and application selection arguments."""
+    parser.add_argument(
+        "--backend",
+        choices=("chirpstack",),
+        default="chirpstack",
+        help="Server backend (default: chirpstack)",
+    )
     parser.add_argument("--server", required=True, help="ChirpStack gRPC http(s) URL")
     parser.add_argument(
         "--api-key-file", type=Path, help="Read the API key from a file"
@@ -47,8 +53,10 @@ def add_connection_args(parser: argparse.ArgumentParser) -> None:
 
 async def connect_from_args(args: argparse.Namespace) -> "ChirpStackConnection":
     """Open a scoped connection; use CHIRPSTACK_API_KEY unless a file is supplied."""
+    if args.backend != "chirpstack":
+        raise ValueError(f"Unsupported backend: {args.backend}")
     try:
-        from .chirpstack import ChirpStackConnection
+        from .backend.chirpstack import ChirpStackConnection
     except ModuleNotFoundError as error:
         raise ValueError(
             'Install the backend: pip install "lorawan-connection[chirpstack]"'

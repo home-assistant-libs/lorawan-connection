@@ -8,7 +8,7 @@ import pytest
 from chirpstack_api import api
 
 from lorawan_connection import ConnectionUnavailable
-from lorawan_connection.chirpstack import (
+from lorawan_connection.backend.chirpstack import (
     AuthenticationError,
     ChirpStackConnection,
     connection_error,
@@ -195,7 +195,7 @@ async def test_repeated_stream_failure_disconnects(connection):
     disconnected = Mock()
     connection.on_disconnect(disconnected)
     connection._internal_api.StreamDeviceEvents = Mock(side_effect=stream)
-    with patch("lorawan_connection.chirpstack.asyncio.sleep", AsyncMock()):
+    with patch("lorawan_connection.backend.chirpstack.asyncio.sleep", AsyncMock()):
         await connection._stream(DESCRIPTOR.dev_eui)
     assert connection._internal_api.StreamDeviceEvents.call_count == 3
     assert not connection.available

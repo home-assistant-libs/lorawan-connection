@@ -31,7 +31,7 @@ For a connected `ChirpStackConnection`, register it during config-entry setup:
 
 ```python
 from lorawan_connection import Unsubscribe
-from lorawan_connection.chirpstack import ChirpStackConnection
+from lorawan_connection.backend.chirpstack import ChirpStackConnection
 
 from homeassistant.components import lorawan
 from homeassistant.config_entries import ConfigEntry

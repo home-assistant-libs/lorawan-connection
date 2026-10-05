@@ -25,7 +25,7 @@ from lorawan_connection import (
     Uplink,
     UplinkData,
 )
-from lorawan_connection.chirpstack import ChirpStackConnection
+from lorawan_connection.backend.chirpstack import ChirpStackConnection
 from lorawan_connection.mock import MockConnection
 from sensecap_lorawan import S2101, SenseCapDeviceCollection
 

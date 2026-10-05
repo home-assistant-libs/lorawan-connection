@@ -12,7 +12,7 @@ from google.protobuf.json_format import MessageToJson
 from google.protobuf.message import Message
 
 from lorawan_connection import DeviceEventData, EventType
-from lorawan_connection.chirpstack import (
+from lorawan_connection.backend.chirpstack import (
     AuthenticationError,
     ChirpStackConnection,
     ConnectionUnavailable,
@@ -184,7 +184,9 @@ async def test_stream_decode_replay_and_disconnect(
     await connection.async_subscribe(brands=None, callback=callback)
     connection.devices = {DESCRIPTOR.dev_eui: DESCRIPTOR}
     connection._internal_api.StreamDeviceEvents = Mock(return_value=stream())
-    with patch("lorawan_connection.chirpstack.datetime", wraps=datetime) as clock:
+    with patch(
+        "lorawan_connection.backend.chirpstack.datetime", wraps=datetime
+    ) as clock:
         clock.now.return_value = now
         with pytest.raises(ConnectionUnavailable, match="stream closed"):
             async for event in connection._read_stream(DESCRIPTOR.dev_eui):

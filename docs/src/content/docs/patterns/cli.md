@@ -30,9 +30,14 @@ pip install "lorawan-connection[chirpstack]"
 With a device library named `my_sensors` installed, run:
 
 ```sh
-python -m my_sensors --server https://chirpstack.example.com:443 \
+python -m my_sensors --backend chirpstack --server https://chirpstack.example.com:443 \
   --api-key-file /path/to/api-key
 ```
+
+`--backend` selects the server adapter. ChirpStack is the default and the only
+supported choice today. The helper imports the selected adapter when connecting.
+An unavailable extra produces an installation command. An unknown backend is
+rejected before opening a connection.
 
 Use `CHIRPSTACK_API_KEY` instead of `--api-key-file` if you keep the key in the environment.
 The helper discovers applications across all tenants accessible to the API key

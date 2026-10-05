@@ -17,7 +17,7 @@ from lorawan_connection import (
     DownlinkError,
     EventType,
 )
-from lorawan_connection.chirpstack import ChirpStackConnection
+from lorawan_connection.backend.chirpstack import ChirpStackConnection
 from lorawan_connection.mock import MockConnection
 
 from .conftest import DESCRIPTOR, inventory

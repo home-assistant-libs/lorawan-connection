@@ -18,6 +18,8 @@ connecting. The backend accesses the server with an API key.
 ## Connect your collection
 
 Install the backend with `pip install "lorawan-connection[chirpstack]"`.
+Its import path is `lorawan_connection.backend.chirpstack`. The shared package
+does not import this module or require its dependencies.
 
 Save the [SenseCAP example library](/lorawan-connection/getting-started/quickstart/#example-library)
 as `sensecap_lorawan.py`. Save the script below as `connect_sensors.py` in the same

@@ -73,7 +73,10 @@ replays a SenseCAP S2101 capture and prints 21.4 °C and 31.4% humidity.
 - Synchronous callback helpers with independent, idempotent unsubscribe functions.
 - Typed exports (`py.typed`), a tested SenseCAP example, and Astro/Starlight documentation.
 
-The optional `lorawan_connection.chirpstack` backend supplies inventory and live events.
+The optional `lorawan_connection.backend.chirpstack` backend supplies inventory and live events.
+Install `lorawan-connection[chirpstack]` to use it. Backend dependencies stay in
+their extras; importing the shared package does not import any adapter.
+Import `ChirpStackConnection` explicitly from `lorawan_connection.backend.chirpstack`.
 The backend drops events whose server receipt timestamps are more than five seconds
 before each device stream starts. Keep the client and ChirpStack clocks synchronized.
 The application owns its connection lifecycle; provisioning, QR parsing, and vendor decoders belong in separate libraries.
@@ -124,6 +127,9 @@ if __name__ == "__main__":
 The helper discovers supported devices and prints their state. Models supply catalog
 identity and update listeners through the shared `Device` base. The CLI reads public
 model attributes and properties.
+Select the server with `--backend chirpstack`. ChirpStack is the default and the
+only backend currently available in the CLI. The helper imports the selected
+adapter only when connecting. `--help` works without backend extras installed.
 By default, it discovers applications across all accessible tenants and streams
 live updates. Use `--tenant UUID` or repeat `--application UUID` to restrict the
 selection. Keys that cannot list tenants require `--tenant`.

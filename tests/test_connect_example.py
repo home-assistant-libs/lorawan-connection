@@ -10,7 +10,10 @@ import pytest
 
 import connect_sensors
 from lorawan_connection import DeviceEvent, DeviceEventData, EventType, UplinkData
-from lorawan_connection.chirpstack import ChirpStackConnection, ConnectionUnavailable
+from lorawan_connection.backend.chirpstack import (
+    ChirpStackConnection,
+    ConnectionUnavailable,
+)
 from sensecap_lorawan import S2101
 
 from .test_sensecap_example import DESCRIPTOR, PAYLOAD
