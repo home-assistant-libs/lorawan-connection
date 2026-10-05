@@ -33,7 +33,7 @@ After confirmation, store these fields in the vendor entry's `data`:
 
 | Field | Meaning |
 | --- | --- |
-| `connection_entry_id` | The selected LoRaWAN config entry's `entry_id`. Setup passes this to `lorawan.async_get_connection()` to obtain the shared connection. |
+| `connection_entry_id` | The selected LoRaWAN config entry's `entry_id`. Pass this explicitly to `manager.async_setup(connection_entry_id=...)`. |
 | `network_id` | The provider's stable identifier for the logical network, supplied through discovery or read from the selected entry. |
 
 Use `network_id` as the vendor entry's unique ID to prevent duplicate entries for
@@ -78,25 +78,20 @@ DEVICE_MODELS = SenseCapDeviceCollection.DEVICES
 ## Config-entry setup
 
 Use `lorawan.DeviceManager` to own the collection and its coordinators.
-Pass the vendor collection and a factory that creates a coordinator from `hass`
-and a device model. The factory initializes `data` and subscribes to model updates
-before returning. The manager then notifies platforms.
+Pass a collection factory and a coordinator factory. The collection factory receives
+the selected connection. The coordinator factory receives `hass` and a device model;
+it initializes `data` and subscribes to model updates before returning.
+The manager then notifies platforms.
 
 The `sensecap_lorawan` import refers to the
 [example device library](/lorawan-connection/getting-started/quickstart/#example-library).
 Define `DOMAIN = "sensecap"` in `const.py`.
 
 ```python
-from homeassistant.components.lorawan import (
-    ConnectionUnavailable,
-    DeviceManager,
-    ProviderNotFound,
-    async_get_connection,
-)
+from homeassistant.components.lorawan import DeviceManager
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryError, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 
 from sensecap_lorawan import S2101, SenseCapDeviceCollection
@@ -110,32 +105,14 @@ PLATFORMS = [Platform.SENSOR]
 
 async def async_setup_entry(hass: HomeAssistant, entry: SenseCapConfigEntry) -> bool:
     """Forward all vendor events to one library collection."""
-    try:
-        connection = async_get_connection(hass, entry.data["connection_entry_id"])
-    except ProviderNotFound as error:
-        raise ConfigEntryError("The selected LoRaWAN provider was removed") from error
-    except ConnectionUnavailable as error:
-        raise ConfigEntryNotReady("LoRaWAN provider is not connected") from error
-    entry.async_on_unload(
-        connection.on_disconnect(
-            lambda: (
-                None
-                if hass.is_stopping
-                else hass.config_entries.async_schedule_reload(entry.entry_id)
-            )
-        )
-    )
     manager = entry.runtime_data = DeviceManager(
         hass,
         entry,
-        collection=SenseCapDeviceCollection(connection),
+        create_collection=SenseCapDeviceCollection,
         create_coordinator=SenseCapCoordinator,
     )
     entry.async_on_unload(manager.close)
-    try:
-        await manager.async_setup()
-    except ConnectionUnavailable as error:
-        raise ConfigEntryNotReady("LoRaWAN provider is not connected") from error
+    await manager.async_setup(connection_entry_id=entry.data["connection_entry_id"])
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
@@ -145,16 +122,18 @@ async def async_unload_entry(hass: HomeAssistant, entry: SenseCapConfigEntry) ->
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 ```
 
-`manager.async_setup()` calls the collection's `async_setup()` to subscribe to
-its vendors. Existing devices receive coordinators before setup returns.
-Platforms use `subscribe_coordinator_added()` to receive these coordinators and
-later additions. The manager closes the collection and retires its coordinators
-when the config entry unloads.
+`manager.async_setup(connection_entry_id=...)` resolves the connection, creates the
+collection, and calls its `async_setup()` to subscribe to its vendors. The manager
+does not read the consuming entry's data; the integration passes its selection explicitly.
+Existing devices receive coordinators before setup returns. Platforms use
+`subscribe_coordinator_added()` to receive these coordinators and later additions.
+The collection is available as `manager.collection` after setup creates it.
 
-If the connection disconnects, the integration schedules a reload. Setup fails with
-`ConfigEntryNotReady` while the connection remains unavailable. A deleted connection entry raises
-`ProviderNotFound`; report this with `ConfigEntryError` instead of retrying. The LoRaWAN integration
-owns transport recovery and credential reauthentication.
+The manager reloads the consuming entry when the connection disconnects. An
+unavailable connection raises `ConfigEntryNotReady`; a missing or invalid connection
+entry raises `ConfigEntryError`. The LoRaWAN integration owns transport recovery
+and credential reauthentication. Closing the manager removes its disconnect listener,
+closes the collection, and retires its coordinators. It leaves the connection open.
 
 ## Share updates through a coordinator
 
@@ -417,8 +396,8 @@ error without rejecting setup or marking the whole network offline.
 
 ## Test the integration boundary
 
-Return a `MockConnection` from the provider's `async_get_connection()` helper and emit
-events through it into the real vendor collection. Assert discovery confirmation, initial model replay, entity state,
+Use a configured LoRaWAN entry with a mocked transport, or return a `MockConnection`
+from the manager's private connection resolver. Emit events into the real vendor collection. Assert discovery confirmation, initial model replay, entity state,
 later additions, removal, unload, and reload after disconnect.
 
 Check that one model update reaches every entity through their shared coordinator.
