@@ -157,8 +157,10 @@ the callback takes no arguments. Use `await devices.async_setup()` to deliver ev
 ## Home Assistant
 
 The [Home Assistant guide](https://home-assistant-libs.github.io/lorawan-connection/home-assistant/integration/) covers provider subscriptions, discovery, config-entry
-lifecycle, and entities that observe library models. The proposed provider API
-is not yet part of Home Assistant.
+lifecycle, and entities that observe library models. The proposed `DeviceManager`
+creates coordinators, delivers them to platforms, and cleans up removed devices.
+Vendor coordinators and the manager use `device_identifiers()` for registry identity.
+These Home Assistant APIs are proposals and are not yet part of Home Assistant.
 
 ## Development
 
