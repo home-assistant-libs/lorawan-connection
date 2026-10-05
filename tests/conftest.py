@@ -14,7 +14,14 @@ from lorawan_connection import (
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 DESCRIPTOR = DeviceDescriptor(
-    "network", "0201010101010101", "Sensor", "app", "profile", "model", 744
+    "network",
+    "0201010101010101",
+    "Sensor",
+    "app",
+    "profile",
+    "model",
+    744,
+    stack="chirpstack",
 )
 
 
@@ -25,8 +32,7 @@ def inventory(
 
 
 class DeviceModel(Device):
-    vendor_id = 744
-    catalog_model_id = "model"
+    identifiers = {"chirpstack": (744, "model")}
 
     def __init__(self, descriptor: DeviceDescriptor) -> None:
         super().__init__(descriptor)

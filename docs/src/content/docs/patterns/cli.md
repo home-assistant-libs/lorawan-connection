@@ -48,9 +48,9 @@ changes. Add `--json` for one JSON object per line:
 ```
 
 Output types are `added`, `state`, and `removed`. Only supported models appear.
-If a device has a supported vendor ID but no matching model, the helper warns on
-stderr once per device per run. The warning includes its name, DevEUI, vendor ID,
-and catalog model ID. This also applies to `--list`; `--json` output stays on stdout.
+If a device has a supported brand ID but no matching model, the helper warns on
+stderr once per device per run. The warning includes its name, DevEUI, brand ID,
+and model ID. This also applies to `--list`; `--json` output stays on stdout.
 
 The helper prints public model attributes and properties, excluding methods,
 private attributes, and the base class's identity and lifecycle fields. Properties

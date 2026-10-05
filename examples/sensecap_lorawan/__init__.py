@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime
-from typing import ClassVar, cast, override
+from typing import cast, override
 
 from lorawan_connection import (
     Device,
@@ -51,8 +51,10 @@ def decode_s2101(data: bytes) -> dict[str, float | None]:
 class S2101(Device):
     """S2101 measurements and update notifications."""
 
-    vendor_id: ClassVar[int] = VENDOR_ID
-    catalog_model_id: ClassVar[str] = "fc455aa2-01cf-492b-9359-a5d8c9a0e1b3"
+    identifiers = {
+        "chirpstack": (VENDOR_ID, "fc455aa2-01cf-492b-9359-a5d8c9a0e1b3"),
+        "tts": ("sensecap", "sensecaps2101-temp-humid"),
+    }
 
     def __init__(self, descriptor: DeviceDescriptor) -> None:
         """Initialize an unobserved model."""

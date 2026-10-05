@@ -26,8 +26,9 @@ DESCRIPTOR = DeviceDescriptor(
     "Greenhouse",
     "application",
     "profile",
-    S2101.catalog_model_id,
-    S2101.vendor_id,
+    S2101.identifiers["chirpstack"][1],
+    S2101.identifiers["chirpstack"][0],
+    stack="chirpstack",
 )
 PAYLOAD = bytes.fromhex("01011098530000010210A87A0000AF51")
 
@@ -57,9 +58,7 @@ def test_collection_lifecycle() -> None:
     collection.handle_event(inventory(replace(DESCRIPTOR, dev_eui="0201010101010102")))
     assert added.call_count == 2
     collection.handle_event(
-        inventory(
-            replace(DESCRIPTOR, catalog_model_id="unsupported"), EventType.UPDATED
-        )
+        inventory(replace(DESCRIPTOR, model_id="unsupported"), EventType.UPDATED)
     )
     assert model.closed
     removed.assert_called_once_with(model)
@@ -156,7 +155,7 @@ def test_unknown_device_network_and_vendor() -> None:
         )
     )
     collection.handle_event(inventory(replace(DESCRIPTOR, network_id="other")))
-    collection.handle_event(inventory(replace(DESCRIPTOR, vendor_id=1)))
+    collection.handle_event(inventory(replace(DESCRIPTOR, brand_id=1)))
     assert not collection.devices
 
 

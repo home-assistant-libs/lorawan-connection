@@ -56,7 +56,7 @@ class AuthenticationError(Exception):
 
 @dataclass(eq=False)
 class _Subscriber:
-    vendor_ids: frozenset[int] | None
+    brands: frozenset[tuple[str, int | str]] | None
     callback: Callable[[DeviceEvent], None]
 
 
@@ -299,6 +299,7 @@ class ChirpStackConnection:
                     vendor_id,
                     model,
                     manufacturer,
+                    stack="chirpstack",
                 )
         return snapshot
 
@@ -311,10 +312,12 @@ class ChirpStackConnection:
         for subscriber in tuple(self._subscribers):
             if subscriber not in self._subscribers:
                 continue
-            vendors = subscriber.vendor_ids
-            if vendors is None or descriptor.vendor_id in vendors:
+            vendors = subscriber.brands
+            if vendors is None or (descriptor.stack, descriptor.brand_id) in vendors:
                 notify([subscriber.callback], event)
-            elif previous is not None and previous.vendor_id in vendors:
+            elif (
+                previous is not None and (previous.stack, previous.brand_id) in vendors
+            ):
                 notify(
                     [subscriber.callback],
                     self._inventory_event(EventType.REMOVED, previous),
@@ -374,13 +377,13 @@ class ChirpStackConnection:
     async def async_subscribe(
         self,
         *,
-        vendor_ids: frozenset[int] | None,
+        brands: frozenset[tuple[str, int | str]] | None,
         callback: Callable[[DeviceEvent], None],
     ) -> Unsubscribe:
         """Deliver matching inventory, then live events; None selects all vendors."""
         if not self.available or self._closed:
             raise ConnectionUnavailable("Connection is not available")
-        subscriber = _Subscriber(vendor_ids, callback)
+        subscriber = _Subscriber(brands, callback)
         self._subscribers.append(subscriber)
 
         def unsubscribe() -> None:
@@ -390,7 +393,7 @@ class ChirpStackConnection:
         for descriptor in tuple(self.devices.values()):
             if subscriber not in self._subscribers:
                 break
-            if vendor_ids is None or descriptor.vendor_id in vendor_ids:
+            if brands is None or (descriptor.stack, descriptor.brand_id) in brands:
                 notify([callback], self._inventory_event(EventType.ADDED, descriptor))
         return unsubscribe
 

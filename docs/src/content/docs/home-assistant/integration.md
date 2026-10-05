@@ -50,14 +50,14 @@ The vendor library declares `lorawan-connection` in its own package dependencies
 without a version constraint. Home Assistant's `lorawan` integration pins the
 version used by all vendor libraries.
 
-Declare one or more vendor IDs in the proposed `lorawan` manifest field. The
+Declare one or more stack and brand pairs in the proposed `lorawan` manifest field. The
 provider matches those IDs against recognized catalog identities to discover the
 integration. These discovery fields belong in a SenseCAP manifest:
 
 ```json
 {
   "dependencies": ["lorawan"],
-  "lorawan": [744]
+  "lorawan": [["chirpstack", 744], ["tts", "sensecap"]]
 }
 ```
 

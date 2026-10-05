@@ -127,8 +127,23 @@ supported models from device descriptions, sends later events to the correct ins
 and removes devices when they are removed.
 
 The `DraginoDevices` class at the end of the complete example declares its supported
-models in `DEVICES`. The base collection uses each class's `vendor_id` and
-`catalog_model_id` to select a model for an incoming descriptor.
+models in `DEVICES`. The base collection uses each class's `identifiers` mapping to select a model for an incoming descriptor.
+
+Each stack has its own catalog. Declare the native brand and model IDs together:
+
+```python
+class S2101(Device):
+    identifiers = {
+        "chirpstack": (744, "fc455aa2-01cf-492b-9359-a5d8c9a0e1b3"),
+        "tts": ("sensecap", "sensecaps2101-temp-humid"),
+    }
+
+    # Implement handle_event() and expose the decoded readings.
+```
+
+The collection matches `(stack, brand_id, model_id)`. The same device model can
+therefore decode messages from either stack. A duplicate identity within one
+stack raises `ValueError`; matching IDs in different stacks are independent.
 
 This function creates a collection and prints each model update:
 

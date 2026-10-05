@@ -42,8 +42,8 @@ async def test_output_commands(
 ) -> None:
     descriptor = replace(
         DESCRIPTOR,
-        vendor_id=LT22222.vendor_id,
-        catalog_model_id=LT22222.catalog_model_id,
+        brand_id=LT22222.identifiers["chirpstack"][0],
+        model_id=LT22222.identifiers["chirpstack"][1],
     )
     mock_connection = MockConnection([descriptor])
     collection = DraginoDevices(mock_connection)

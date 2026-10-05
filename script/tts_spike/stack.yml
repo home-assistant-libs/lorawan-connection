@@ -1,0 +1,26 @@
+log:
+  level: warn
+redis:
+  address: 127.0.0.1:16389
+grpc:
+  listen: 127.0.0.1:18849
+  listen-tls: ''
+http:
+  listen: 127.0.0.1:18859
+  listen-tls: ''
+cluster:
+  name: tts-spike
+  keys:
+    - '00112233445566778899aabbccddeeff'
+  grpc-address: 127.0.0.1:18849
+  tls: false
+  identity-server: 127.0.0.1:18849
+  network-server: 127.0.0.1:18849
+  application-server: 127.0.0.1:18849
+  join-server: 127.0.0.1:18849
+as:
+  mqtt:
+    listen: ''
+    listen-tls: ''
+interop:
+  listen-tls: ''

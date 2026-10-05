@@ -21,7 +21,7 @@ from .conftest import DESCRIPTOR, NOW, DeviceModel, inventory
 
 class Collection(DeviceCollection[DeviceModel]):
     def _create_device(self, descriptor: DeviceDescriptor) -> DeviceModel | None:
-        if descriptor.vendor_id == 744 and descriptor.catalog_model_id in {
+        if descriptor.brand_id == 744 and descriptor.model_id in {
             "model",
             "other",
         }:
@@ -105,8 +105,8 @@ def test_unknown_activity_never_creates_a_device() -> None:
             type=EventType.ADDED,
             descriptor=DESCRIPTOR,
         ),
-        inventory(replace(DESCRIPTOR, vendor_id=42)),
-        inventory(replace(DESCRIPTOR, catalog_model_id="unsupported")),
+        inventory(replace(DESCRIPTOR, brand_id=42)),
+        inventory(replace(DESCRIPTOR, model_id="unsupported")),
     ],
 )
 def test_unusable_identity_is_ignored(event: DeviceEventData) -> None:
@@ -126,12 +126,12 @@ def test_identity_change_retires_before_replacement() -> None:
     collection.subscribe_device_added(lambda device: order.append("added"))
     order.clear()
     collection.handle_event(
-        inventory(replace(DESCRIPTOR, catalog_model_id="other"), EventType.UPDATED)
+        inventory(replace(DESCRIPTOR, model_id="other"), EventType.UPDATED)
     )
     assert order == ["removed:1", "added"]
     assert collection.devices[DESCRIPTOR.dev_eui] is not original
     collection.handle_event(
-        inventory(replace(DESCRIPTOR, vendor_id=1), EventType.UPDATED)
+        inventory(replace(DESCRIPTOR, brand_id=1), EventType.UPDATED)
     )
     assert not collection.devices
     assert order == ["removed:1", "added", "removed:1"]
@@ -232,7 +232,7 @@ def test_removed_callback_can_close_during_model_replacement() -> None:
     original = collection.devices[DESCRIPTOR.dev_eui]
     collection.subscribe_device_removed(lambda device: collection.close())
     collection.handle_event(
-        inventory(replace(DESCRIPTOR, catalog_model_id="other"), EventType.UPDATED)
+        inventory(replace(DESCRIPTOR, model_id="other"), EventType.UPDATED)
     )
     assert original.close_count == 1
     assert not collection.devices
@@ -240,8 +240,7 @@ def test_removed_callback_can_close_during_model_replacement() -> None:
 
 async def test_setup_subscribes_to_registered_vendors() -> None:
     class Sensor(DeviceModel):
-        vendor_id = 744
-        catalog_model_id = "model"
+        identifiers = {"chirpstack": (744, "model")}
 
     connection = MockConnection([DESCRIPTOR])
     original_subscribe = connection.async_subscribe
@@ -250,16 +249,16 @@ async def test_setup_subscribes_to_registered_vendors() -> None:
     added = Mock()
     collection.subscribe_device_added(added)
 
-    async def subscribe(*, vendor_ids, callback):
+    async def subscribe(*, brands, callback):
         unsubscribe.side_effect = await original_subscribe(
-            vendor_ids=vendor_ids, callback=callback
+            brands=brands, callback=callback
         )
         return unsubscribe
 
     connection.async_subscribe = AsyncMock(side_effect=subscribe)
     await collection.async_setup()
     connection.async_subscribe.assert_awaited_once_with(
-        vendor_ids=frozenset({744}), callback=collection.handle_event
+        brands=frozenset({("chirpstack", 744)}), callback=collection.handle_event
     )
     device = collection.devices[DESCRIPTOR.dev_eui]
     added.assert_called_once_with(device)
@@ -324,7 +323,7 @@ def test_device_remove_listener(replacement: bool) -> None:
 
     device.add_remove_listener(on_remove)
     event = (
-        inventory(replace(DESCRIPTOR, catalog_model_id="other"), EventType.UPDATED)
+        inventory(replace(DESCRIPTOR, model_id="other"), EventType.UPDATED)
         if replacement
         else inventory(kind=EventType.REMOVED)
     )

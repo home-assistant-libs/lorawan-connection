@@ -56,11 +56,15 @@ async def test_replay_live_updates_and_unsubscribe() -> None:
 async def test_vendor_filters_and_changes() -> None:
     connection = MockConnection([DESCRIPTOR])
     original, other = Mock(), Mock()
-    await connection.async_subscribe(vendor_ids=frozenset({744}), callback=original)
-    await connection.async_subscribe(vendor_ids=frozenset({42}), callback=other)
+    await connection.async_subscribe(
+        brands=frozenset({("chirpstack", 744)}), callback=original
+    )
+    await connection.async_subscribe(
+        brands=frozenset({("chirpstack", 42)}), callback=other
+    )
     original.assert_called_once()
     other.assert_not_called()
-    changed = inventory(replace(DESCRIPTOR, vendor_id=42), EventType.UPDATED)
+    changed = inventory(replace(DESCRIPTOR, brand_id=42), EventType.UPDATED)
     connection.emit(changed)
     assert original.call_args.args[0].type == EventType.REMOVED
     assert original.call_args.args[0].descriptor is DESCRIPTOR
@@ -72,7 +76,9 @@ async def test_vendor_filters_and_changes() -> None:
     assert other.call_args.args[0].type == EventType.REMOVED
     assert not connection.devices
     late = Mock()
-    await connection.async_subscribe(vendor_ids=frozenset({42}), callback=late)
+    await connection.async_subscribe(
+        brands=frozenset({("chirpstack", 42)}), callback=late
+    )
     late.assert_not_called()
 
 
@@ -80,9 +86,11 @@ async def test_duplicate_callbacks_unsubscribe_independently() -> None:
     connection = MockConnection([DESCRIPTOR])
     callback = Mock()
     unsubscribe = await connection.async_subscribe(
-        vendor_ids=frozenset({744}), callback=callback
+        brands=frozenset({("chirpstack", 744)}), callback=callback
     )
-    await connection.async_subscribe(vendor_ids=frozenset({744}), callback=callback)
+    await connection.async_subscribe(
+        brands=frozenset({("chirpstack", 744)}), callback=callback
+    )
     callback.reset_mock()
     unsubscribe()
     unsubscribe()
@@ -93,7 +101,7 @@ async def test_duplicate_callbacks_unsubscribe_independently() -> None:
 async def test_callback_failure_and_unsubscribe_during_delivery() -> None:
     connection = MockConnection([DESCRIPTOR])
     await connection.async_subscribe(
-        vendor_ids=frozenset({744}),
+        brands=frozenset({("chirpstack", 744)}),
         callback=Mock(side_effect=ValueError("bad listener")),
     )
 
@@ -101,10 +109,12 @@ async def test_callback_failure_and_unsubscribe_during_delivery() -> None:
         if event.type == EventType.UPLINK:
             unsubscribe()
 
-    await connection.async_subscribe(vendor_ids=frozenset({744}), callback=first)
+    await connection.async_subscribe(
+        brands=frozenset({("chirpstack", 744)}), callback=first
+    )
     callback = Mock()
     unsubscribe = await connection.async_subscribe(
-        vendor_ids=frozenset({744}), callback=callback
+        brands=frozenset({("chirpstack", 744)}), callback=callback
     )
     callback.reset_mock()
     connection.emit(activity())
@@ -162,7 +172,9 @@ async def test_disconnect_ends_subscriptions_and_pending_commands() -> None:
     with pytest.raises(DownlinkError, match="closed"):
         await pending
     with pytest.raises(ConnectionUnavailable):
-        await connection.async_subscribe(vendor_ids=frozenset({744}), callback=Mock())
+        await connection.async_subscribe(
+            brands=frozenset({("chirpstack", 744)}), callback=Mock()
+        )
     with pytest.raises(ConnectionUnavailable):
         connection.emit(activity())
     with pytest.raises(ConnectionUnavailable):

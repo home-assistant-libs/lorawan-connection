@@ -12,12 +12,13 @@ A frozen, slotted dataclass. Positional or keyword arguments follow this order:
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `network_id` | `str` | Required | Stable application-owned network identity. |
+| `stack` | `str` | Required, keyword-only | Catalog namespace, such as `chirpstack` or `tts`. |
 | `dev_eui` | `str` | Required | Eight-byte device identifier. |
 | `name` | `str` | Required | Current display name. |
 | `application_id` | `str` | Required | Server application identity. |
-| `profile_id` | `str` | Required | Server profile identity. |
-| `catalog_model_id` | `str` | `""` | Reviewed catalog model identity, if known. |
-| `vendor_id` | `int \| None` | `None` | Catalog vendor identifier. |
+| `profile_id` | `str` | Required | Server profile identity, or an empty string when the stack has no equivalent. |
+| `model_id` | `str` | `""` | Reviewed catalog model identity, if known. |
+| `brand_id` | `int \| str \| None` | `None` | Native brand identifier within the stack. |
 | `model` | `str` | `""` | Model display text. |
 | `manufacturer` | `str` | `""` | Manufacturer display text. |
 

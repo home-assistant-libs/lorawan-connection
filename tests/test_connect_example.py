@@ -47,7 +47,7 @@ async def test_connection_example(
     async def subscribe(
         callback: Callable[[DeviceEvent], None],
         *,
-        vendor_ids: frozenset[int],
+        brands: frozenset[tuple[str, int | str]],
     ) -> Mock:
         devices = callback.__self__
         devices.subscribe_device_added(models.append)

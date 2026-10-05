@@ -22,13 +22,14 @@ async def main() -> None:
 
     devices.subscribe_device_added(device_added)
     descriptor = DeviceDescriptor(
+        stack="chirpstack",
         network_id="home",
         dev_eui="0201010101010101",
         name="Greenhouse",
         application_id="sensors",
         profile_id="s2101-profile",
-        catalog_model_id=S2101.catalog_model_id,
-        vendor_id=S2101.vendor_id,
+        model_id=S2101.identifiers["chirpstack"][1],
+        brand_id=S2101.identifiers["chirpstack"][0],
         manufacturer="Seeed Studio",
         model="SenseCAP S2101",
     )

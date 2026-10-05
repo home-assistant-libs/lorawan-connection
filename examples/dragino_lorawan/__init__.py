@@ -2,7 +2,7 @@
 
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import ClassVar, cast, override
+from typing import cast, override
 
 from lorawan_connection import (
     Device,
@@ -21,8 +21,10 @@ VENDOR_ID = 676
 class LT22222(Device):
     """Model for the Dragino LT-22222-L."""
 
-    vendor_id: ClassVar[int] = VENDOR_ID
-    catalog_model_id: ClassVar[str] = "cb0a7bef-eaa0-4c61-a0b6-ce33e6ecbc4f"
+    identifiers = {
+        "chirpstack": (VENDOR_ID, "cb0a7bef-eaa0-4c61-a0b6-ce33e6ecbc4f"),
+        "tts": ("dragino", "lt22222-l"),
+    }
 
     def __init__(self, descriptor: DeviceDescriptor) -> None:
         """Initialize values as unobserved until a device report arrives."""

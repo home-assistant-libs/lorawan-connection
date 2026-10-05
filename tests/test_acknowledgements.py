@@ -159,9 +159,7 @@ async def test_retired_device_stops_waiting(devices, action) -> None:
         devices.handle_event(inventory(kind=EventType.REMOVED))
     else:
         devices.handle_event(
-            inventory(
-                replace(DESCRIPTOR, catalog_model_id="new-model"), EventType.UPDATED
-            )
+            inventory(replace(DESCRIPTOR, model_id="new-model"), EventType.UPDATED)
         )
     with pytest.raises(DownlinkError, match="closed"):
         await command

@@ -18,7 +18,7 @@ class Connection(Protocol):
     async def async_subscribe(
         self,
         *,
-        vendor_ids: frozenset[int],
+        brands: frozenset[tuple[str, int | str]],
         callback: Callable[[DeviceEvent], None],
     ) -> Unsubscribe:
         """Deliver matching existing devices before returning, then live events."""

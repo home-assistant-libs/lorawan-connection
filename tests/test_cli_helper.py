@@ -164,7 +164,7 @@ async def test_missing_optional_backend() -> None:
 
 
 def test_duplicate_model_identity() -> None:
-    with pytest.raises(ValueError, match="Duplicate catalog identity"):
+    with pytest.raises(ValueError, match="Duplicate model identity"):
         DeviceCollection(MockConnection(), [S2101, S2101])
 
 
@@ -173,7 +173,7 @@ async def test_list_supported_models_only(
 ) -> None:
     connection.inventory.return_value = [
         DESCRIPTOR,
-        replace(DESCRIPTOR, dev_eui="0000000000000002", catalog_model_id="unsupported"),
+        replace(DESCRIPTOR, dev_eui="0000000000000002", model_id="unsupported"),
     ]
     parsed = args("--list", "--json")
     with patch(
@@ -201,7 +201,7 @@ async def test_invalid_collection_closes_connection(connection: Mock) -> None:
             "lorawan_connection.cli_helper.connect_from_args",
             AsyncMock(return_value=connection),
         ),
-        pytest.raises(ValueError, match="Duplicate catalog identity"),
+        pytest.raises(ValueError, match="Duplicate model identity"),
     ):
         await _watch(args(), [S2101, S2101])
     connection.close.assert_awaited_once()
@@ -212,7 +212,7 @@ async def test_live_state_removal_and_disconnect(
 ) -> None:
     stop = Mock()
 
-    async def subscribe(*, vendor_ids, callback):
+    async def subscribe(*, brands, callback):
         now = datetime.now(UTC)
         callback(
             DeviceEventData(
@@ -264,27 +264,27 @@ async def test_warn_unmapped_devices_from_supported_vendors(
     json_output: bool,
 ) -> None:
     class OtherVendor(S2101):
-        vendor_id = 123
+        identifiers = {"chirpstack": (123, S2101.identifiers["chirpstack"][1])}
 
     unmapped = [
-        replace(DESCRIPTOR, dev_eui="0000000000000002", catalog_model_id="unknown"),
-        replace(DESCRIPTOR, dev_eui="0000000000000003", catalog_model_id=""),
+        replace(DESCRIPTOR, dev_eui="0000000000000002", model_id="unknown"),
+        replace(DESCRIPTOR, dev_eui="0000000000000003", model_id=""),
         replace(
             DESCRIPTOR,
             dev_eui="0000000000000004",
-            vendor_id=OtherVendor.vendor_id,
-            catalog_model_id="unknown",
+            brand_id=OtherVendor.identifiers["chirpstack"][0],
+            model_id="unknown",
         ),
     ]
     descriptors = [
         DESCRIPTOR,
         *unmapped,
-        replace(DESCRIPTOR, dev_eui="0000000000000005", vendor_id=999),
-        replace(DESCRIPTOR, dev_eui="0000000000000006", vendor_id=None),
+        replace(DESCRIPTOR, dev_eui="0000000000000005", brand_id=999),
+        replace(DESCRIPTOR, dev_eui="0000000000000006", brand_id=None),
     ]
     connection.inventory.return_value = descriptors
 
-    async def subscribe(*, vendor_ids, callback):
+    async def subscribe(*, brands, callback):
         for event_type in (EventType.ADDED, EventType.UPDATED):
             for descriptor in descriptors:
                 callback(
@@ -320,8 +320,8 @@ async def test_warn_unmapped_devices_from_supported_vendors(
         assert warning.startswith("Warning: unmapped device ")
         assert repr(descriptor.name) in warning
         assert descriptor.dev_eui in warning
-        assert f"vendor ID {descriptor.vendor_id}" in warning
-        assert f"catalog model ID {descriptor.catalog_model_id or 'missing'}" in warning
+        assert f"brand ID {descriptor.brand_id}" in warning
+        assert f"model ID {descriptor.model_id or 'missing'}" in warning
     if json_output:
         rows = [json.loads(line) for line in captured.out.splitlines()]
         assert rows
@@ -336,7 +336,7 @@ async def test_cancellation_closes_models_and_connection(connection: Mock) -> No
     stop = Mock()
     subscribed = asyncio.Event()
 
-    async def subscribe(*, vendor_ids, callback):
+    async def subscribe(*, brands, callback):
         callback(
             DeviceEventData(
                 type=EventType.ADDED,
@@ -397,12 +397,12 @@ def test_connection_error_does_not_print_credentials(
 
 def test_models_can_share_catalog_ids_across_vendors() -> None:
     class OtherVendor(S2101):
-        vendor_id = 123
+        identifiers = {"chirpstack": (123, S2101.identifiers["chirpstack"][1])}
 
     collection = DeviceCollection(MockConnection(), [S2101, OtherVendor])
     descriptors = [
         DESCRIPTOR,
-        replace(DESCRIPTOR, dev_eui="0000000000000002", vendor_id=123),
+        replace(DESCRIPTOR, dev_eui="0000000000000002", brand_id=123),
     ]
     for descriptor in descriptors:
         collection.handle_event(
@@ -465,7 +465,7 @@ async def test_removed_after_initial_output_failure(
         def unobserved(self):
             raise ValueError("No reading yet")
 
-    async def subscribe(*, vendor_ids, callback):
+    async def subscribe(*, brands, callback):
         callback(
             DeviceEventData(
                 type=EventType.ADDED,

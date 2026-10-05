@@ -29,15 +29,13 @@ class DeviceCollection[DeviceT: Device]:
         self._setup_started = False
         self._send_downlink = connection.async_send_downlink
         self.devices: dict[str, DeviceT] = {}
-        self._models: dict[tuple[int, str], type[DeviceT]] = {}
+        self._models: dict[tuple[str, int | str, str], type[DeviceT]] = {}
         for model in self.DEVICES if models is None else models:
-            identity = (model.vendor_id, model.catalog_model_id)
-            if identity in self._models:
-                raise ValueError(
-                    f"Duplicate catalog identity: vendor_id={identity[0]}, "
-                    f"catalog_model_id={identity[1]!r}"
-                )
-            self._models[identity] = model
+            for stack, (brand_id, model_id) in model.identifiers.items():
+                identity = (stack, brand_id, model_id)
+                if identity in self._models:
+                    raise ValueError(f"Duplicate model identity: {identity!r}")
+                self._models[identity] = model
         self._added: list[Callable[[DeviceT], None]] = []
         self._removed: list[Callable[[DeviceT], None]] = []
         self._closed = False
@@ -49,7 +47,9 @@ class DeviceCollection[DeviceT: Device]:
         self._setup_started = True
         try:
             unsubscribe = await self._connection.async_subscribe(
-                vendor_ids=frozenset(vendor_id for vendor_id, _ in self._models),
+                brands=frozenset(
+                    (stack, brand_id) for stack, brand_id, _ in self._models
+                ),
                 callback=self.handle_event,
             )
         except BaseException:
@@ -62,9 +62,11 @@ class DeviceCollection[DeviceT: Device]:
 
     def _create_device(self, descriptor: DeviceDescriptor) -> DeviceT | None:
         """Construct a registered model, or leave an unknown identity unsupported."""
-        if descriptor.vendor_id is None:
+        if descriptor.brand_id is None:
             return None
-        model = self._models.get((descriptor.vendor_id, descriptor.catalog_model_id))
+        model = self._models.get(
+            (descriptor.stack, descriptor.brand_id, descriptor.model_id)
+        )
         if model is None:
             return None
         return model(descriptor)
@@ -118,9 +120,10 @@ class DeviceCollection[DeviceT: Device]:
             ):
                 return
             if device is not None and (
-                device.descriptor.catalog_model_id,
-                device.descriptor.vendor_id,
-            ) != (descriptor.catalog_model_id, descriptor.vendor_id):
+                device.descriptor.stack,
+                device.descriptor.model_id,
+                device.descriptor.brand_id,
+            ) != (descriptor.stack, descriptor.model_id, descriptor.brand_id):
                 self._remove(eui)
                 if self._closed:
                     return

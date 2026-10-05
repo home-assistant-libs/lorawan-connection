@@ -28,12 +28,13 @@ DEV_EUI = "0201010101010101"
 def connection() -> MockConnection:
     descriptor = DeviceDescriptor(
         network_id="network",
+        stack="chirpstack",
         dev_eui=DEV_EUI,
         name="Greenhouse",
         application_id="application",
         profile_id="profile",
-        catalog_model_id=S2101.catalog_model_id,
-        vendor_id=S2101.vendor_id,
+        model_id=S2101.identifiers["chirpstack"][1],
+        brand_id=S2101.identifiers["chirpstack"][0],
     )
     return MockConnection([descriptor])
 
@@ -108,12 +109,13 @@ from lorawan_connection.mock import MockConnection
 async def test_relay_command() -> None:
     descriptor = DeviceDescriptor(
         network_id="network",
+        stack="chirpstack",
         dev_eui="0201010101010101",
         name="Controller",
         application_id="application",
         profile_id="profile",
-        catalog_model_id=LT22222.catalog_model_id,
-        vendor_id=LT22222.vendor_id,
+        model_id=LT22222.identifiers["chirpstack"][1],
+        brand_id=LT22222.identifiers["chirpstack"][0],
     )
     connection = MockConnection([descriptor])
     devices = DraginoDevices(connection)

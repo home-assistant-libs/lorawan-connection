@@ -12,8 +12,7 @@ from .conftest import DESCRIPTOR, inventory
 
 
 class Sensor(Device):
-    vendor_id = 744
-    catalog_model_id = "model"
+    identifiers = {"chirpstack": (744, "model")}
 
     def __init__(self, descriptor: DeviceDescriptor) -> None:
         super().__init__(descriptor)
@@ -25,7 +24,7 @@ class Sensor(Device):
 
 
 class OtherSensor(Sensor):
-    catalog_model_id = "other"
+    identifiers = {"chirpstack": (744, "other")}
 
 
 class Sensors(DeviceCollection[Sensor]):
@@ -120,7 +119,7 @@ def test_subclass_registry_override_does_not_modify_parent() -> None:
     child = Others(MockConnection())
     for descriptor in (
         DESCRIPTOR,
-        replace(DESCRIPTOR, dev_eui="0000000000000002", catalog_model_id="other"),
+        replace(DESCRIPTOR, dev_eui="0000000000000002", model_id="other"),
     ):
         parent.handle_event(inventory(descriptor))
         child.handle_event(inventory(descriptor))
@@ -134,7 +133,7 @@ def test_explicit_registry_overrides_declaration_and_is_copied() -> None:
     models.clear()
     collection.handle_event(inventory())
     assert not collection.devices
-    collection.handle_event(inventory(replace(DESCRIPTOR, catalog_model_id="other")))
+    collection.handle_event(inventory(replace(DESCRIPTOR, model_id="other")))
     assert isinstance(collection.devices[DESCRIPTOR.dev_eui], OtherSensor)
     empty = Sensors(MockConnection(), [])
     empty.handle_event(inventory())
@@ -145,20 +144,20 @@ def test_duplicate_identity_rejected_before_any_events() -> None:
     class Duplicate(Sensor):
         pass
 
-    with pytest.raises(ValueError, match="Duplicate catalog identity"):
+    with pytest.raises(ValueError, match="Duplicate model identity"):
         DeviceCollection(MockConnection(), [Sensor, Duplicate])
 
     class Duplicates(DeviceCollection[Sensor]):
         DEVICES = (Sensor, Duplicate)
 
-    with pytest.raises(ValueError, match="Duplicate catalog identity"):
+    with pytest.raises(ValueError, match="Duplicate model identity"):
         Duplicates(MockConnection())
 
 
 def test_missing_vendor_and_model_are_unsupported() -> None:
     collection = Sensors(MockConnection())
-    collection.handle_event(inventory(replace(DESCRIPTOR, vendor_id=None)))
-    collection.handle_event(inventory(replace(DESCRIPTOR, catalog_model_id="unknown")))
+    collection.handle_event(inventory(replace(DESCRIPTOR, brand_id=None)))
+    collection.handle_event(inventory(replace(DESCRIPTOR, model_id="unknown")))
     assert not collection.devices
 
 

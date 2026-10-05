@@ -87,7 +87,7 @@ poll_interval=30, channel=None)` owns its channel, including an injected test ch
 | `await applications()` | Return `{application_uuid: name}` for the selected tenant, or all accessible tenants when `tenant_id` is `None` (the default). |
 | `await inventory()` | Read descriptors without starting streams or updating the current device list. |
 | `await async_connect()` | Read existing devices and start polling and live events. |
-| `await async_subscribe(*, vendor_ids, callback)` | Report matching existing devices, then live events. Return an unsubscribe function. `vendor_ids=None` includes all vendors. |
+| `await async_subscribe(*, brands, callback)` | Report matching existing devices, then live events. Return an unsubscribe function. `brands=None` includes all vendors. |
 | `on_disconnect(callback)` | Register a callback with no arguments; return an unsubscribe function. |
 | `await async_send_downlink(downlink)` | Validate device scope and enqueue application bytes; return the queue-item UUID. |
 | `await refresh()` | Refresh the connected device list. |
@@ -104,8 +104,8 @@ refresh is in progress.
 Events delivered before a collection subscribes are not buffered. The five-second
 leeway does not guarantee initial readings.
 
-`vendor_ids=None` is a backend extension for discovery tools. Device libraries and
-`MockConnection` use the `Connection` protocol with an explicit set of vendor IDs.
+`brands=None` is a backend extension for discovery tools. Device libraries and
+`MockConnection` use the `Connection` protocol with an explicit set of stack and brand pairs.
 
 Callbacks run synchronously. Callbacks registered with `on_disconnect()` run after `available` becomes
 false. Create a new connection to recover. `AuthenticationError` reports rejected

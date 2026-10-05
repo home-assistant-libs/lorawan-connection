@@ -18,8 +18,10 @@ from lorawan_connection import Device, DeviceCollection, DeviceDescriptor, Devic
 
 
 class Sensor(Device):
-    vendor_id = 123
-    catalog_model_id = "known-model"
+    identifiers = {
+        "chirpstack": (123, "known-model"),
+        "tts": ("example-brand", "known-model"),
+    }
 
     def __init__(self, descriptor: DeviceDescriptor) -> None:
         super().__init__(descriptor)
@@ -41,6 +43,7 @@ unsubscribe = sensors.subscribe_device_added(
 )
 ```
 
+Each model maps a stack name to its native `(brand_id, model_id)` in `identifiers`.
 The collection builds its catalog lookup from `DEVICES`. You can also pass classes
 at construction: `DeviceCollection(connection, [Sensor])`.
 Call `await sensors.async_setup()` to subscribe through the supplied connection.
@@ -90,7 +93,7 @@ Callers can bound the wait with `asyncio.timeout()`. Device reports update model
 attributes; an ACK confirms delivery, not the resulting device state.
 
 The [Dragino example](https://home-assistant-libs.github.io/lorawan-connection/modelling/overview/#complete-device-example)
-models the LT-22222-L using its existing ChirpStack catalog identity.
+models the LT-22222-L with identities from both the ChirpStack and TTS catalogs.
 
 ## Testing device libraries
 
@@ -126,7 +129,7 @@ live updates. Use `--tenant UUID` or repeat `--application UUID` to restrict the
 selection. Keys that cannot list tenants require `--tenant`.
 Use `--list` to print inventory and exit, or `--json` for machine-readable output.
 Unmapped devices from supported vendors produce a warning on stderr, once per
-device per run. Each warning includes the device name, DevEUI, vendor ID, and catalog model ID.
+device per run. Each warning includes the device name, DevEUI, brand ID, and model ID.
 
 ```sh
 pip install "lorawan-connection[chirpstack]"
@@ -139,13 +142,13 @@ and [Connecting to ChirpStack](https://home-assistant-libs.github.io/lorawan-con
 ## Collection subscriptions
 
 Pass a connection to the collection, then call `await devices.async_setup()`.
-The collection selects vendor IDs from its registered model classes and receives
+The collection selects stack and brand pairs from its registered model classes and receives
 existing devices before setup returns. Later events reach models automatically.
 `devices.close()` unsubscribes and closes the models without closing the connection.
 Listen for a model's removal with `device.add_remove_listener(callback)`. It fires
 after removal or replacement closes that model, but not during ordinary shutdown.
 
-`Connection` exposes only `async_subscribe(*, vendor_ids, callback)`,
+`Connection` exposes only `async_subscribe(*, brands, callback)`,
 `on_disconnect(callback)`, and `async_send_downlink(downlink)`.
 Applications own connection startup, recovery, and shutdown. The ChirpStack backend
 retries transient polling and device-stream failures before reporting connection loss.

@@ -1,6 +1,6 @@
 """Read-only event contracts and concrete inventory fixtures."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
@@ -28,12 +28,13 @@ class DeviceDescriptor:
     """Catalog identity and current inventory metadata."""
 
     network_id: str
+    stack: str = field(kw_only=True)
     dev_eui: str
     name: str
     application_id: str
     profile_id: str
-    catalog_model_id: str = ""
-    vendor_id: int | None = None
+    model_id: str = ""
+    brand_id: int | str | None = None
     model: str = ""
     manufacturer: str = ""
 

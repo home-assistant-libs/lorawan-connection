@@ -12,7 +12,7 @@ from .events import DeviceDescriptor, DeviceEvent, DeviceEventData, EventType
 
 @dataclass(eq=False)
 class _Subscriber:
-    vendor_ids: frozenset[int]
+    brands: frozenset[tuple[str, int | str]]
     callback: Callable[[DeviceEvent], None]
 
 
@@ -39,17 +39,17 @@ class MockConnection:
     async def async_subscribe(
         self,
         *,
-        vendor_ids: frozenset[int],
+        brands: frozenset[tuple[str, int | str]],
         callback: Callable[[DeviceEvent], None],
     ) -> Unsubscribe:
         """Deliver existing matching devices, then subscribe to future events."""
         self._check_available()
-        subscriber = _Subscriber(vendor_ids, callback)
+        subscriber = _Subscriber(brands, callback)
         self._subscribers.append(subscriber)
         for descriptor in tuple(self.devices.values()):
             if subscriber not in self._subscribers:
                 break
-            if descriptor.vendor_id in vendor_ids:
+            if (descriptor.stack, descriptor.brand_id) in brands:
                 notify(
                     [callback],
                     DeviceEventData(
@@ -106,9 +106,12 @@ class MockConnection:
         for subscriber in tuple(self._subscribers):
             if subscriber not in self._subscribers:
                 continue
-            if descriptor.vendor_id in subscriber.vendor_ids:
+            if (descriptor.stack, descriptor.brand_id) in subscriber.brands:
                 notify([subscriber.callback], event)
-            elif previous is not None and previous.vendor_id in subscriber.vendor_ids:
+            elif (
+                previous is not None
+                and (previous.stack, previous.brand_id) in subscriber.brands
+            ):
                 notify(
                     [subscriber.callback],
                     DeviceEventData(

@@ -110,7 +110,7 @@ def _model_data(device: Device) -> dict[str, object]:
         name: value
         for name in dir(device)
         if not name.startswith("_")
-        and name not in {"descriptor", "vendor_id", "catalog_model_id", "closed"}
+        and name not in {"descriptor", "identifiers", "closed"}
         and not callable(value := getattr(device, name))
     }
 
@@ -120,21 +120,22 @@ class _CLICollection(DeviceCollection[Device]):
 
     def __init__(self, connection: Connection, models: Sequence[type[Device]]) -> None:
         super().__init__(connection, models)
-        self._vendor_ids = {model.vendor_id for model in models}
+        self._brands = {(stack, brand) for stack, brand, _ in self._models}
         self._warned: set[str] = set()
 
     def _create_device(self, descriptor: DeviceDescriptor) -> Device | None:
         device = super()._create_device(descriptor)
         if (
             device is None
-            and descriptor.vendor_id in self._vendor_ids
+            and (descriptor.stack, descriptor.brand_id) in self._brands
             and descriptor.dev_eui not in self._warned
         ):
             self._warned.add(descriptor.dev_eui)
             print(
                 f"Warning: unmapped device {descriptor.name!r} "
-                f"(DevEUI {descriptor.dev_eui}, vendor ID {descriptor.vendor_id}, "
-                f"catalog model ID {descriptor.catalog_model_id or 'missing'}). "
+                f"(DevEUI {descriptor.dev_eui}, stack {descriptor.stack}, "
+                f"brand ID {descriptor.brand_id}, "
+                f"model ID {descriptor.model_id or 'missing'}). "
                 "No supported model matches this device.",
                 file=sys.stderr,
             )

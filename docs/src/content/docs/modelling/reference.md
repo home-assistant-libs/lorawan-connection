@@ -5,8 +5,8 @@ description: Collection lifecycle, callback order, and cleanup behavior.
 
 ## Device
 
-An abstract model base. Declare class attributes `vendor_id: int` and
-`catalog_model_id: str`, then implement `handle_event(event)`.
+An abstract model base. Declare `identifiers: Mapping[str, tuple[int | str, str]]`, mapping each stack
+to its `(brand_id, model_id)` pair. Then implement `handle_event(event)`.
 
 `Device(descriptor)` initializes `descriptor` and listeners. Model constructors
 accept a descriptor and call `super().__init__(descriptor)`. The model defines its
@@ -72,7 +72,7 @@ its `DEVICES` declaration. An explicit empty sequence accepts no models.
   Treat it as a read-only view; only the collection changes its contents.
 
 The collection copies the registry at construction. Duplicate
-`(vendor_id, catalog_model_id)` pairs raise `ValueError`. A subclass inherits `DEVICES`
+`(stack, brand_id, model_id)` pairs raise `ValueError`. A subclass inherits `DEVICES`
 unless it replaces that declaration. Explicit constructor models override it.
 Registered models inherit `Device` and accept a descriptor as their constructor argument.
 
@@ -80,7 +80,7 @@ Registered models inherit `Device` and accept a descriptor as their constructor 
 
 The backend-neutral `Connection` protocol exposes:
 
-- `async_subscribe(*, vendor_ids, callback) -> Unsubscribe` reports matching existing
+- `async_subscribe(*, brands, callback) -> Unsubscribe` takes a `frozenset[tuple[str, int | str]]` and reports matching existing
   devices before returning, then live events. Arguments are keyword-only.
 - `on_disconnect(callback) -> Unsubscribe` registers a notification callback with no arguments.
 - `async_send_downlink(downlink: Downlink) -> str` queues a command and returns its
@@ -92,14 +92,14 @@ Read-only connections raise `DownlinkError` on attempted writes.
 
 ### async_setup() → None
 
-Subscribe to the vendor IDs declared by the registered model classes. Existing
+Subscribe to the stack and brand pairs declared by the registered model classes. Existing
 models are ready when setup returns. Later events reach `handle_event()` automatically.
 Setup is allowed once per collection. Calling it again or after close raises `RuntimeError`.
 A failed or cancelled setup closes any models already created and propagates the error.
 
 ### _create_device(descriptor)
 
-The default factory matches `(vendor_id, catalog_model_id)` and constructs the
+The default factory matches `(stack, brand_id, model_id)` and constructs the
 registered class with the descriptor. An unknown identity returns `None`.
 Override this method for custom matching. Return a model with the supplied descriptor,
 or `None`. Do not perform I/O or feed events back into the collection from the factory.
@@ -110,7 +110,7 @@ or `None`. Do not perform I/O or feed events back into the collection from the f
 - Event DevEUIs are compared after removing colons and lowercasing.
 - `ADDED` and `UPDATED` need a matching descriptor. Missing or mismatched descriptors are ignored.
 - Either `ADDED` or `UPDATED` can create a model. Repeated descriptions do not create duplicates.
-- A changed `(vendor_id, catalog_model_id)` closes and removes the previous model before calling the factory.
+- A changed `(stack, brand_id, model_id)` closes and removes the previous model before calling the factory.
 - An unchanged identity updates `device.descriptor` in place.
 - New models are stored, then device-added callbacks run, then the model receives the event.
 - `REMOVED` retires the model without forwarding that event to its `handle_event` method.

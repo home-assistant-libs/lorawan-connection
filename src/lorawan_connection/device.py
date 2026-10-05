@@ -2,7 +2,7 @@
 
 import asyncio
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from typing import ClassVar
 
@@ -15,8 +15,7 @@ from .payloads import Ack
 class Device(ABC):
     """Own identity and listeners; subclasses define data and interpret events."""
 
-    vendor_id: ClassVar[int]
-    catalog_model_id: ClassVar[str]
+    identifiers: ClassVar[Mapping[str, tuple[int | str, str]]]
 
     def __init__(self, descriptor: DeviceDescriptor) -> None:
         self.descriptor = descriptor
