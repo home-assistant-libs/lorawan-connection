@@ -109,6 +109,18 @@ If a command should expire while queued, pass a timezone-aware `expires_at`
 datetime. Queue expiry limits how long the server retains a command; the caller's
 timeout limits how long the application waits.
 
+
+The Dragino example exposes optional expiry on both output methods:
+
+```python
+await device.async_set_relay(1, True)  # No queue expiry.
+await device.async_set_digital_output(1, True, expires_at=deadline)
+```
+
+`deadline` must be a timezone-aware datetime. ChirpStack supports queue expiry;
+TTS rejects an explicit deadline. Without expiry, a queued command can execute
+later, including after the caller stops waiting. No automatic queue clearing occurs.
+
 ### Handle failures
 
 A rejected command or negative acknowledgement raises `DownlinkError`.

@@ -2,12 +2,14 @@
 
 import asyncio
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock
 
 import grpc
 import pytest
 
+from dragino_lorawan import LT22222, DraginoDevices
 from lorawan_connection import ConnectionUnavailable, Downlink, DownlinkError, EventType
 from lorawan_connection.backend._tts_api import message
 from lorawan_connection.backend.tts import AuthenticationError, TTSConnection
@@ -330,3 +332,41 @@ async def test_other_application_events(
         message("ApplicationUp", end_device_ids=IDS, **{field: fields[field]})
     )
     assert received[-1].type is expected
+
+
+@pytest.mark.parametrize(
+    "method,payload",
+    [
+        ("async_set_relay", b"\x03\x01\x11"),
+        ("async_set_digital_output", b"\x02\x01\x11\x11"),
+    ],
+)
+async def test_dragino_output_command(
+    connection: TTSConnection, method: str, payload: bytes
+) -> None:
+    connection.devices[EUI] = replace(
+        connection.devices[EUI],
+        brand_id=LT22222.identifiers["tts"][0],
+        model_id=LT22222.identifiers["tts"][1],
+    )
+    models = DraginoDevices(connection)
+    await models.async_setup()
+    model = models.devices[EUI]
+    connection._application.DownlinkQueuePush = AsyncMock()
+    pending = asyncio.create_task(getattr(model, method)(1, True))
+    await asyncio.sleep(0)
+    queued = connection._application.DownlinkQueuePush.call_args.args[0].downlinks[0]
+    assert queued.frm_payload == payload
+    assert queued.f_port == 2
+    assert queued.confirmed
+    await connection.handle_message(
+        message(
+            "ApplicationUp",
+            end_device_ids=IDS,
+            downlink_ack={"correlation_ids": queued.correlation_ids},
+        )
+    )
+    await pending
+    assert model.relays == {1: None, 2: None}
+    assert model.digital_outputs == {1: None, 2: None}
+    models.close()

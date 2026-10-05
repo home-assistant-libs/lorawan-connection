@@ -50,7 +50,6 @@ async def test_output_commands(
     await collection.async_setup()
     device = collection.devices[descriptor.dev_eui]
 
-    before = datetime.now(UTC)
     command = getattr(device, method)
     pending = asyncio.create_task(command(channel, on))
     await asyncio.sleep(0)
@@ -68,11 +67,7 @@ async def test_output_commands(
     assert request.data == bytes.fromhex(payload)
     assert request.f_port == 2
     assert request.confirmed
-    assert (
-        before + timedelta(seconds=30)
-        <= request.expires_at
-        <= datetime.now(UTC) + timedelta(seconds=30)
-    )
+    assert request.expires_at is None
     assert device.relays == {1: None, 2: None}
     assert device.digital_outputs == {1: None, 2: None}
     mock_connection.emit(inventory(descriptor, EventType.REMOVED))
@@ -186,3 +181,16 @@ async def test_cancel_does_not_retry(connection: ChirpStackConnection) -> None:
         )
     connection._device_api.Enqueue.assert_awaited_once()
     await connection.close()
+
+
+@pytest.mark.parametrize("method", ["async_set_relay", "async_set_digital_output"])
+async def test_output_explicit_expiry(method: str) -> None:
+    device = LT22222(DESCRIPTOR)
+    device._send_downlink = AsyncMock(return_value="queue")
+    expiry = datetime.now(UTC) + timedelta(seconds=30)
+    pending = asyncio.create_task(getattr(device, method)(1, True, expires_at=expiry))
+    await asyncio.sleep(0)
+    assert device._send_downlink.call_args.args[0].expires_at == expiry
+    device._handle_ack(AckData("queue", True))
+    await pending
+    device.close()

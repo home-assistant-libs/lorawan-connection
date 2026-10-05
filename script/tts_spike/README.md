@@ -76,9 +76,9 @@ and polls inventory as a fallback. The HA `the_things_stack` integration owns
 recovery and reauthentication. Its external test is
 `script/lorawan_poc/real_tts.py` in the Core worktree.
 
-TTS does not support queue expiry. The backend rejects `expires_at`; Dragino's
-expiry-requiring relay methods remain unsupported through TTS. The harness tests
-raw commands without expiry. Devices without a DevEUI are skipped.
+TTS does not support queue expiry. The backend rejects explicit `expires_at`.
+Dragino relay and digital-output methods default to no expiry and work through TTS.
+The harness tests raw commands without expiry. Devices without a DevEUI are skipped.
 
 The generic connection protocol uses `(stack, brand_id)` filters. Device models
 keep each stack's native catalog IDs. Collections need no server-selection logic.

@@ -90,8 +90,9 @@ The `lorawan_connection.backend.tts` adapter uses The Things Stack gRPC APIs.
 Install `lorawan-connection[tts]`. It supports separate Identity and Application
 Servers, native catalog identity, live uplinks, lifecycle events, and command ACKs.
 See the [TTS guide](https://home-assistant-libs.github.io/lorawan-connection/connection/tts/).
-TTS rejects commands with queue expiry; the Dragino example's relay commands
-require expiry and therefore cannot run through this backend yet.
+The Dragino example's relay and digital-output methods default to no queue expiry
+and work through both backends. Pass an optional `expires_at` datetime when needed.
+TTS rejects explicit queue expiry; ChirpStack supports it.
 
 ## Sending commands
 

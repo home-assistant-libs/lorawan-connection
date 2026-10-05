@@ -100,9 +100,13 @@ ACK, NACK, or downlink failure to the waiting model. A read-only write fails wit
 `DownlinkError` and leaves the connection available. Commands are never retried.
 
 TTS has no queue-expiry field. The adapter rejects a downlink with `expires_at`
-before enqueueing it. The Dragino example requires a 30-second queue expiry, so
-its relay commands are currently unavailable through TTS. Sensor readings work.
-A local timeout stops waiting but does not remove a queued command.
+before enqueueing it. The Dragino relay and digital-output methods default to no
+expiry and can run through TTS. A local timeout stops waiting but does not remove
+a queued command; it may be delivered later.
+
+Queue clearing is a separate operation that needs a live server connection. It
+cannot undo a command already sent and can remove other pending commands. The
+backend does not clear queues automatically when a command times out.
 
 ## CLI
 
