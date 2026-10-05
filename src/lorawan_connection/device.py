@@ -26,6 +26,7 @@ class Device(ABC):
         self._pending_acks: dict[str, asyncio.Future[bool]] = {}
         self._early_acks: dict[str, bool] = {}
         self._enqueuing = 0
+        self._connection_generation = 0
 
     @property
     def closed(self) -> bool:
@@ -79,9 +80,12 @@ class Device(ABC):
             return
 
         # An ACK can reach the event feed before enqueue returns its queue ID.
+        generation = self._connection_generation
         self._enqueuing += 1
         try:
             queue_id = await self._send_downlink(downlink)
+            if generation != self._connection_generation:
+                raise DownlinkError("Connection was lost while sending the command")
             if self._closed:
                 raise DownlinkError("Device is closed")
             result = asyncio.get_running_loop().create_future()
@@ -109,6 +113,19 @@ class Device(ABC):
     @abstractmethod
     def handle_event(self, event: DeviceEvent) -> None:
         """Interpret an event, commit state, then notify listeners as needed."""
+
+    def _connection_lost(self) -> None:
+        """Fail commands on a lost connection without retiring this model."""
+        self._connection_generation += 1
+        for result in self._pending_acks.values():
+            if not result.done():
+                result.set_exception(
+                    DownlinkError(
+                        "Connection was lost while waiting for acknowledgement"
+                    )
+                )
+        self._pending_acks.clear()
+        self._early_acks.clear()
 
     def close(self) -> None:
         """Retire the model and release listeners; repeated calls are harmless."""

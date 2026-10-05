@@ -150,6 +150,7 @@ after removal or replacement closes that model, but not during ordinary shutdown
 
 `Connection` exposes only `async_subscribe(*, brands, callback)`,
 `on_disconnect(callback)`, and `async_send_downlink(downlink)`.
+Collections fail pending commands when the connection is lost and keep models open.
 Applications own connection startup, recovery, and shutdown. The ChirpStack backend
 retries transient polling and device-stream failures before reporting connection loss.
 
@@ -159,14 +160,15 @@ the callback takes no arguments. Use `await devices.async_setup()` to deliver ev
 
 ## Home Assistant
 
-The [Home Assistant guide](https://home-assistant-libs.github.io/lorawan-connection/home-assistant/integration/) covers provider subscriptions, discovery, config-entry
-lifecycle, and entities that observe library models. The proposed `DeviceManager`
-resolves an explicitly selected connection, creates the collection and coordinators,
-and cleans up removed devices. Platforms subscribe to ready coordinators.
+The [Home Assistant guide](https://home-assistant-libs.github.io/lorawan-connection/home-assistant/integration/)
+covers registered connections, discovery, coordinators, and entities. Server
+integrations register connections with `lorawan`. One vendor entry handles all
+registered servers through `DeviceManager`, with one collection per connection.
+Platforms subscribe to ready coordinators. Temporary disconnection preserves
+models and registry records; reconnection reconciles the device list.
+
 Vendor coordinators and the manager use `device_identifier()` for registry identity.
 It returns one identifier tuple; wrap it in a set for `DeviceInfo.identifiers`.
-Manager setup raises `ConfigEntryNotReady` for unavailable connections and
-`ConfigEntryError` for missing connection entries.
 These Home Assistant APIs are proposals and are not yet part of Home Assistant.
 
 ## Development

@@ -192,3 +192,31 @@ async def test_enqueue_failure_cleans_up(devices, sender, error) -> None:
     assert not device._early_acks
     assert device._enqueuing == 0
     sender.assert_awaited_once()
+
+
+@pytest.mark.parametrize("during_enqueue", [False, True])
+async def test_disconnect_fails_command_without_retiring_model(during_enqueue) -> None:
+    connection = MockConnection([DESCRIPTOR])
+    enqueued, release = asyncio.Event(), asyncio.Event()
+    original = connection.async_send_downlink
+
+    async def send(downlink):
+        result = await original(downlink)
+        enqueued.set()
+        if during_enqueue:
+            await release.wait()
+        return result
+
+    connection.async_send_downlink = send
+    devices = DeviceCollection(connection, [DeviceModel])
+    await devices.async_setup()
+    device = devices.devices[DESCRIPTOR.dev_eui]
+    command = asyncio.create_task(device.async_send_downlink(data=b"command", f_port=2))
+    await enqueued.wait()
+    connection.disconnect()
+    release.set()
+    with pytest.raises(DownlinkError, match="Connection was lost"):
+        await command
+    assert devices.devices[DESCRIPTOR.dev_eui] is device
+    assert not device.closed
+    devices.close()

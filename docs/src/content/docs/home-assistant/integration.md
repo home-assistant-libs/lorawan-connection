@@ -12,34 +12,23 @@ integration, publish it as a separate PyPI package with no Home Assistant import
 Test its decoders, models, and commands independently.
 
 The Home Assistant integration connects that library to config entries and entities.
-The `lorawan` provider owns the server connection. Your device library consumes a
-`Connection`, selects device models, and decodes their data. Entities read the
-models' attributes and call their command methods.
+A server integration, such as ChirpStack, owns credentials and transport recovery.
+It registers its connection with the shared `lorawan` integration. Device libraries
+receive the common `Connection` interface and interpret device messages.
 
-Use one vendor config entry per provider network. That entry owns one collection
-for all supported devices on that network. Store its `DeviceManager` in `entry.runtime_data`.
+Use one vendor config entry for all registered LoRaWAN connections. Its
+`DeviceManager` creates one collection per connection and one coordinator per device.
+Store the manager in `entry.runtime_data`.
 
 ## Config flow
 
-The user first configures the `lorawan` integration. This creates a Home Assistant
-config entry for the server connection. That entry stores the endpoint and API key.
+Users configure their server integration and select the applications to expose.
+They confirm the discovered vendor integration once. The vendor config flow has
+no connection picker and stores no server credentials or connection reference.
+Use the vendor domain as its unique ID to prevent duplicate vendor entries.
 
-Your vendor integration's config flow selects which LoRaWAN entry to use.
-For automatic discovery, the provider supplies its entry ID in the discovery data.
-For manual setup, select the entry automatically when only one exists. Show a
-chooser when several exist. If none exists, ask the user to set up LoRaWAN first.
-
-After confirmation, store these fields in the vendor entry's `data`:
-
-| Field | Meaning |
-| --- | --- |
-| `connection_entry_id` | The selected LoRaWAN config entry's `entry_id`. Pass this explicitly to `manager.async_setup(connection_entry_id=...)`. |
-| `network_id` | The provider's stable identifier for the logical network, supplied through discovery or read from the selected entry. |
-
-Use `network_id` as the vendor entry's unique ID to prevent duplicate entries for
-the same network. It stays unchanged when server credentials change. Connection
-credentials remain in the LoRaWAN entry.
-
+The vendor integration can load before any server connects. Its manager subscribes
+to connections as they register, including servers added later.
 Users provision devices in the existing LoRaWAN stack in the first version.
 
 ## Dependencies and discovery
@@ -64,7 +53,7 @@ integration. These discovery fields belong in a SenseCAP manifest:
 Add a `requirements` entry for your published vendor package. The SenseCAP package
 on this page is an example, not a published package.
 
-Use numeric LoRa Alliance VendorIDs; a match on any listed ID selects the integration.
+Keep each stack’s native brand IDs: ChirpStack uses numeric vendor IDs; TTS uses strings.
 
 Expose the library's supported models in a `lorawan.py` platform. The provider uses
 this declaration to explain whether a device's model is supported:
@@ -77,9 +66,9 @@ DEVICE_MODELS = SenseCapDeviceCollection.DEVICES
 
 ## Config-entry setup
 
-Use `lorawan.DeviceManager` to own the collection and its coordinators.
+Use `lorawan.DeviceManager` to own the collections and their coordinators.
 Pass a collection factory and a coordinator factory. The collection factory receives
-the selected connection. The coordinator factory receives `hass` and a device model;
+each registered connection. The coordinator factory receives `hass` and a device model;
 it initializes `data` and subscribes to model updates before returning.
 The manager then notifies platforms.
 
@@ -104,7 +93,7 @@ PLATFORMS = [Platform.SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: SenseCapConfigEntry) -> bool:
-    """Forward all vendor events to one library collection."""
+    """Set up supported devices across all LoRaWAN connections."""
     manager = entry.runtime_data = DeviceManager(
         hass,
         entry,
@@ -112,7 +101,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SenseCapConfigEntry) -> 
         create_coordinator=SenseCapCoordinator,
     )
     entry.async_on_unload(manager.close)
-    await manager.async_setup(connection_entry_id=entry.data["connection_entry_id"])
+    await manager.async_setup()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
@@ -122,19 +111,19 @@ async def async_unload_entry(hass: HomeAssistant, entry: SenseCapConfigEntry) ->
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 ```
 
-`manager.async_setup(connection_entry_id=...)` resolves the connection, creates the
-collection, and calls its `async_setup()` to subscribe to its vendors. The manager
-does not read the consuming entry's data; the integration passes its selection explicitly.
-Existing devices receive coordinators before setup returns. Platforms use
-`subscribe_coordinator_added()` to receive these coordinators and later additions.
-The collection is available as `manager.collection` after setup creates it.
+`manager.async_setup()` creates collections for current connections and subscribes
+to future registrations. Each collection calls its own `async_setup()` to receive
+the brands declared by its models. Existing devices receive coordinators before
+manager setup returns. Platforms use `subscribe_coordinator_added()` to receive
+those coordinators and later additions.
 
-The manager reloads the consuming entry when the connection disconnects.
-Its setup raises `ConfigEntryNotReady` for an unavailable connection so HA retries.
-It raises `ConfigEntryError` for a missing connection entry so setup fails without retrying.
-The LoRaWAN integration owns transport recovery and credential reauthentication.
-Closing the manager removes its disconnect listener, closes the collection, and
-retires its coordinators. It leaves the connection open.
+A disconnected server makes only its coordinators unavailable. The manager keeps
+its collections, models, and registry records. When the server returns, it reuses
+existing models, reconciles the current device list, and restores availability.
+Vendor config entries do not reload when a server disconnects.
+
+The server integration owns reconnection and credential reauthentication. Closing
+the manager releases all collections and coordinators while leaving the transports open.
 
 ## Share updates through a coordinator
 
@@ -202,8 +191,8 @@ retaining retired coordinators until entry unload. The manager schedules
 
 The coordinator exposes `device_info` for its entities. Use
 `{lorawan.device_identifier(DOMAIN, device)}` for its `identifiers` set. The helper
-returns one `(domain, identifier)` tuple combining the integration domain, network ID,
-and DevEUI. The manager uses the same identity
+returns one `(domain, identifier)` tuple combining the integration domain, server
+config entry ID, and DevEUI. The provider uses its entry ID as `network_id`. The manager uses the same identity
 for cleanup without reading the coordinator's `device_info`.
 
 ## Device lifecycle
@@ -215,12 +204,15 @@ contracts so each vendor integration can use the same lifecycle handling:
 - Create one coordinator per model and deliver it to all subscribed platforms.
 - Remove the registry device when its model is removed or replaced. HA removes
   its entity registry records and active entities, including disabled entities.
-- After successful setup, remove registry devices absent from the collection.
-  This covers devices removed while HA was offline.
+- After a connection registers, remove its registry devices absent from the complete
+  device list. Keep records for other connections, including offline servers.
+- Remove records for a deleted server entry, including deletions while the vendor
+  integration was unloaded. Device identifiers carry the server entry ID.
 - Update registered device names when their model descriptors change.
 - Close the collection and retire coordinators on unload, preserving registry records.
 
-Entities register devices through their coordinator's `device_info`. Keep manufacturer
+The manager registers device identity before notifying platforms. Entities add
+metadata through their coordinator’s `device_info`. Keep manufacturer
 and model metadata in the vendor coordinator. The manager accepts ordinary
 `DataUpdateCoordinator` subclasses; no LoRaWAN-specific coordinator base is required.
 
@@ -236,7 +228,8 @@ Use `lorawan.LoRaWANEntity` for entities backed by these device models. It exten
 entity addition that finishes after the manager removed its device.
 
 Its `async_update()` is a no-op because readings arrive through the connection.
-Provider disconnection uses the config-entry reload path.
+Server disconnection makes the affected coordinators unavailable. Other servers
+continue updating their devices.
 
 ## Map device values to entities
 
@@ -398,9 +391,10 @@ error without rejecting setup or marking the whole network offline.
 
 ## Test the integration boundary
 
-Use a configured LoRaWAN entry with a mocked transport, or return a `MockConnection`
-from the manager's private connection resolver. Emit events into the real vendor collection. Assert discovery confirmation, initial model replay, entity state,
-later additions, removal, unload, and reload after disconnect.
+Register server connections with mocked transports, then emit events into the real
+vendor collections. Assert discovery confirmation, initial model replay, entity
+state, later additions, removal, and unload. Test two connections together: losing
+one must preserve the other’s availability, and reconnecting must reuse entities.
 
 Check that one model update reaches every entity through their shared coordinator.
 Check live removal, startup cleanup of devices removed while offline, and disabled

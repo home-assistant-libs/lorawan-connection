@@ -169,7 +169,7 @@ async def test_disconnect_ends_subscriptions_and_pending_commands() -> None:
     remaining.assert_called_once_with()
     discarded.assert_not_called()
     assert not devices.devices
-    with pytest.raises(DownlinkError, match="closed"):
+    with pytest.raises(DownlinkError, match="Connection was lost"):
         await pending
     with pytest.raises(ConnectionUnavailable):
         await connection.async_subscribe(

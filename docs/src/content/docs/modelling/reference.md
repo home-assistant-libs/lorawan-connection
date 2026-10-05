@@ -96,6 +96,9 @@ Subscribe to the stack and brand pairs declared by the registered model classes.
 models are ready when setup returns. Later events reach `handle_event()` automatically.
 Setup is allowed once per collection. Calling it again or after close raises `RuntimeError`.
 A failed or cancelled setup closes any models already created and propagates the error.
+The collection listens for connection loss and fails pending command waits with
+`DownlinkError`. Models remain open. An application can retain the collection when
+its connection supports recovery, or close it when ending the session.
 
 ### _create_device(descriptor)
 

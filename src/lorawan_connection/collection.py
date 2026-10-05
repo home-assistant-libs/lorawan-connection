@@ -26,6 +26,7 @@ class DeviceCollection[DeviceT: Device]:
         """Own one network; use explicit model classes or the subclass's DEVICES."""
         self._connection = connection
         self._unsubscribe: Unsubscribe | None = None
+        self._unsubscribe_disconnect: Unsubscribe | None = None
         self._setup_started = False
         self._send_downlink = connection.async_send_downlink
         self.devices: dict[str, DeviceT] = {}
@@ -46,6 +47,9 @@ class DeviceCollection[DeviceT: Device]:
             raise RuntimeError("Device collection is closed or already set up")
         self._setup_started = True
         try:
+            self._unsubscribe_disconnect = self._connection.on_disconnect(
+                self._connection_lost
+            )
             unsubscribe = await self._connection.async_subscribe(
                 brands=frozenset(
                     (stack, brand_id) for stack, brand_id, _ in self._models
@@ -142,9 +146,16 @@ class DeviceCollection[DeviceT: Device]:
                 device._handle_ack(cast(Ack, event.data))
             device.handle_event(event)
 
+    def _connection_lost(self) -> None:
+        for device in tuple(self.devices.values()):
+            device._connection_lost()
+
     def close(self) -> None:
         """Retire all models and listeners; repeated calls are harmless."""
         self._closed = True
+        if self._unsubscribe_disconnect is not None:
+            self._unsubscribe_disconnect()
+            self._unsubscribe_disconnect = None
         if self._unsubscribe is not None:
             self._unsubscribe()
             self._unsubscribe = None

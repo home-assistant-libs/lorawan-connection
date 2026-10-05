@@ -67,7 +67,8 @@ async def test_connection_example(
             )
         )
         connection.error = ConnectionUnavailable("Disconnected")
-        connection.on_disconnect.call_args.args[0]()
+        for registration in tuple(connection.on_disconnect.call_args_list):
+            registration.args[0]()
         return stop
 
     connection.async_subscribe.side_effect = subscribe
