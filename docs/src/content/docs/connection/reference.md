@@ -4,6 +4,8 @@ description: Exact fields for descriptors, event envelopes, and payload contract
 ---
 
 All types below are importable from `lorawan_connection`.
+For transport lifecycle and subscription requirements, see
+[Add a backend](/lorawan-connection/connection/adding-a-backend/).
 
 ## DeviceDescriptor
 

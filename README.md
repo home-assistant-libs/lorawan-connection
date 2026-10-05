@@ -4,8 +4,8 @@
 [Building a device library](https://home-assistant-libs.github.io/lorawan-connection/patterns/library/)
 
 Backend-neutral LoRaWAN events and device collections for Python 3.12+.
-The base package has no runtime dependencies. Install the optional ChirpStack backend
-to connect to a server.
+The base package has no runtime dependencies. Install the optional ChirpStack or
+The Things Stack backend to connect to a server.
 
 A vendor `DeviceCollection` creates supported models and routes incoming events
 to them automatically. Applications use device-added callbacks to observe those
@@ -172,6 +172,13 @@ For ChirpStack, call `await connection.async_connect()` before setting up collec
 Register disconnect notifications with `connection.on_disconnect(callback)`;
 the callback takes no arguments. Use `await devices.async_setup()` to deliver events to models. Several collections can share one connection.
 
+## Add a backend
+
+The [backend guide](https://home-assistant-libs.github.io/lorawan-connection/connection/adding-a-backend/)
+covers optional dependency packaging, complete inventory, subscription ordering,
+event translation, downlink acknowledgements, transport cleanup, and CLI selection.
+Adapters implement the connection protocol without importing an application framework.
+
 ## Home Assistant
 
 The [Home Assistant guide](https://home-assistant-libs.github.io/lorawan-connection/home-assistant/integration/)
@@ -185,7 +192,9 @@ Server integrations use their config entry ID as `network_id` and call
 `await lorawan.async_register_connection(hass, entry, connection=connection)`
 after connecting. The returned callback withdraws the registration. The server
 integration calls it before closing its transport and owns retries and reauthentication.
-The guide includes a registration example and the setup and shutdown requirements.
+The [server integration guide](https://home-assistant-libs.github.io/lorawan-connection/home-assistant/server-integration/)
+shows how to add a backend to HA, including manifest dependencies, config-flow
+validation, registration, recovery, cleanup, and vendor discovery.
 
 Vendor coordinators and the manager use `device_identifier()` for registry identity.
 It returns one identifier tuple; wrap it in a set for `DeviceInfo.identifiers`.

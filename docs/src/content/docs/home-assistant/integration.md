@@ -13,7 +13,7 @@ Test its decoders, models, and commands independently.
 
 The Home Assistant integration connects that library to config entries and entities.
 Server integrations such as ChirpStack and The Things Stack own credentials and transport recovery.
-It registers its connection with the shared `lorawan` integration. Device libraries
+Each server integration registers its connection with the shared `lorawan` integration. Device libraries
 receive the common `Connection` interface and interpret device messages.
 
 Use one vendor config entry for all registered LoRaWAN connections. Its
@@ -21,6 +21,9 @@ Use one vendor config entry for all registered LoRaWAN connections. Its
 Store the manager in `entry.runtime_data`.
 
 ## Register a server connection
+
+For a new backend, follow [Add a server integration](/lorawan-connection/home-assistant/server-integration/).
+It covers the server manifest, config flow, transport ownership, and discovery.
 
 The server integration declares `lorawan` in its manifest's `dependencies`.
 It constructs the backend with `network_id=entry.entry_id` and connects it before

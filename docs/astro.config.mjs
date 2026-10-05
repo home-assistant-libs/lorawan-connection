@@ -42,6 +42,7 @@ export default defineConfig({
           { label: "Understanding events", slug: "connection/events" },
           { label: "Connecting to ChirpStack", slug: "connection/chirpstack" },
           { label: "Connecting to The Things Stack", slug: "connection/tts" },
+          { label: "Add a backend", slug: "connection/adding-a-backend" },
           { label: "Event reference", slug: "connection/reference" },
         ] },
         { label: "Device modelling", items: [
@@ -55,6 +56,7 @@ export default defineConfig({
         ] },
         { label: "Home Assistant", items: [
           { label: "Integration structure", slug: "home-assistant/integration" },
+          { label: "Add a server integration", slug: "home-assistant/server-integration" },
         ] },
       ],
     }),
