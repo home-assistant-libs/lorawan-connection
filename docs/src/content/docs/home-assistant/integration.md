@@ -150,7 +150,7 @@ or a first refresh. Put this in `coordinator.py`:
 import logging
 from typing import override
 
-from homeassistant.components.lorawan import device_identifiers
+from homeassistant.components.lorawan import device_identifier
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
@@ -175,7 +175,7 @@ class SenseCapCoordinator(DataUpdateCoordinator[S2101]):
     def device_info(self) -> DeviceInfo:
         """Describe this device for its entities."""
         return DeviceInfo(
-            identifiers=device_identifiers(DOMAIN, self.data),
+            identifiers={device_identifier(DOMAIN, self.data)},
             name=self.data.descriptor.name,
             manufacturer="Seeed Studio",
             model="SenseCAP S2101",
@@ -200,8 +200,9 @@ retaining retired coordinators until entry unload. The manager schedules
 `async_shutdown()` when the model leaves the collection, including during unload.
 
 The coordinator exposes `device_info` for its entities. Use
-`lorawan.device_identifiers(DOMAIN, device)` for its identifiers. The helper combines
-the integration domain, network ID, and DevEUI. The manager uses the same identity
+`{lorawan.device_identifier(DOMAIN, device)}` for its `identifiers` set. The helper
+returns one `(domain, identifier)` tuple combining the integration domain, network ID,
+and DevEUI. The manager uses the same identity
 for cleanup without reading the coordinator's `device_info`.
 
 ## Device lifecycle
