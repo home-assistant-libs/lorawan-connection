@@ -167,6 +167,12 @@ registered servers through `DeviceManager`, with one collection per connection.
 Platforms subscribe to ready coordinators. Temporary disconnection preserves
 models and registry records; reconnection reconciles the device list.
 
+Server integrations use their config entry ID as `network_id` and call
+`await lorawan.async_register_connection(hass, entry, connection=connection)`
+after connecting. The returned callback withdraws the registration. The server
+integration calls it before closing its transport and owns retries and reauthentication.
+The guide includes a registration example and the setup and shutdown requirements.
+
 Vendor coordinators and the manager use `device_identifier()` for registry identity.
 It returns one identifier tuple; wrap it in a set for `DeviceInfo.identifiers`.
 These Home Assistant APIs are proposals and are not yet part of Home Assistant.

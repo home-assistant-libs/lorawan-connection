@@ -20,6 +20,65 @@ Use one vendor config entry for all registered LoRaWAN connections. Its
 `DeviceManager` creates one collection per connection and one coordinator per device.
 Store the manager in `entry.runtime_data`.
 
+## Register a server connection
+
+The server integration declares `lorawan` in its manifest's `dependencies`.
+It constructs the backend with `network_id=entry.entry_id` and connects it before
+registration. The registration reads the complete device inventory before it
+exposes the connection to vendor integrations.
+
+For a connected `ChirpStackConnection`, register it during config-entry setup:
+
+```python
+from lorawan_connection import Unsubscribe
+from lorawan_connection.chirpstack import ChirpStackConnection
+
+from homeassistant.components import lorawan
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant, callback
+
+
+async def async_register_server(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    connection: ChirpStackConnection,
+) -> Unsubscribe:
+    """Register an already connected backend and schedule recovery on disconnect."""
+    unsubscribe = await lorawan.async_register_connection(
+        hass, entry, connection=connection
+    )
+    entry.async_on_unload(unsubscribe)
+
+    @callback
+    def disconnected() -> None:
+        if not hass.is_stopping:
+            hass.config_entries.async_schedule_reload(entry.entry_id)
+
+    unsubscribe_disconnect = connection.on_disconnect(disconnected)
+    entry.async_on_unload(unsubscribe_disconnect)
+
+    @callback
+    def unsubscribe_server() -> None:
+        unsubscribe_disconnect()
+        unsubscribe()
+
+    return unsubscribe_server
+```
+
+Store the returned callback with the connection in the server's runtime data.
+During unload or HA shutdown, call it before `await connection.close()`.
+This withdraws the registration and stops recovery callbacks before closing the
+transport. Registration cleanup does not close the transport itself.
+
+The server integration closes the transport if setup or registration fails.
+It maps authentication failures to `ConfigEntryAuthFailed` and connection failures
+to `ConfigEntryNotReady`. HA retries setup and registers the replacement connection
+under the same config entry ID.
+
+An adapter must support `async_subscribe(brands=None, callback=...)` to replay all
+devices in the selected applications. Vendor collections receive only the common
+`Connection` methods. They cannot close or reconnect the server transport.
+
 ## Config flow
 
 Users configure their server integration and select the applications to expose.
