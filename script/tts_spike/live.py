@@ -14,7 +14,6 @@ sys.path[:0] = [
 ]
 
 import grpc
-from backend import TTSConnection
 from ttn.lorawan.v3 import application_pb2 as apps
 from ttn.lorawan.v3 import application_services_pb2_grpc as apps_grpc
 from ttn.lorawan.v3 import applicationserver_pb2 as app
@@ -27,6 +26,7 @@ from ttn.lorawan.v3 import networkserver_pb2_grpc as ns_grpc
 from ttn.lorawan.v3 import rights_pb2 as rights
 
 from lorawan_connection import Downlink, DownlinkError
+from lorawan_connection.backend.tts import TTSConnection
 from sensecap_lorawan import S2101, SenseCapDeviceCollection
 
 
@@ -161,14 +161,14 @@ async def main():
         metadata=metadata,
     )
     connection = TTSConnection(
-        grpc.aio.insecure_channel("127.0.0.1:18849"),
+        "http://127.0.0.1:18849",
         key_response.key,
         application_ids=[app_ids.application_id],
         network_id="tts-spike",
     )
     models = SenseCapDeviceCollection(connection)
     try:
-        await connection.connect()
+        await connection.async_connect()
         await models.async_setup()
         sensor = models.devices[device_ids.dev_eui.hex()]
         assert isinstance(sensor, S2101)
@@ -254,13 +254,13 @@ async def main():
             metadata=metadata,
         )
         read_connection = TTSConnection(
-            grpc.aio.insecure_channel("127.0.0.1:18849"),
+            "http://127.0.0.1:18849",
             read_key.key,
             application_ids=[app_ids.application_id],
             network_id="tts-spike",
         )
         try:
-            await read_connection.connect()
+            await read_connection.async_connect()
             try:
                 await read_connection.async_send_downlink(
                     Downlink(dev_eui=device_ids.dev_eui.hex(), f_port=1, data=b"\x01")
@@ -310,11 +310,29 @@ async def main():
         await registry.Delete(device_ids, metadata=metadata)
         await until(lambda: not models.devices)
         print("PASS lifecycle removal retires model without polling")
-        print("Observed events:", connection.lifecycle_events)
+        print("PASS packaged backend completed all external checks")
     finally:
         models.close()
         await connection.close()
-        await channel.close()
+        try:
+            remaining = await registry.List(
+                devices.ListEndDevicesRequest(application_ids=app_ids, limit=100),
+                metadata=metadata,
+            )
+            for item in remaining.end_devices:
+                for service in (
+                    app_grpc.AsEndDeviceRegistryStub(channel),
+                    ns_grpc.NsEndDeviceRegistryStub(channel),
+                    registry,
+                ):
+                    try:
+                        await service.Delete(item.ids, metadata=metadata)
+                    except grpc.aio.AioRpcError as error:
+                        if error.code() is not grpc.StatusCode.NOT_FOUND:
+                            raise
+            await applications.Delete(app_ids, metadata=metadata)
+        finally:
+            await channel.close()
 
 
 if __name__ == "__main__":

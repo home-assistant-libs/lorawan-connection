@@ -86,6 +86,13 @@ Events are live notifications. The package does not persist history, reconnect a
 transport, or request replay after a gap. Providers report inventory before activity.
 Collections select models from catalog identity, never from names or payload guesses.
 
+The `lorawan_connection.backend.tts` adapter uses The Things Stack gRPC APIs.
+Install `lorawan-connection[tts]`. It supports separate Identity and Application
+Servers, native catalog identity, live uplinks, lifecycle events, and command ACKs.
+See the [TTS guide](https://home-assistant-libs.github.io/lorawan-connection/connection/tts/).
+TTS rejects commands with queue expiry; the Dragino example's relay commands
+require expiry and therefore cannot run through this backend yet.
+
 ## Sending commands
 
 Pass the connection to the collection. Device models encode their
@@ -127,8 +134,8 @@ if __name__ == "__main__":
 The helper discovers supported devices and prints their state. Models supply catalog
 identity and update listeners through the shared `Device` base. The CLI reads public
 model attributes and properties.
-Select the server with `--backend chirpstack`. ChirpStack is the default and the
-only backend currently available in the CLI. The helper imports the selected
+Select the server with `--backend chirpstack` or `--backend tts`. ChirpStack is
+the default. TTS requires explicit `--application` IDs and uses `TTS_API_KEY`. The helper imports the selected
 adapter only when connecting. `--help` works without backend extras installed.
 By default, it discovers applications across all accessible tenants and streams
 live updates. Use `--tenant UUID` or repeat `--application UUID` to restrict the
@@ -186,7 +193,7 @@ These Home Assistant APIs are proposals and are not yet part of Home Assistant.
 ## Development
 
 ```sh
-uv sync --group compatibility
+uv sync --group compatibility --all-extras
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy

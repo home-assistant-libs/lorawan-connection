@@ -15,7 +15,7 @@ if __name__ == "__main__":
     run(SenseCapDeviceCollection.DEVICES)
 ```
 
-The helper connects a `DeviceCollection` to ChirpStack. The collection creates
+The helper connects a `DeviceCollection` to the selected server. The collection creates
 supported models and routes events to them. The helper subscribes to each model's
 state and prints updates. The model owns decoding.
 
@@ -34,8 +34,7 @@ python -m my_sensors --backend chirpstack --server https://chirpstack.example.co
   --api-key-file /path/to/api-key
 ```
 
-`--backend` selects the server adapter. ChirpStack is the default and the only
-supported choice today. The helper imports the selected adapter when connecting.
+`--backend` selects `chirpstack` (the default) or `tts`. The helper imports the selected adapter when connecting.
 An unavailable extra produces an installation command. An unknown backend is
 rejected before opening a connection.
 
@@ -67,3 +66,11 @@ representation.
 Add `--list` to read the device list once and exit. Live mode stops on a
 connection failure with exit code 1. Ctrl+C closes models and the connection.
 The helper does not reconnect. `--help` works without the optional backend installed.
+
+## The Things Stack
+
+Install `lorawan-connection[tts]` and select `--backend tts`. Supply at least one
+`--application` ID. Use `TTS_API_KEY` or `--api-key-file` for its application key.
+Set `--identity-server` when the Identity Server differs from `--server`, which
+selects the Application Server. `--tenant` is specific to ChirpStack. See the
+[TTS connection guide](/lorawan-connection/connection/tts/) for rights and examples.

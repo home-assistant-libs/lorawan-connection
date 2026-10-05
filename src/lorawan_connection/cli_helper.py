@@ -26,17 +26,21 @@ from .callbacks import Unsubscribe
 
 if TYPE_CHECKING:
     from .backend.chirpstack import ChirpStackConnection
+    from .backend.tts import TTSConnection
 
 
 def add_connection_args(parser: argparse.ArgumentParser) -> None:
     """Add server, key, tenant, and application selection arguments."""
     parser.add_argument(
         "--backend",
-        choices=("chirpstack",),
+        choices=("chirpstack", "tts"),
         default="chirpstack",
         help="Server backend (default: chirpstack)",
     )
-    parser.add_argument("--server", required=True, help="ChirpStack gRPC http(s) URL")
+    parser.add_argument(
+        "--server", required=True, help="Application server gRPC http(s) URL"
+    )
+    parser.add_argument("--identity-server", help="TTS Identity Server gRPC URL")
     parser.add_argument(
         "--api-key-file", type=Path, help="Read the API key from a file"
     )
@@ -51,10 +55,37 @@ def add_connection_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
-async def connect_from_args(args: argparse.Namespace) -> "ChirpStackConnection":
-    """Open a scoped connection; use CHIRPSTACK_API_KEY unless a file is supplied."""
+async def connect_from_args(
+    args: argparse.Namespace,
+) -> "ChirpStackConnection | TTSConnection":
+    """Open the selected backend with its environment key or an explicit key file."""
+    if args.backend == "tts":
+        try:
+            from .backend.tts import TTSConnection
+        except ModuleNotFoundError as error:
+            raise ValueError(
+                'Install the backend: pip install "lorawan-connection[tts]"'
+            ) from error
+        if args.tenant:
+            raise ValueError("--tenant is only supported by ChirpStack")
+        key = (
+            (await asyncio.to_thread(args.api_key_file.read_text)).strip()
+            if args.api_key_file
+            else os.environ.get("TTS_API_KEY", "").strip()
+        )
+        if not key:
+            raise ValueError("Set TTS_API_KEY or use --api-key-file")
+        return TTSConnection(
+            args.server,
+            key,
+            identity_server=args.identity_server,
+            application_ids=list(dict.fromkeys(args.application)),
+            network_id=args.server,
+        )
     if args.backend != "chirpstack":
         raise ValueError(f"Unsupported backend: {args.backend}")
+    if args.identity_server:
+        raise ValueError("--identity-server is only supported by TTS")
     try:
         from .backend.chirpstack import ChirpStackConnection
     except ModuleNotFoundError as error:

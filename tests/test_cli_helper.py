@@ -515,3 +515,29 @@ async def test_removed_after_initial_output_failure(
         await _watch(args(), [Sensor])
     assert "removed: Greenhouse" in capsys.readouterr().out
     assert "KeyError" not in caplog.text
+
+
+async def test_tts_backend_selection(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TTS_API_KEY", "tts-secret")
+    connection = Mock()
+    with patch(
+        "lorawan_connection.backend.tts.TTSConnection", return_value=connection
+    ) as constructor:
+        result = await connect_from_args(
+            args(
+                "--backend",
+                "tts",
+                "--application",
+                "my-app",
+                "--identity-server",
+                "https://identity.example.com:8884",
+            )
+        )
+    assert result is connection
+    constructor.assert_called_once_with(
+        "http://localhost:8080",
+        "tts-secret",
+        identity_server="https://identity.example.com:8884",
+        application_ids=["my-app"],
+        network_id="http://localhost:8080",
+    )

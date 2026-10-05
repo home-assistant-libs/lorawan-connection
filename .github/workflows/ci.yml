@@ -23,7 +23,7 @@ jobs:
       - name: Ruff lint
         run: uvx ruff check .
       - name: mypy
-        run: uv run --group compatibility mypy
+        run: uv run --group compatibility --all-extras mypy
 
   test:
     runs-on: ubuntu-latest
@@ -38,7 +38,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: uv sync --group compatibility
+        run: uv sync --group compatibility --all-extras
       - name: Verify the interpreter is the one this job is for
         # Without the assert, a version uv declines to select leaves the job
         # testing whatever it picked instead, and the matrix silently covers

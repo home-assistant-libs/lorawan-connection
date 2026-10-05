@@ -35,3 +35,13 @@ from lorawan_connection.backend.chirpstack import ChirpStackConnection
 ```
 
 The CLI selects it with `--backend chirpstack` and imports it only when connecting.
+
+## Optional The Things Stack backend
+
+```sh
+pip install "lorawan-connection[tts]"
+```
+
+Import `TTSConnection` from `lorawan_connection.backend.tts`. The CLI selects it
+with `--backend tts`. Its gRPC and protobuf dependencies remain optional.
+See [Connecting to The Things Stack](/lorawan-connection/connection/tts/).

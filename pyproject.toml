@@ -21,6 +21,7 @@ dependencies = []
 
 [project.optional-dependencies]
 chirpstack = ["chirpstack-api==4.19.0"]
+tts = ["grpcio>=1.76,<2", "protobuf>=6.31,<8"]
 
 [project.urls]
 Homepage = "https://github.com/home-assistant-libs/lorawan-connection"

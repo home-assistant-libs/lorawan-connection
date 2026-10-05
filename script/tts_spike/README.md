@@ -1,7 +1,7 @@
-# The Things Stack connection spike
+# The Things Stack external test harness
 
-This is an external test harness, separate from the installed library and its test
-suite. It uses the actual TTS gRPC services with generated Python bindings. It does
+This external test harness exercises `lorawan_connection.backend.tts` from the
+installed library. It uses the actual TTS gRPC services with generated Python bindings. It does
 not use MQTT or HTTP callbacks.
 
 The tested server is TTS 3.36.2. Bindings were generated from
@@ -21,7 +21,7 @@ From the library checkout:
 ```sh
 uv sync --project script/tts_spike
 uv run --project script/tts_spike python script/tts_spike/generate.py ../lorawan-stack
-uv run --project script/tts_spike pytest script/tts_spike/test_backend.py
+uv run --all-extras --group compatibility pytest tests/test_tts.py
 uv run --project script/tts_spike python script/tts_spike/live.py \
   --admin-key-file /path/to/local-test-admin-key.txt
 ```
@@ -62,24 +62,23 @@ reuse the generated session keys or the fixed cluster key outside this test.
 The server, APIs and streams are real. Radio reception and acknowledgements are
 simulated; this does not test a physical device or TTN Community Edition hosting.
 
-## Work before a production backend
+## Packaged backend
 
-- Select Identity Server and Application Server endpoints independently. Hosted
-  deployments can use different endpoints; this spike uses one local channel.
-- Establish stream readiness and reauthentication behavior. Reconcile the initial
-  device list with lifecycle events during connection setup.
-- Map join, status, location and diagnostic events. The spike implements raw
-  uplinks, device lifecycle, and positive/negative command acknowledgements.
-- Decide how to support devices without a DevEUI. This adapter skips them because
-  the current library identity requires one.
-- Package or generate the official Python bindings reproducibly for distribution.
-- Decide how to handle downlink expiry. The TTS API has no equivalent queue expiry
-  field. The adapter rejects `expires_at` rather than silently discarding it.
-  The current Dragino command methods specify expiry and therefore need a policy
-  before they can work unchanged on TTS. A caller's timeout does not cancel an
-  already queued command.
+The adapter is in `src/lorawan_connection/backend/tts.py`. Its `tts` extra supplies
+gRPC and protobuf. A private descriptor set is packaged with the wheel; runtime
+users do not generate bindings. `script/generate_tts_schema.py` reproduces that set
+from the pinned upstream checkout. This harness generates additional bindings
+only for provisioning the disposable test environment.
 
-The generic connection protocol is unchanged apart from stack-aware brand filters.
-`brands` contains `(stack, brand_id)` pairs. Descriptors include `stack`, `brand_id`
-and `model_id`. A device class maps each supported stack to its native catalog
-identity in `identifiers`; no cross-catalog translation table is needed.
+The adapter supports separate Identity and Application Server endpoints. It
+reconciles startup inventory, checks read permissions, watches lifecycle events,
+and polls inventory as a fallback. The HA `the_things_stack` integration owns
+recovery and reauthentication. Its external test is
+`script/lorawan_poc/real_tts.py` in the Core worktree.
+
+TTS does not support queue expiry. The backend rejects `expires_at`; Dragino's
+expiry-requiring relay methods remain unsupported through TTS. The harness tests
+raw commands without expiry. Devices without a DevEUI are skipped.
+
+The generic connection protocol uses `(stack, brand_id)` filters. Device models
+keep each stack's native catalog IDs. Collections need no server-selection logic.

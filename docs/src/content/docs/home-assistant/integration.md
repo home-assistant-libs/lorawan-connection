@@ -12,7 +12,7 @@ integration, publish it as a separate PyPI package with no Home Assistant import
 Test its decoders, models, and commands independently.
 
 The Home Assistant integration connects that library to config entries and entities.
-A server integration, such as ChirpStack, owns credentials and transport recovery.
+Server integrations such as ChirpStack and The Things Stack own credentials and transport recovery.
 It registers its connection with the shared `lorawan` integration. Device libraries
 receive the common `Connection` interface and interpret device messages.
 

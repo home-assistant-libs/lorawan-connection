@@ -1,66 +1,101 @@
-"""Experimental TTS gRPC adapter; generated modules are built by generate.py."""
+"""The Things Stack registry, application traffic and lifecycle over gRPC."""
 
 import asyncio
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 import grpc
-from ttn.lorawan.v3 import (
-    applicationserver_pb2_grpc as app_grpc,
-)
-from ttn.lorawan.v3 import (
-    end_device_pb2 as device_pb,
-)
-from ttn.lorawan.v3 import (
-    end_device_services_pb2_grpc as device_grpc,
-)
-from ttn.lorawan.v3 import (
-    events_pb2 as events_pb,
-)
-from ttn.lorawan.v3 import (
-    events_pb2_grpc as events_grpc,
-)
-from ttn.lorawan.v3 import (
-    identifiers_pb2 as ids_pb,
-)
-from ttn.lorawan.v3 import (
-    messages_pb2 as messages_pb,
-)
 
 from lorawan_connection import (
     AckData,
     ConnectionUnavailable,
+    CoordinatesData,
     DeviceDescriptor,
     DeviceEvent,
     DeviceEventData,
     Downlink,
     DownlinkError,
     EventType,
+    JoinData,
+    LocationData,
     Unsubscribe,
     UplinkData,
     notify,
     subscribe,
 )
 
+from ._tts_api import Service, message
+
+
+class AuthenticationError(Exception):
+    """The key lacks required device or application-traffic read access."""
+
+
+def _connection_error(error: Exception) -> Exception:
+    if isinstance(error, grpc.RpcError):
+        code = error.code()
+        if code in (grpc.StatusCode.UNAUTHENTICATED, grpc.StatusCode.PERMISSION_DENIED):
+            return AuthenticationError(
+                "TTS rejected the API key or its read permissions"
+            )
+        return ConnectionUnavailable(f"TTS RPC {code.name}")
+    return error
+
+
+def _target(endpoint: str) -> tuple[str, bool]:
+    url = urlsplit(endpoint)
+    if (
+        url.scheme not in ("http", "https")
+        or not url.hostname
+        or url.username
+        or url.password
+        or url.path not in ("", "/")
+        or url.query
+        or url.fragment
+    ):
+        raise ValueError("Endpoint must be http(s)://host:port")
+    # Accessing port also rejects malformed or out-of-range ports.
+    port = url.port or (443 if url.scheme == "https" else 80)
+    host = f"[{url.hostname}]" if ":" in url.hostname else url.hostname
+    return f"{host}:{port}", url.scheme == "https"
+
 
 class TTSConnection:
-    """Combine the registry, application streams and lifecycle events."""
+    """Own independently configured Identity and Application Server connections."""
 
     def __init__(
         self,
-        channel: grpc.aio.Channel,
+        endpoint: str,
         api_key: str,
         *,
         application_ids: list[str],
         network_id: str,
+        identity_server: str | None = None,
+        poll_interval: float = 30,
     ) -> None:
-        self.channel = channel
+        targets = [_target(endpoint), _target(identity_server or endpoint)]
+        if not application_ids or any(not app.strip() for app in application_ids):
+            raise ValueError("Select at least one TTS application")
+        if len(set(application_ids)) != len(application_ids):
+            raise ValueError("Application IDs must be unique")
+        if poll_interval <= 0:
+            raise ValueError("poll_interval must be positive")
+        self._channels = [
+            grpc.aio.secure_channel(target, grpc.ssl_channel_credentials())
+            if secure
+            else grpc.aio.insecure_channel(target)
+            for target, secure in targets
+        ]
+        self.channel, self._identity_channel = self._channels
         self.metadata = (("authorization", f"Bearer {api_key}"),)
-        self.application_ids = application_ids
+        self.application_ids = list(application_ids)
         self.network_id = network_id
+        self.poll_interval = poll_interval
         self.devices: dict[str, DeviceDescriptor] = {}
-        self._ids: dict[str, ids_pb.EndDeviceIdentifiers] = {}
+        self._ids: dict[str, Any] = {}
         self._subscribers: list[
             tuple[
                 frozenset[tuple[str, int | str]] | None, Callable[[DeviceEvent], None]
@@ -69,20 +104,70 @@ class TTSConnection:
         self._disconnect: list[Callable[[None], None]] = []
         self._tasks: list[asyncio.Task[None]] = []
         self._lock = asyncio.Lock()
+        self._ready = asyncio.Event()
+        self._closed = False
+        self._started = False
         self.available = False
         self.error: Exception | None = None
-        self.lifecycle_events: list[str] = []
-        self._registry = device_grpc.EndDeviceRegistryStub(channel)
-        self._application = app_grpc.AppAsStub(channel)
-        self._events = events_grpc.EventsStub(channel)
+        self._registry = Service(self._identity_channel, "EndDeviceRegistry")
+        self._access = Service(self._identity_channel, "ApplicationAccess")
+        self._application = Service(self.channel, "AppAs")
+        self._events = Service(self._identity_channel, "Events")
 
-    async def connect(self) -> None:
-        await self.refresh()
-        self.available = True
-        self._tasks = [asyncio.create_task(self._lifecycle())]
-        self._tasks.extend(
-            asyncio.create_task(self._traffic(app)) for app in self.application_ids
-        )
+    async def inventory(self) -> list[DeviceDescriptor]:
+        """Read a complete inventory and validate the key's traffic-read right."""
+        try:
+            for app in self.application_ids:
+                rights = await self._access.ListRights(
+                    message("ApplicationIdentifiers", application_id=app),
+                    metadata=self.metadata,
+                    timeout=15,
+                )
+                names = rights.DESCRIPTOR.fields_by_name[
+                    "rights"
+                ].enum_type.values_by_number
+                if "RIGHT_APPLICATION_TRAFFIC_READ" not in {
+                    names[value].name for value in rights.rights
+                }:
+                    raise AuthenticationError(
+                        "TTS key needs application traffic read access"
+                    )
+            await self.refresh()
+        except grpc.RpcError as error:
+            raise _connection_error(error) from error
+        return list(self.devices.values())
+
+    async def async_connect(self) -> None:
+        """Read inventory, start streams, then reconcile registrations again."""
+        if self._closed or self._started:
+            raise ConnectionUnavailable("TTS connection is closed or already started")
+        self._started = True
+        try:
+            async with asyncio.timeout(15):
+                await asyncio.gather(
+                    *(channel.channel_ready() for channel in self._channels)
+                )
+            await self.inventory()
+            self._tasks.append(asyncio.create_task(self._lifecycle()))
+            self._tasks.extend(
+                asyncio.create_task(self._traffic(app)) for app in self.application_ids
+            )
+            async with asyncio.timeout(15):
+                await self._ready.wait()
+            if self.error is not None:
+                raise self.error
+            await self.refresh()
+            if self.error is not None:
+                raise self.error
+            self.available = True
+            self._tasks.append(asyncio.create_task(self._poll()))
+        except BaseException as error:
+            await self.close()
+            if isinstance(error, grpc.RpcError):
+                raise _connection_error(error) from error
+            if isinstance(error, TimeoutError):
+                raise ConnectionUnavailable("TTS connection timed out") from error
+            raise
 
     def _emit(
         self, event: DeviceEvent, previous: DeviceDescriptor | None = None
@@ -112,7 +197,8 @@ class TTSConnection:
                 page = 1
                 while True:
                     result = await self._registry.List(
-                        device_pb.ListEndDevicesRequest(
+                        message(
+                            "ListEndDevicesRequest",
                             application_ids={"application_id": app},
                             limit=100,
                             page=page,
@@ -159,7 +245,8 @@ class TTSConnection:
     async def _lifecycle(self) -> None:
         try:
             call = self._events.Stream(
-                events_pb.StreamEventsRequest(
+                message(
+                    "StreamEventsRequest",
                     identifiers=[
                         {"application_ids": {"application_id": app}}
                         for app in self.application_ids
@@ -173,33 +260,56 @@ class TTSConnection:
                 ),
                 metadata=self.metadata,
             )
+            await call.initial_metadata()
+            # Events sends an explicit start event after authorization/subscription.
             async for event in call:
-                self.lifecycle_events.append(event.name)
-                await self.refresh()
+                if event.name == "events.stream.start":
+                    self._ready.set()
+                else:
+                    await self.refresh()
             raise ConnectionUnavailable("TTS lifecycle stream ended")
         except Exception as error:
             self._failed(error)
 
     async def _traffic(self, app: str) -> None:
         try:
-            async for message in self._application.Subscribe(
-                ids_pb.ApplicationIdentifiers(application_id=app),
+            async for up in self._application.Subscribe(
+                message("ApplicationIdentifiers", application_id=app),
                 metadata=self.metadata,
             ):
-                await self.handle_message(message)
+                await self.handle_message(up)
             raise ConnectionUnavailable("TTS application stream ended")
         except Exception as error:
             self._failed(error)
 
-    async def handle_message(self, message: messages_pb.ApplicationUp) -> None:
-        eui = message.end_device_ids.dev_eui.hex()
+    async def _poll(self) -> None:
+        try:
+            while True:
+                await asyncio.sleep(self.poll_interval)
+                await self.refresh()
+        except Exception as error:
+            self._failed(error)
+
+    async def handle_message(self, up: Any) -> None:
+        """Translate raw upstream traffic to the shared payload contracts."""
+        app = up.end_device_ids.application_ids.application_id
+        if app not in self.application_ids:
+            return
+        eui = up.end_device_ids.dev_eui.hex()
+        if not eui:
+            return
         if eui not in self.devices:
             await self.refresh()
         if eui not in self.devices:
             return
-        if message.HasField("uplink_message"):
-            uplink = message.uplink_message
-            # A deployment that skips payload crypto cannot feed plaintext models.
+        if (
+            self._ids[eui].device_id != up.end_device_ids.device_id
+            or self.devices[eui].application_id != app
+        ):
+            return
+        payload: Any
+        if up.HasField("uplink_message"):
+            uplink = up.uplink_message
             if uplink.HasField("app_s_key"):
                 raise ConnectionUnavailable(
                     "TTS supplied an encrypted application payload"
@@ -208,9 +318,34 @@ class TTSConnection:
                 EventType.UPLINK,
                 UplinkData(bytes(uplink.frm_payload), uplink.f_port),
             )
-        elif message.HasField("downlink_ack") or message.HasField("downlink_nack"):
-            confirmed = message.HasField("downlink_ack")
-            downlink = message.downlink_ack if confirmed else message.downlink_nack
+        elif up.HasField("join_accept"):
+            kind, payload = EventType.JOIN, JoinData(up.end_device_ids.dev_addr.hex())
+        elif up.HasField("location_solved"):
+            if not up.location_solved.HasField("location"):
+                return
+            location = up.location_solved.location
+            kind, payload = (
+                EventType.LOCATION,
+                LocationData(
+                    CoordinatesData(
+                        location.latitude,
+                        location.longitude,
+                        location.altitude,
+                    )
+                ),
+            )
+        elif any(
+            up.HasField(name)
+            for name in ("downlink_ack", "downlink_nack", "downlink_failed")
+        ):
+            confirmed = up.HasField("downlink_ack")
+            downlink = (
+                up.downlink_ack
+                if confirmed
+                else up.downlink_nack
+                if up.HasField("downlink_nack")
+                else up.downlink_failed.downlink
+            )
             correlation = next(
                 (
                     cid
@@ -229,7 +364,9 @@ class TTSConnection:
                 type=kind,
                 descriptor=self.devices[eui],
                 data=payload,
-                received_at=message.received_at.ToDatetime(tzinfo=UTC),
+                received_at=up.received_at.ToDatetime(tzinfo=UTC)
+                if up.HasField("received_at")
+                else datetime.now(UTC),
             )
         )
 
@@ -256,19 +393,23 @@ class TTSConnection:
         return unsubscribe
 
     def on_disconnect(self, callback: Callable[[], None]) -> Unsubscribe:
-        self._check_available()
+        if self._closed:
+            raise ConnectionUnavailable("TTS connection is closed")
         return subscribe(self._disconnect, lambda _: callback())
 
     async def async_send_downlink(self, downlink: Downlink) -> str:
-        self._check_available()
+        """Queue once and retain a correlation ID for application acknowledgements."""
+        if not self.available or self._closed:
+            raise DownlinkError("TTS connection is unavailable")
         if downlink.expires_at is not None:
-            raise DownlinkError("TTS spike does not support queue expiry")
+            raise DownlinkError("TTS does not support downlink queue expiry")
         if downlink.dev_eui not in self._ids:
             raise DownlinkError("Device no longer exists")
         correlation = f"lorawan-connection:{uuid4()}"
         try:
             await self._application.DownlinkQueuePush(
-                messages_pb.DownlinkQueueRequest(
+                message(
+                    "DownlinkQueueRequest",
                     end_device_ids=self._ids[downlink.dev_eui],
                     downlinks=[
                         {
@@ -284,24 +425,29 @@ class TTSConnection:
                 timeout=15,
             )
         except grpc.RpcError as error:
-            raise DownlinkError("TTS rejected the downlink") from error
+            raise DownlinkError(
+                f"TTS rejected the downlink ({error.code().name})"
+            ) from error
         return correlation
 
     def _check_available(self) -> None:
-        if not self.available:
+        if not self.available or self._closed:
             raise ConnectionUnavailable("TTS connection is unavailable")
 
     def _failed(self, error: Exception) -> None:
-        if not self.available:
+        if self._closed or self.error is not None:
             return
         self.available = False
-        self.error = error
+        self.error = _connection_error(error)
+        self._ready.set()
         notify(self._disconnect, None)
         for task in self._tasks:
             if task is not asyncio.current_task():
                 task.cancel()
 
     async def close(self) -> None:
+        """Release streams and both channels; do not trigger reconnect callbacks."""
+        self._closed = True
         self.available = False
         for task in self._tasks:
             task.cancel()
@@ -309,4 +455,4 @@ class TTSConnection:
         self._tasks.clear()
         self._subscribers.clear()
         self._disconnect.clear()
-        await self.channel.close()
+        await asyncio.gather(*(channel.close() for channel in self._channels))

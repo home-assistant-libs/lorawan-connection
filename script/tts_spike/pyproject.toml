@@ -2,7 +2,7 @@
 name = "lorawan-tts-spike"
 version = "0.0.0"
 requires-python = ">=3.13"
-dependencies = ["lorawan-connection", "grpcio-tools", "pytest", "pytest-asyncio"]
+dependencies = ["lorawan-connection", "grpcio-tools==1.84.0", "pytest", "pytest-asyncio"]
 
 [tool.uv.sources]
 lorawan-connection = { path = "../..", editable = true }

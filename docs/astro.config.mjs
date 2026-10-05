@@ -20,7 +20,7 @@ export default defineConfig({
         starlightLinksValidator(),
         starlightLlmsTxt({
           projectName: "lorawan-connection",
-          description: "A Python library for modelling LoRaWAN devices. Build device libraries with readings, commands, and update subscriptions. An optional ChirpStack connection provides inventory, live events, and queued downlinks.",
+          description: "A Python library for modelling LoRaWAN devices. Build device libraries with readings, commands, and update subscriptions. Optional ChirpStack and The Things Stack connections provide inventory, live events, and queued downlinks.",
           details: [
             "- Requires Python 3.12 or later. Install with `pip install lorawan-connection`.",
             "- The application owns the connection and subscribes its DeviceCollection to inventory and live events.",
@@ -41,6 +41,7 @@ export default defineConfig({
         { label: "Events and connections", items: [
           { label: "Understanding events", slug: "connection/events" },
           { label: "Connecting to ChirpStack", slug: "connection/chirpstack" },
+          { label: "Connecting to The Things Stack", slug: "connection/tts" },
           { label: "Event reference", slug: "connection/reference" },
         ] },
         { label: "Device modelling", items: [
