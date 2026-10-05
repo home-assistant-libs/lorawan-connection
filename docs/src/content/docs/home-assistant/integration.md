@@ -33,7 +33,7 @@ After confirmation, store these fields in the vendor entry's `data`:
 
 | Field | Meaning |
 | --- | --- |
-| `provider_entry_id` | The selected LoRaWAN config entry's `entry_id`. Setup passes this to `lorawan.get_connection()` to obtain the shared connection. |
+| `connection_entry_id` | The selected LoRaWAN config entry's `entry_id`. Setup passes this to `lorawan.get_connection()` to obtain the shared connection. |
 | `network_id` | The provider's stable identifier for the logical network, supplied through discovery or read from the selected entry. |
 
 Use `network_id` as the vendor entry's unique ID to prevent duplicate entries for
@@ -114,7 +114,7 @@ class SenseCapData:
 async def async_setup_entry(hass: HomeAssistant, entry: SenseCapConfigEntry) -> bool:
     """Forward all vendor events to one library collection."""
     try:
-        connection = get_connection(hass, entry.data["provider_entry_id"])
+        connection = get_connection(hass, entry.data["connection_entry_id"])
     except ProviderNotFound as error:
         raise ConfigEntryError("The selected LoRaWAN provider was removed") from error
     except ConnectionUnavailable as error:
