@@ -88,10 +88,15 @@ The `sensecap_lorawan` import refers to the
 Define `DOMAIN = "sensecap"` in `const.py`.
 
 ```python
-from homeassistant.components.lorawan import DeviceManager
+from homeassistant.components.lorawan import (
+    ConnectionNotFound,
+    ConnectionUnavailable,
+    DeviceManager,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryError, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 
 from sensecap_lorawan import S2101, SenseCapDeviceCollection
@@ -112,7 +117,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: SenseCapConfigEntry) -> 
         create_coordinator=SenseCapCoordinator,
     )
     entry.async_on_unload(manager.close)
-    await manager.async_setup(connection_entry_id=entry.data["connection_entry_id"])
+    try:
+        await manager.async_setup(connection_entry_id=entry.data["connection_entry_id"])
+    except ConnectionUnavailable as error:
+        raise ConfigEntryNotReady("LoRaWAN connection is not available") from error
+    except ConnectionNotFound as error:
+        raise ConfigEntryError(
+            "The selected LoRaWAN connection entry was removed"
+        ) from error
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
@@ -130,9 +142,11 @@ Existing devices receive coordinators before setup returns. Platforms use
 The collection is available as `manager.collection` after setup creates it.
 
 The manager reloads the consuming entry when the connection disconnects. An
-unavailable connection raises `ConfigEntryNotReady`; a missing or invalid connection
-entry raises `ConfigEntryError`. The LoRaWAN integration owns transport recovery
-and credential reauthentication. Closing the manager removes its disconnect listener,
+unavailable connection raises `ConnectionUnavailable`; a missing or invalid connection
+entry raises `ConnectionNotFound`. Catch these in the consuming integration's setup.
+Raise `ConfigEntryNotReady` for the unavailable connection so HA retries. Raise
+`ConfigEntryError` for a removed connection so setup fails without retrying.
+The LoRaWAN integration owns transport recovery and credential reauthentication. Closing the manager removes its disconnect listener,
 closes the collection, and retires its coordinators. It leaves the connection open.
 
 ## Share updates through a coordinator
