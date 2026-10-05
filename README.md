@@ -162,8 +162,8 @@ resolves an explicitly selected connection, creates the collection and coordinat
 and cleans up removed devices. Platforms subscribe to ready coordinators.
 Vendor coordinators and the manager use `device_identifier()` for registry identity.
 It returns one identifier tuple; wrap it in a set for `DeviceInfo.identifiers`.
-Consuming integrations translate `ConnectionUnavailable` to `ConfigEntryNotReady`
-and `ConnectionNotFound` to `ConfigEntryError` during setup.
+Manager setup raises `ConfigEntryNotReady` for unavailable connections and
+`ConfigEntryError` for missing connection entries.
 These Home Assistant APIs are proposals and are not yet part of Home Assistant.
 
 ## Development
