@@ -1,5 +1,5 @@
 ---
-title: Add a server integration
+title: Connection providers
 description: Configure a backend, register its connection with LoRaWAN, and own recovery and shutdown in Home Assistant.
 ---
 
@@ -10,9 +10,10 @@ Home Assistant APIs. They are implemented in the PoC, not released in Home Assis
 
 First implement and publish a backend using the
 [backend guide](/lorawan-connection/connection/adding-a-backend/).
-The server integration configures that backend and registers its connection with
-`lorawan`. Vendor integrations use `DeviceManager` to access matching devices on
-all available connections. The server integration does not create vendor entities.
+A connection provider is a server integration that configures a backend and
+registers its connection with `lorawan`.
+[Device implementations](/lorawan-connection/home-assistant/device-implementations/)
+use these connections to create vendor entities through `DeviceManager`.
 
 The examples below use the released TTS adapter. For a new server, substitute
 your adapter, authentication exception, configuration fields, and dependency extra.
@@ -203,37 +204,17 @@ models and coordinators, attaches the replacement transport, and reconciles its
 inventory. A disconnect affects only that server. The manager handles removal
 when a device or server entry is deleted.
 
-## Add catalog discovery for the new stack
+## Supply device identities for discovery
 
-A connection alone does not identify a device model. Supply the backend's native
-`stack`, `brand_id`, and `model_id` in its descriptors. Add matching identities to
-vendor libraries and vendor integration manifests.
+Include the backend's native `stack`, `brand_id`, and `model_id` in each device
+descriptor. LoRaWAN uses the stack and brand to discover the vendor integration;
+the vendor library uses the model ID to select a device implementation.
 
-For a hypothetical stack named `example`, a vendor model can declare:
-
-```python
-from lorawan_connection import Device
-
-
-class TemperatureSensor(Device):
-    identifiers = {"example": ("acme", "temperature-v1")}
-```
-
-This only illustrates identity declaration. Add payload handling and include the
-model in the vendor collection's `DEVICES`, as described in the
-[device library guide](/lorawan-connection/patterns/library/).
-The vendor integration's manifest includes:
-
-```json
-{
-  "dependencies": ["lorawan"],
-  "lorawan": [["example", "acme"]]
-}
-```
-
-The `lorawan` discovery field belongs to the vendor integration. The server
-integration supplies the connection. Existing vendor setup can remain unchanged
-when its device library gains the new stack's model identities.
+When adding another stack, add its identities to the vendor library and its
+integration's discovery manifest. Follow
+[Dependencies and discovery](/lorawan-connection/home-assistant/device-implementations/#dependencies-and-discovery)
+for the manifest and device-library declarations. The `lorawan` discovery field
+belongs to the device integration's manifest. The provider supplies the connection.
 
 ## Verify the HA boundary
 

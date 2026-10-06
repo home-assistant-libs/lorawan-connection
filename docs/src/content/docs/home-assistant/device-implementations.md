@@ -1,5 +1,5 @@
 ---
-title: Integration structure
+title: Device implementations
 description: Share device updates through a coordinator and keep device and entity registries in sync.
 ---
 
@@ -11,87 +11,23 @@ Build the [device library](/lorawan-connection/patterns/library/) first. For a C
 integration, publish it as a separate PyPI package with no Home Assistant imports.
 Test its decoders, models, and commands independently.
 
-The Home Assistant integration connects that library to config entries and entities.
-Server integrations such as ChirpStack and The Things Stack own credentials and transport recovery.
-Each server integration registers its connection with the shared `lorawan` integration. Device libraries
-receive the common `Connection` interface and interpret device messages.
+A device integration connects its library to config entries, coordinators, and
+entities. It receives connections from
+[connection providers](/lorawan-connection/home-assistant/connection-providers/)
+through the shared `lorawan` integration.
 
 Use one vendor config entry for all registered LoRaWAN connections. Its
 `DeviceManager` creates one collection per connection and one coordinator per device.
 Store the manager in `entry.runtime_data`.
 
-## Register a server connection
-
-For a new backend, follow [Add a server integration](/lorawan-connection/home-assistant/server-integration/).
-It covers the server manifest, config flow, transport ownership, and discovery.
-
-The server integration declares `lorawan` in its manifest's `dependencies`.
-It constructs the backend with `network_id=entry.entry_id` and connects it before
-registration. The registration reads the complete device inventory before it
-exposes the connection to vendor integrations.
-
-For a connected `ChirpStackConnection`, register it during config-entry setup:
-
-```python
-from lorawan_connection import Unsubscribe
-from lorawan_connection.backend.chirpstack import ChirpStackConnection
-
-from homeassistant.components import lorawan
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
-
-
-async def async_register_server(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    connection: ChirpStackConnection,
-) -> Unsubscribe:
-    """Register an already connected backend and schedule recovery on disconnect."""
-    unsubscribe = await lorawan.async_register_connection(
-        hass, entry, connection=connection
-    )
-    entry.async_on_unload(unsubscribe)
-
-    @callback
-    def disconnected() -> None:
-        if not hass.is_stopping:
-            hass.config_entries.async_schedule_reload(entry.entry_id)
-
-    unsubscribe_disconnect = connection.on_disconnect(disconnected)
-    entry.async_on_unload(unsubscribe_disconnect)
-
-    @callback
-    def unsubscribe_server() -> None:
-        unsubscribe_disconnect()
-        unsubscribe()
-
-    return unsubscribe_server
-```
-
-Store the returned callback with the connection in the server's runtime data.
-During unload or HA shutdown, call it before `await connection.close()`.
-This withdraws the registration and stops recovery callbacks before closing the
-transport. Registration cleanup does not close the transport itself.
-
-The server integration closes the transport if setup or registration fails.
-It maps authentication failures to `ConfigEntryAuthFailed` and connection failures
-to `ConfigEntryNotReady`. HA retries setup and registers the replacement connection
-under the same config entry ID.
-
-An adapter must support `async_subscribe(brands=None, callback=...)` to replay all
-devices in the selected applications. Vendor collections receive only the common
-`Connection` methods. They cannot close or reconnect the server transport.
-
 ## Config flow
 
-Users configure their server integration and select the applications to expose.
-They confirm the discovered vendor integration once. The vendor config flow has
-no connection picker and stores no server credentials or connection reference.
-Use the vendor domain as its unique ID to prevent duplicate vendor entries.
+Users confirm the discovered vendor integration once. Use the vendor domain as
+its unique ID to prevent duplicate vendor entries. A `DeviceManager` gives the
+integration access to matching devices on all available LoRaWAN connections.
 
 The vendor integration can load before any server connects. Its manager subscribes
 to connections as they register, including servers added later.
-Users provision devices in the existing LoRaWAN stack in the first version.
 
 ## Dependencies and discovery
 

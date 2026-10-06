@@ -181,7 +181,7 @@ Adapters implement the connection protocol without importing an application fram
 
 ## Home Assistant
 
-The [Home Assistant guide](https://home-assistant-libs.github.io/lorawan-connection/home-assistant/integration/)
+The [device implementation guide](https://home-assistant-libs.github.io/lorawan-connection/home-assistant/device-implementations/)
 covers registered connections, discovery, coordinators, and entities. Server
 integrations register connections with `lorawan`. One vendor entry handles all
 registered servers through `DeviceManager`, with one collection per connection.
@@ -192,7 +192,7 @@ Server integrations use their config entry ID as `network_id` and call
 `await lorawan.async_register_connection(hass, entry, connection=connection)`
 after connecting. The returned callback withdraws the registration. The server
 integration calls it before closing its transport and owns retries and reauthentication.
-The [server integration guide](https://home-assistant-libs.github.io/lorawan-connection/home-assistant/server-integration/)
+The [connection provider guide](https://home-assistant-libs.github.io/lorawan-connection/home-assistant/connection-providers/)
 shows how to add a backend to HA, including manifest dependencies, config-flow
 validation, registration, recovery, cleanup, and vendor discovery.
 
