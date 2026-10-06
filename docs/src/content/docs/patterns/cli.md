@@ -15,9 +15,7 @@ if __name__ == "__main__":
     run(SenseCapDeviceCollection.DEVICES)
 ```
 
-The helper connects a `DeviceCollection` to the selected server. The collection creates
-supported models and routes events to them. The helper subscribes to each model's
-state and prints updates. The model owns decoding.
+The helper discovers supported devices and prints model updates from the selected server.
 
 ## Run it
 
@@ -34,9 +32,8 @@ python -m my_sensors --backend chirpstack --server https://chirpstack.example.co
   --api-key-file /path/to/api-key
 ```
 
-`--backend` selects `chirpstack` (the default) or `tts`. The helper imports the selected adapter when connecting.
-An unavailable extra produces an installation command. An unknown backend is
-rejected before opening a connection.
+`--backend` selects `chirpstack` (the default) or `tts`. If its extra is missing,
+the helper prints an installation command.
 
 Use `CHIRPSTACK_API_KEY` instead of `--api-key-file` if you keep the key in the environment.
 The helper discovers applications across all tenants accessible to the API key
@@ -44,8 +41,7 @@ at startup. Pass `--tenant UUID` to restrict it to one tenant, or repeat
 `--application UUID` to select specific applications. Keys that cannot list tenants
 require `--tenant`; this includes tenant-scoped keys with the tested ChirpStack version.
 
-The command prints discovered devices and stays connected to print live state
-changes. Add `--json` for one JSON object per line:
+Add `--json` for one JSON object per line:
 
 ```json
 {"type":"state","dev_eui":"0102030405060708","name":"Greenhouse","model":"S2101","state":{"temperature":21.4,"humidity":31.4}}

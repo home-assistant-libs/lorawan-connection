@@ -5,13 +5,11 @@ description: Collection lifecycle, callback order, and cleanup behavior.
 
 ## Device
 
-An abstract model base. Declare `identifiers: Mapping[str, tuple[int | str, str]]`, mapping each stack
-to its `(brand_id, model_id)` pair. Then implement `handle_event(event)`.
+Subclass `Device`, declare `identifiers: Mapping[str, tuple[int | str, str]]`, and
+implement `handle_event(event)`. Each identifier maps a stack to its `(brand_id, model_id)`.
 
-`Device(descriptor)` initializes `descriptor` and listeners. Model constructors
-accept a descriptor and call `super().__init__(descriptor)`. The model defines its
-own data attributes; the base imposes no measurement schema or state container.
-The collection replaces `descriptor` on metadata updates.
+Call `super().__init__(descriptor)` to initialize identity and listeners, then define
+the model's data attributes. The collection replaces `descriptor` on metadata updates.
 
 ### add_update_listener(listener) → Unsubscribe
 
@@ -44,8 +42,7 @@ Returns `None` on success. The collection correlates ACKs before forwarding them
 model's `handle_event()`. The model does not need to call a base event handler.
 
 Set `wait_for_ack=False` to send an unconfirmed downlink and return when queued.
-Use `asyncio.timeout()` to
-bound the operation. Cancellation ends the wait without removing a queued command.
+Use `asyncio.timeout()` to bound the operation. Cancellation ends the wait without removing a queued command.
 `expires_at` is a separate server queue expiry.
 
 A negative ACK, closed model, or missing sender raises `DownlinkError`. Closing
@@ -143,10 +140,9 @@ They can close the collection; do not recursively inject device changes.
 
 ### close() → None
 
-Unsubscribe from device events, retire all models, and clear all listeners.
-Leave the shared connection open.
-Repeated calls do nothing. Cleanup exceptions from one model are logged; other
-models still close and removal callbacks still run. Subsequent events are ignored.
+Unsubscribe, retire all models, and clear listeners, leaving the shared connection
+open. Repeated calls and subsequent events do nothing. Cleanup failures are logged;
+other models still close and removal callbacks still run.
 
 ## Callback helpers
 

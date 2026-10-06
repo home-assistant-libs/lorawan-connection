@@ -3,18 +3,9 @@ title: Build a device library
 description: Organize device models into a library with a public collection, a CLI, and tests.
 ---
 
-A device library gives applications Python objects for the devices it supports.
-Its public entry point is a collection that accepts a `Connection`. Applications
-discover devices through that collection, read their attributes, subscribe to
-updates, and call their command methods.
-
-Keep payload decoding, measurement units, and command encoding in this package.
-The application supplies the connection and decides how to display the data.
-Release and test the library independently of the applications that use it.
-
-Start with a model from [Devices and collections](/lorawan-connection/modelling/overview/).
-That guide covers decoding, state, commands, and model lifecycle. This page shows
-how those pieces fit into a Python package.
+Package your [device models](/lorawan-connection/modelling/overview/) with a public
+collection that accepts a `Connection`. Keep decoding, units, and command encoding
+in the library; applications supply the connection and display the data.
 
 ## Organize the package
 
@@ -57,29 +48,18 @@ class SenseCapDeviceCollection(DeviceCollection[S2101]):
 __all__ = ["S2101", "SenseCapDeviceCollection"]
 ```
 
-The collection is the application's entry point for all supported devices on a
-network. It creates models, routes their events, and reports additions and
-removals. A device-added callback receives a model ready for the application to
-observe.
-
-This gives callers stable imports as the package grows. With several device
-classes, use their union as the collection's type parameter and list them all
-in `DEVICES`. Move the collection to `collection.py` if it grows substantial
-custom logic, and keep exporting it from `__init__.py`.
+For several device classes, use their union as the collection's type parameter
+and list them in `DEVICES`. Keep the collection exported from `__init__.py` if you
+move its implementation to another module.
 
 ## Keep the application boundary clear
 
-The library owns payload formats, ports, units, device commands, and reported
-state. Its public attributes and methods let applications use devices without
-interpreting LoRaWAN messages.
+Keep backend imports in application code such as the CLI. Device models use the
+shared event and downlink interfaces.
 
-The application owns credentials, connection setup, and reconnection. Keep backend
-imports in connection scripts such as the CLI. The device models use the shared
-event and downlink interfaces. See [Connecting to ChirpStack](/lorawan-connection/connection/chirpstack/)
-for a complete application using the SenseCAP collection.
-
-For example, an application with an open connection can monitor the library like
-this. Cancel `monitor()` to stop; its `finally` block closes the collection.
+An application with an open connection can call `monitor()` below. Cancelling it
+closes the collection while leaving the connection open. See
+[Connecting to ChirpStack](/lorawan-connection/connection/chirpstack/) for connection setup.
 
 ```python
 import asyncio
@@ -109,20 +89,11 @@ async def monitor(connection: Connection) -> None:
         devices.close()
 ```
 
-The collection creates a model for each supported device and attaches its command
-sender. Values can be `None` until the first report. A model can expose several
-measurements, channels, or sub-systems; one event can update any number of them.
-
-Closing the collection clears its models' listeners and leaves the supplied
-connection open. Device removal calls the model's removal listeners. Closing the
-collection during application shutdown does not report every device as removed.
+Values can be `None` until the first report. The model's removal listener runs on
+device removal or replacement; collection shutdown clears it without calling it.
 
 ## Add a CLI and tests
 
-Expose a command with the [command-line helper](/lorawan-connection/patterns/cli/).
-It accepts the collection's model classes, connects to a server, and prints device
-updates. This lets users try the library with their devices.
-
-Use the [testing guide](/lorawan-connection/patterns/testing/) to create a collection
-fixture with a device already added. Test the library through its public model
-attributes, command methods, and update listeners using captured payloads.
+The [CLI helper](/lorawan-connection/patterns/cli/) connects the library to a server
+and prints device updates. Use [fixture events](/lorawan-connection/patterns/testing/)
+to test attributes, commands, and listeners with captured payloads.

@@ -6,20 +6,12 @@ description: Read registered devices and live device events from an existing Chi
 import { Code } from '@astrojs/starlight/components';
 import source from '../../../../../examples/connect_sensors.py?raw';
 
-The ChirpStack backend connects your device library to an existing ChirpStack
-server. It discovers provisioned devices and delivers device descriptions and live
-events to your collection. The collection creates supported device models, which
-decode readings and notify your application when their state changes.
-
-For writable devices, the backend also sends commands from models to ChirpStack
-for delivery. Provision devices and configure gateways in ChirpStack before
-connecting. The backend accesses the server with an API key.
+The ChirpStack backend supplies device inventory, live events, and downlinks over
+gRPC. Provision devices and gateways in ChirpStack, then connect with an API key.
 
 ## Connect your collection
 
 Install the backend with `pip install "lorawan-connection[chirpstack]"`.
-Its import path is `lorawan_connection.backend.chirpstack`. The shared package
-does not import this module or require its dependencies.
 
 Save the [SenseCAP example library](/lorawan-connection/getting-started/quickstart/#example-library)
 as `sensecap_lorawan.py`. Save the script below as `connect_sensors.py` in the same
@@ -30,15 +22,8 @@ your API key. Set `CHIRPSTACK_TENANT_ID` if your key cannot list tenants.
 python connect_sensors.py
 ```
 
-The script selects all applications accessible to the key and prints supported
-devices and their readings. It waits for a disconnect notification, then closes the collection and connection. Ctrl+C also runs that cleanup.
-
-The backend subscription delivers events to the collection, which creates models
-and routes their events automatically. The `device_added` callback prints each
-model's name and subscribes to its state updates.
-
-Pass the connection directly to `SenseCapDeviceCollection(connection)`. Call
-`await devices.async_setup()` to subscribe to the vendors in its model registry.
+The script prints supported devices and readings from all applications accessible
+to the key. A disconnect or Ctrl+C closes the collection and connection.
 
 <Code code={source} lang="python" title="connect_sensors.py" />
 
@@ -51,11 +36,6 @@ tenant UUID to restrict discovery to that tenant, or when the API key cannot lis
 tenants. `application_ids` selects which applications supply devices and events.
 
 ## Existing devices and events
-
-Call `await connection.async_connect()` to read existing devices and start live
-updates. Each collection then calls `async_setup()` to subscribe independently.
-Closing a collection removes its subscription and leaves the connection open.
-The connection owner calls `await connection.close()` when it stops.
 
 The backend polls the device list every 30 seconds and opens an internal ChirpStack
 event stream for each device. Catalog profiles supply model and vendor identities.
@@ -75,8 +55,7 @@ drops older events. This also applies to devices discovered later.
 
 Keep the client and ChirpStack clocks synchronized. The filter uses the Redis event
 ID's timestamp, not the sensor's clock. Clock differences can drop new events or
-admit retained ones. There is no startup delay or historical recovery. A server-side
-live-only option is requested upstream.
+admit retained ones. Missed telemetry is not recovered.
 
 ## API reference
 

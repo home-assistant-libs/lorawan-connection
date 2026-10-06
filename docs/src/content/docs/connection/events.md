@@ -3,16 +3,13 @@ title: Understanding events
 description: What LoRaWAN events contain and how they reach device models.
 ---
 
-An event describes a change or activity for one LoRaWAN device. A sensor sending
-a temperature reading produces an uplink event. Registering that sensor on the server produces an `ADDED` event
-when the connection discovers it.
+Backends deliver device inventory and activity through a common event interface.
+Collections use inventory events to create and remove models. Models decode
+activity events into readings and command results.
 
-`lorawan-connection` gives these events a common Python interface. Device libraries
-use them to discover supported devices, decode readings, and update their models.
+## Event types
 
-## Which events are there?
-
-Device added, updated, and removed events describe which devices are available and their metadata:
+Inventory events:
 
 | Event | Meaning |
 | --- | --- |
@@ -20,7 +17,7 @@ Device added, updated, and removed events describe which devices are available a
 | `UPDATED` | A device's metadata changed, such as its name or assigned profile. |
 | `REMOVED` | A device is no longer among the subscribed devices. |
 
-Activity events describe messages and reports for those devices:
+Activity events:
 
 | Event | Meaning |
 | --- | --- |
@@ -32,12 +29,10 @@ Activity events describe messages and reports for those devices:
 | `LOG` | A backend log message associated with the device. |
 | `LOCATION` | A location update for the device. |
 
-A model handles the events it understands. For example, the S2101 model decodes
-`UPLINK` events into temperature and humidity. Another model might also read battery
-information from `STATUS`. Sending a command is a separate operation; see
-[sending commands](/lorawan-connection/modelling/overview/#send-commands) for downlinks.
+Sending a command is a separate operation; see
+[sending commands](/lorawan-connection/modelling/overview/#send-commands).
 
-## What is inside an event?
+## Event fields
 
 Every event identifies its network and device, gives its `EventType`, and includes
 a timezone-aware `received_at` timestamp. The device identifier is its DevEUI.
@@ -62,12 +57,8 @@ added = DeviceEventData(
 )
 ```
 
-An activity event carries its payload in `data`. For an uplink, that payload
-contains raw application bytes and an FPort. The FPort is the application port;
-the device library decides how to interpret it and the bytes.
-Without a descriptor, supply the network and device identifiers explicitly.
-
-Here is an uplink event built without a server:
+Activity payloads go in `data`. An uplink carries raw application bytes and the
+application port, `f_port`. Without a descriptor, supply the identifiers explicitly:
 
 ```python
 from datetime import UTC, datetime
@@ -86,10 +77,8 @@ event = DeviceEventData(
 )
 ```
 
-`DeviceEventData` holds the common event fields. `UplinkData` holds the uplink
-payload. These dataclasses are useful for tests and capture replays. The
-[event reference](/lorawan-connection/connection/reference/) lists the fields and
-payload types for every event.
+Use these dataclasses for tests and capture replays. The
+[event reference](/lorawan-connection/connection/reference/) lists all fields and payload types.
 
 ## How events reach a device
 
@@ -116,12 +105,10 @@ forwarding that activity. Collections ignore activity for devices they have not
 created. A backend only reports removals after a complete successful device-list
 refresh; an incomplete read must not make devices disappear.
 
-## Who manages the connection?
+## Connection ownership
 
-The program using the device library owns the connection, credentials, and
-reconnection. It connects a collection for each logical network to the backend
-subscription. One collection can span several ChirpStack applications; each application
-groups devices on the server.
+The application owns credentials and the connection lifecycle. Create one collection
+per logical network; a collection can span several server applications.
 
 Register a connection-loss listener with `connection.on_disconnect(callback)`.
 The callback takes no arguments. Close the old collection when the connection

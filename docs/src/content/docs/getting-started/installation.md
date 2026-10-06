@@ -9,13 +9,9 @@ Use Python 3.12 or later.
 pip install lorawan-connection
 ```
 
-The base installation has no runtime dependencies. The application owns the
-connection that supplies events.
-Backend modules live under `lorawan_connection.backend`. Importing the shared
-package or the backend namespace does not load adapters or their dependencies.
-
-The wheel includes `py.typed`. Type checkers can check your collection, models,
-and fixture payloads against the public contracts.
+The base package has no runtime dependencies and includes `py.typed` for type checking.
+Backend modules live under `lorawan_connection.backend` and load only when imported
+explicitly.
 
 Continue with the [quickstart](/lorawan-connection/getting-started/quickstart/).
 
@@ -42,6 +38,6 @@ The CLI selects it with `--backend chirpstack` and imports it only when connecti
 pip install "lorawan-connection[tts]"
 ```
 
-Import `TTSConnection` from `lorawan_connection.backend.tts`. The CLI selects it
-with `--backend tts`. Its gRPC and protobuf dependencies remain optional.
-See [Connecting to The Things Stack](/lorawan-connection/connection/tts/).
+Import `TTSConnection` from `lorawan_connection.backend.tts`, or select
+`--backend tts` in the CLI. See
+[Connecting to The Things Stack](/lorawan-connection/connection/tts/).

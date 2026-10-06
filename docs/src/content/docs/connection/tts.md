@@ -3,9 +3,8 @@ title: Connecting to The Things Stack
 description: Read devices and live traffic through The Things Stack gRPC APIs.
 ---
 
-The Things Stack backend uses gRPC for inventory, application traffic, lifecycle
-events, and downlinks. It works with devices already registered in the selected
-applications. It does not provision devices or require MQTT.
+The Things Stack backend supplies device inventory, live events, and downlinks
+over gRPC. Register devices in the selected applications before connecting.
 
 Install its optional dependencies:
 
@@ -110,7 +109,7 @@ backend does not clear queues automatically when a command times out.
 
 ## CLI
 
-The shared helper selects the backend and imports it only when connecting:
+Select `--backend tts` in a device library's CLI:
 
 ```sh
 python -m my_sensors --backend tts \
@@ -119,9 +118,8 @@ python -m my_sensors --backend tts \
   --application my-application --api-key-file /path/to/key --json
 ```
 
-The wheel contains a private descriptor set generated from the official TTS 3.36.2
-API definitions. No protobuf compiler or source checkout is needed at runtime.
-The adapter uses a private descriptor pool and does not install a `ttn` namespace.
+The wheel bundles descriptors from the TTS 3.36.2 API, so no protobuf compiler is
+needed at runtime. It uses a private descriptor pool and leaves the `ttn` namespace free.
 
 References: [application API](https://www.thethingsindustries.com/docs/api/reference/grpc/application_server/)
 and [events API](https://www.thethingsindustries.com/docs/api/reference/grpc/events/).

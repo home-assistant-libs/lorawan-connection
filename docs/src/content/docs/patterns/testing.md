@@ -3,12 +3,9 @@ title: Testing
 description: Test device libraries using fixture events and real generated payloads.
 ---
 
-`MockConnection` implements the same connection protocol as a network backend.
-It replays existing devices when a collection subscribes, delivers events to the
-subscribed vendors, and records outgoing commands. It needs no server or radio.
-
-Use a fixture to seed the connection with an S2101 descriptor. Each test receives
-a fresh collection with that device already added through `async_setup()`.
+`MockConnection` replays inventory, delivers events, and records commands without
+a server. This fixture seeds an S2101 descriptor so each test starts with a model
+created through `async_setup()`:
 
 ```python
 from collections.abc import AsyncIterator
@@ -69,8 +66,7 @@ async def test_s2101(
     assert model.humidity == 31.4
 ```
 
-This repository adds `examples/` to pytest's path so that the example library is
-importable. In your library repository, import your installed development package.
+Import your installed device library. This repository uses `examples/` on pytest's path.
 
 ## Event sequences to cover
 
@@ -156,9 +152,8 @@ the descriptor or the network and device identifiers.
 
 `connection.disconnect()` stops event delivery and calls registered disconnect
 listeners once. Later subscriptions raise `ConnectionUnavailable`; command sends
-raise `DownlinkError`. The application must close its collections when notified,
-just as it does with a real connection. Create a new mock connection to test
-reconnection.
+raise `DownlinkError`. Close the collections when notified and create a new mock
+to test reconnection.
 
 Each mock represents one network. Add a device before emitting its activity;
 unknown devices and events from another network raise `ValueError`.

@@ -6,27 +6,20 @@ description: Model a device's values and commands, then manage devices in a coll
 import { Code } from '@astrojs/starlight/components';
 import source from '../../../../../examples/dragino_lorawan/__init__.py?raw';
 
-A device model is a Python object representing one physical LoRaWAN device. Its
-attributes hold reported values. Its methods let applications observe changes and
-send commands. The example on this page models a Dragino LT-22222-L.
+A device model holds reported values and exposes command methods for one physical
+device. This example implements a Dragino LT-22222-L.
 
 ## Complete device example
 
-Create a subclass of `Device` for each supported model. In this example, `LT22222`
-defines its data, decodes incoming events in `handle_event()`, and encodes commands
-in its async methods. The base class provides identity, update subscriptions, and
-command delivery.
+Subclass `Device` and implement `handle_event()` to decode incoming events.
+The base class provides identity, update subscriptions, and command delivery.
 
-Save this as `dragino_lorawan.py`. It also declares `DraginoDevices`, the collection
-explained later on this page. The code is the same implementation exercised by the
-example's tests.
+Save this as `dragino_lorawan.py`. It includes the `DraginoDevices` collection used below.
 
 <Code code={source} lang="python" title="dragino_lorawan.py" />
 
-The constructor receives a `DeviceDescriptor` for the physical device and passes
-it to `super().__init__(descriptor)`. Data starts as `None` until a report arrives.
-The model uses channel dictionaries; other devices can use individual attributes,
-nested objects, or dataclasses.
+Values start as `None` until a report arrives. The model uses channel dictionaries;
+other models can use individual attributes, nested objects, or dataclasses.
 
 ## Decode events and update state
 
@@ -45,10 +38,8 @@ and stale-data rules; the collection does not impose them.
 
 ## Read values and observe changes
 
-Applications read model attributes directly. Reading them does not contact the
-device. The values contain the latest report the model received.
-
-Define a callback for devices announced by the collection:
+Read the latest reported values from model attributes without contacting the device.
+Subscribe to changes in the collection's device-added callback:
 
 ```python
 from dragino_lorawan import LT22222
@@ -63,12 +54,9 @@ def device_added(device: LT22222) -> None:
     device.add_update_listener(show_values)
 ```
 
-The first call reads the current values. Later, `notify()` calls `show_values()`
-again. Listeners take no arguments and run synchronously.
-
-`add_update_listener()` returns a function you can call to unsubscribe. Closing
-the model also removes its listeners. Registering a listener does not replay state;
-that is why the example calls `show_values()` first.
+Listeners run synchronously with no arguments. Registration does not replay state,
+so call `show_values()` once for the initial values. `add_update_listener()` returns
+an unsubscribe function; closing the model also removes its listeners.
 
 ## Send commands
 
@@ -85,21 +73,16 @@ async def turn_on(device: LT22222) -> None:
         await device.async_set_relay(1, True)
 ```
 
-The model encodes the command and calls `async_send_downlink()`. The collection
-supplies the sender, as shown below. The method completes after a device acknowledgement.
-The caller's timeout raises `TimeoutError` after 30 seconds. Keep the connection's
-event subscription running so acknowledgements can arrive.
-
-An acknowledgement confirms delivery. Reported state changes when an uplink arrives,
-and the model notifies its listeners.
+The call completes after a device acknowledgement or raises `TimeoutError` after
+30 seconds. Keep the event subscription running so acknowledgements can arrive.
+An ACK confirms delivery; reported state changes with the next uplink.
 
 ### Implement a command method
 
 Validate the caller's arguments and encode them using the device's protocol.
 Then await `self.async_send_downlink(data=payload, f_port=port)` from the model's
 async method. The base class supplies the device's DevEUI and waits for its ACK.
-It returns `None` on success. Keep reported attributes unchanged until a device
-report arrives.
+Keep reported attributes unchanged until a device report arrives.
 
 By default, `wait_for_ack=True` requests a confirmed downlink. A model can pass
 `wait_for_ack=False` to send an unconfirmed command and return after the server
@@ -108,7 +91,6 @@ accepts it. Confirmation follows this setting automatically.
 If a command should expire while queued, pass a timezone-aware `expires_at`
 datetime. Queue expiry limits how long the server retains a command; the caller's
 timeout limits how long the application waits.
-
 
 The Dragino example exposes optional expiry on both output methods:
 
@@ -134,12 +116,9 @@ to end pending acknowledgement waits.
 
 ## Manage devices with a collection
 
-A collection holds the device instances for one logical network. It creates
-supported models from device descriptions, sends later events to the correct instance,
-and removes devices when they are removed.
-
-The `DraginoDevices` class at the end of the complete example declares its supported
-models in `DEVICES`. The base collection uses each class's `identifiers` mapping to select a model for an incoming descriptor.
+A collection manages device instances for one logical network. `DraginoDevices`
+declares its supported models in `DEVICES`; the collection selects a class by
+matching its `identifiers` against each incoming descriptor.
 
 Each stack has its own catalog. Declare the native brand and model IDs together:
 
@@ -193,9 +172,8 @@ from lorawan_connection import DeviceCollection
 collection = DeviceCollection(connection, [LT22222])
 ```
 
-`Connection` is a protocol shared by backends and test doubles. Call `async_setup()`
-to subscribe after creating a collection. Several collections can share the same
-connection. Closing one collection leaves the connection and other collections open.
+Backends and test doubles implement the same `Connection` protocol. Several
+collections can share a connection; closing one leaves the others and the transport open.
 
 ## Device lifecycle
 

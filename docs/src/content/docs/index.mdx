@@ -16,15 +16,13 @@ hero:
 
 import { CardGrid, LinkCard } from "@astrojs/starlight/components";
 
-`lorawan-connection` is a Python library for modelling LoRaWAN devices. Build device
-libraries that expose readings, states, and commands, with subscriptions for updates.
+Define device models that decode readings and send commands. `lorawan-connection`
+creates those models from server inventory and routes events to them. Applications
+read model attributes and subscribe to updates.
 
-You define each device's data and decoding. The shared base classes manage device
-collections and listeners. An optional ChirpStack connection supplies live events
-and sends commands.
-
-Start with the [quickstart](/lorawan-connection/getting-started/quickstart/) to replay
-a SenseCAP sensor reading and see its temperature and humidity values.
+Optional ChirpStack and The Things Stack backends connect to live servers.
+The [quickstart](/lorawan-connection/getting-started/quickstart/) replays a SenseCAP
+sensor reading without a server.
 
 ## Guides
 

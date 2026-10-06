@@ -8,24 +8,17 @@ The shared `lorawan` integration and registration API described here are propose
 Home Assistant APIs. They are implemented in the PoC, not released in Home Assistant.
 :::
 
-First implement and publish a backend using the
-[backend guide](/lorawan-connection/connection/adding-a-backend/).
-A connection provider is a server integration that configures a backend and
-registers its connection with `lorawan`.
-[Device implementations](/lorawan-connection/home-assistant/device-implementations/)
-use these connections to create vendor entities through `DeviceManager`.
+A connection provider configures a server backend and registers it with `lorawan`.
+[Device integrations](/lorawan-connection/home-assistant/device-implementations/)
+use the registered connections through `DeviceManager`.
 
-The examples below use the released TTS adapter. For a new server, substitute
-your adapter, authentication exception, configuration fields, and dependency extra.
-Keep server-specific SDK calls inside the Python backend.
+These examples use `TTSConnection` from the `lorawan-connection` package. To support
+another server, implement its adapter using the
+[backend guide](/lorawan-connection/connection/adding-a-backend/) first.
 
 ## Declare the dependency
 
-Add an integration directory with `manifest.json`, `__init__.py`, `config_flow.py`,
-`const.py`, and `strings.json`. Follow Home Assistant's integration requirements
-for ownership, documentation, tests, and the quality scale.
-
-These are the dependency fields for a TTS server integration:
+A TTS integration needs these manifest fields:
 
 ```json
 {
@@ -37,24 +30,17 @@ These are the dependency fields for a TTS server integration:
 }
 ```
 
-Add the integration's own domain, name, code owners, and documentation URL to the
-manifest. Choose `iot_class` for the actual transport and deployment. Pin the
-published version that provides your backend. The shared `lorawan` integration
-pins the base library; its version and the server extra must agree.
-
-A separately published adapter belongs in `requirements` under its own package
-name and version. The HA integration imports its backend explicitly. Shared
-LoRaWAN code and vendor integrations must not import optional server adapters.
+Pin the same `lorawan-connection` version as the shared `lorawan` integration.
+For a separately published adapter, use its package name and version in `requirements`.
+Import the adapter in the server integration; keep its SDK calls in the backend.
 
 ## Configure and validate the server
 
-The config flow collects the endpoint, credentials, and applications or tenant
-that define its scope. Mark credentials as secret fields. Give each server/scope
-a stable unique ID so repeated setup does not create duplicate entries. Do not
-include the API key in that ID.
+Collect the endpoint, credentials, and applications or tenant. Derive the config
+entry's unique ID from the server and selected scope, excluding credentials.
 
-Validate the connection using the backend and always close the temporary client.
-For TTS, a config flow can call this helper and display the returned error key:
+Validate with a temporary backend connection. This helper returns a config-flow
+error key and closes the client:
 
 ```python
 from lorawan_connection import ConnectionUnavailable
@@ -88,28 +74,20 @@ async def async_validate_server(
     return None
 ```
 
-Validate the input's shape and nonempty application selection before calling the
-helper. Define corresponding form errors in `strings.json`. Do not require write
-permission just to connect: read-only credentials should support monitoring.
-
-Implement reauthentication to validate replacement credentials, update the same
-config entry, and reload it. Preserve its entry ID and scope. Do not register the
-validation client with `lorawan`; normal entry setup creates the owned connection.
+Require a nonempty application selection before calling the helper. Accept read-only
+credentials for monitoring. Reauthentication updates and reloads the existing
+entry, preserving its ID and scope.
 
 ## Connect, register, and close
 
-The backend must support `async_subscribe(brands=None, callback=...)`. Registration
-uses this to receive every device in the selected scope. The narrower consumer
-`Connection` protocol is sufficient for vendor collections but not server registration.
+Registration requires `async_subscribe(brands=None, callback=...)` to receive all
+devices in the selected scope. The initial inventory must be complete.
 
-Set `network_id=entry.entry_id`. LoRaWAN uses that identity to route events and
-distinguish identical DevEUIs on different servers. Registration expects complete
-initial inventory and returns an idempotent unsubscribe callback. It does not own
-the transport.
+Set `network_id=entry.entry_id` to distinguish identical DevEUIs on different servers.
+The returned unsubscribe callback withdraws the connection; the server integration
+owns transport cleanup.
 
-This `__init__.py` example uses the fields `endpoint`, `api_key`, `application_ids`,
-and optional `identity_server` stored by the config flow. Define the integration's
-`DOMAIN` in `const.py`.
+In `__init__.py`, use the config-flow fields and `DOMAIN` from `const.py`:
 
 ```python
 from dataclasses import dataclass
@@ -190,19 +168,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ServerConfigEntry) -> b
     return True
 ```
 
-Call registration cleanup before closing the transport on unload or shutdown.
-Remove the recovery listener first so intentional closure cannot request a reload.
-Close the backend on setup failure, including cancellation during registration.
-The broad exception handler above performs cleanup and immediately reraises.
+Remove the recovery listener before intentional closure to avoid scheduling a reload.
+Then unregister the connection and close the transport. The setup exception handlers
+also close the backend if registration fails or is cancelled.
 
-LoRaWAN withdraws a failed connection when the backend notifies disconnect
-listeners. The server integration schedules its own reload. Authentication errors
-start reauthentication; temporary connection errors let HA retry setup.
-
-Keep the same entry ID when reconnecting. `DeviceManager` retains the vendor's
-models and coordinators, attaches the replacement transport, and reconciles its
-inventory. A disconnect affects only that server. The manager handles removal
-when a device or server entry is deleted.
+On disconnect, `lorawan` withdraws the connection and the server integration
+schedules a reload. `ConfigEntryAuthFailed` starts reauthentication;
+`ConfigEntryNotReady` lets HA retry setup. Keep the entry ID on reconnect so
+`DeviceManager` can reuse models and coordinators with the replacement transport.
 
 ## Supply device identities for discovery
 
@@ -210,25 +183,18 @@ Include the backend's native `stack`, `brand_id`, and `model_id` in each device
 descriptor. LoRaWAN uses the stack and brand to discover the vendor integration;
 the vendor library uses the model ID to select a device implementation.
 
-When adding another stack, add its identities to the vendor library and its
-integration's discovery manifest. Follow
-[Dependencies and discovery](/lorawan-connection/home-assistant/device-implementations/#dependencies-and-discovery)
-for the manifest and device-library declarations. The `lorawan` discovery field
-belongs to the device integration's manifest. The provider supplies the connection.
+Add new stack identities to the vendor library and the device integration's
+[discovery manifest](/lorawan-connection/home-assistant/device-implementations/#dependencies-and-discovery).
 
-## Verify the HA boundary
+## Tests
 
-Test config-flow validation, duplicate entries, and reauthentication. Cover setup
-success, retryable failure, authentication failure, cancellation, unload, and HA
-shutdown. Assert that setup errors close transports and intentional closure does
-not schedule recovery.
+Alongside config-flow and setup tests, cover:
 
-Connect two servers with the same DevEUI. Check that one can disconnect, recover,
-and be deleted without affecting the other. Verify that a reconnect preserves
-existing vendor models and coordinators, reconciles inventory, and routes commands
-to the replacement connection. Include read-only credentials and device removal.
+- Setup failure and cancellation closing all transports.
+- Unload and HA shutdown without scheduling recovery.
+- Two servers with the same DevEUI; disconnecting or deleting one leaves the other available.
+- Reconnection preserving models and coordinators, reconciling inventory, and routing commands to the replacement connection.
+- Read-only credentials and device removal.
 
-Finally, exercise the backend against a disposable real server through HA setup,
-vendor discovery, an uplink, a TCP outage, and recovery. Test downlinks where the
-server and device model support them. Distinguish simulated radio traffic from
-physical-device validation in the results.
+Use a disposable server to test discovery, uplinks, downlinks, and recovery from
+a TCP outage. Record whether radio traffic was simulated or came from physical devices.

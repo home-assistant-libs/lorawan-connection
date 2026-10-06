@@ -28,15 +28,11 @@ Device: Greenhouse
 temperature=21.4, humidity=31.4
 ```
 
-The first event supplies catalog identity. The collection selects and creates the
-model, then calls `device_added`. The next event carries the captured uplink.
-The model decodes it and notifies its state listener.
-
-The replay supplies a mock connection, so it needs no server.
+The mock connection supplies a device descriptor followed by a captured uplink.
+The collection creates the S2101 model, which decodes the reading and notifies its
+listener. No server is needed.
 
 <Code code={replay} lang="python" title="replay.py" />
-
-The example closes the collection when finished. The collection removes its event subscription.
 
 ## Example library
 
@@ -48,7 +44,3 @@ This example follows the [Seeed reference decoders](https://github.com/Seeed-Sol
 It decodes channel-one temperature and humidity records, but does not validate the
 two-byte trailer. It has been tested with captured payloads and a simulated device,
 not physical SenseCAP hardware.
-
-Read [Devices and collections](/lorawan-connection/modelling/overview/) to write
-your own models, then [Build a device library](/lorawan-connection/patterns/library/)
-to organize them into a package.

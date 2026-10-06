@@ -3,8 +3,7 @@ title: Event reference
 description: Exact fields for descriptors, event envelopes, and payload contracts.
 ---
 
-All types below are importable from `lorawan_connection`.
-For transport lifecycle and subscription requirements, see
+Import these types from `lorawan_connection`. For transport and subscription requirements, see
 [Add a backend](/lorawan-connection/connection/adding-a-backend/).
 
 ## DeviceDescriptor
@@ -30,8 +29,7 @@ Other fields are supplied by the provider and are not validated by this dataclas
 
 ## DeviceEvent and DeviceEventData
 
-`DeviceEvent` is a read-only Protocol. `DeviceEventData` is its frozen, slotted
-fixture and envelope implementation.
+`DeviceEvent` is a read-only protocol; `DeviceEventData` is its frozen, slotted dataclass implementation.
 
 | Field | Type | Dataclass default |
 | --- | --- | --- |
@@ -116,5 +114,5 @@ the backend's enums. The library does not define a cross-backend enum mapping.
 altitude is meters. Fixtures: `CoordinatesData(latitude, longitude, altitude)`
 and `LocationData(location)`. The coordinates object is borrowed by reference.
 
-Fixtures supply fields, not validation of radio ranges, checksums, or payload
-authenticity. Vendor decoders validate their wire format.
+Fixture dataclasses do not validate radio ranges, checksums, or payload authenticity.
+Validate wire formats in the vendor decoder.

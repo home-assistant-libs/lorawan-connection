@@ -43,16 +43,14 @@ unsubscribe = sensors.subscribe_device_added(
 )
 ```
 
-Each model maps a stack name to its native `(brand_id, model_id)` in `identifiers`.
-The collection builds its catalog lookup from `DEVICES`. You can also pass classes
-at construction: `DeviceCollection(connection, [Sensor])`.
-Call `await sensors.async_setup()` to subscribe through the supplied connection.
-The collection owns its subscription; the application owns connection cleanup.
-The `Device` base supplies identity, `add_update_listener()`, `notify()`, and cleanup.
-Models define their own attributes, including multiple measurements or channels.
-Listeners take no arguments and read model attributes after a complete update.
-See [Connecting to ChirpStack](https://home-assistant-libs.github.io/lorawan-connection/connection/chirpstack/)
-to connect the collection to a server.
+Each model declares native `(brand_id, model_id)` pairs by stack. The collection
+selects models from `DEVICES`; alternatively pass them to
+`DeviceCollection(connection, [Sensor])`.
+
+Call `await sensors.async_setup()` to receive inventory and live events.
+Applications observe models through `add_update_listener()`. Models decode readings,
+update their attributes, then call `notify()`. Closing the collection removes
+subscriptions and closes models, leaving the connection open.
 
 ## Install
 
@@ -63,45 +61,31 @@ pip install lorawan-connection
 The [quickstart](https://home-assistant-libs.github.io/lorawan-connection/getting-started/quickstart/)
 replays a SenseCAP S2101 capture and prints 21.4 °C and 31.4% humidity.
 
-## Included
+## Backends
 
-- Read-only event and payload `Protocol`s. Generated payloads can pass by reference.
-- Immutable descriptors and fixture dataclasses for every supported event payload.
-- An in-memory `MockConnection` for device replay, event delivery, and command tests.
-- A `Device` base with synchronous update listeners and explicit notifications.
-- A generic `DeviceCollection` with inventory replay, model replacement, and retirement.
-- Synchronous callback helpers with independent, idempotent unsubscribe functions.
-- Typed exports (`py.typed`), a tested SenseCAP example, and Astro/Starlight documentation.
+| Server | Install | Import |
+| --- | --- | --- |
+| [ChirpStack](https://home-assistant-libs.github.io/lorawan-connection/connection/chirpstack/) | `pip install "lorawan-connection[chirpstack]"` | `lorawan_connection.backend.chirpstack.ChirpStackConnection` |
+| [The Things Stack](https://home-assistant-libs.github.io/lorawan-connection/connection/tts/) | `pip install "lorawan-connection[tts]"` | `lorawan_connection.backend.tts.TTSConnection` |
 
-The optional `lorawan_connection.backend.chirpstack` backend supplies inventory and live events.
-Install `lorawan-connection[chirpstack]` to use it. Backend dependencies stay in
-their extras; importing the shared package does not import any adapter.
-Import `ChirpStackConnection` explicitly from `lorawan_connection.backend.chirpstack`.
-The backend drops events whose server receipt timestamps are more than five seconds
-before each device stream starts. Keep the client and ChirpStack clocks synchronized.
-The application owns its connection lifecycle; provisioning, QR parsing, and vendor decoders belong in separate libraries.
-The SenseCAP implementation under `examples/` illustrates a separate device library.
+Adapters load only when explicitly imported. Both supply inventory before live
+activity. Collections select models by catalog identity. Provision devices on the
+server before connecting. The application owns connection startup, recovery, and shutdown;
+missed telemetry is not replayed.
 
-Events are live notifications. The package does not persist history, reconnect a
-transport, or request replay after a gap. Providers report inventory before activity.
-Collections select models from catalog identity, never from names or payload guesses.
-
-The `lorawan_connection.backend.tts` adapter uses The Things Stack gRPC APIs.
-Install `lorawan-connection[tts]`. It supports separate Identity and Application
-Servers, native catalog identity, live uplinks, lifecycle events, and command ACKs.
-See the [TTS guide](https://home-assistant-libs.github.io/lorawan-connection/connection/tts/).
-The Dragino example's relay and digital-output methods default to no queue expiry
-and work through both backends. Pass an optional `expires_at` datetime when needed.
-TTS rejects explicit queue expiry; ChirpStack supports it.
+ChirpStack drops retained events older than five seconds before each device stream
+starts. Keep server and client clocks synchronized. TTS supports separate Identity
+and Application Servers.
 
 ## Sending commands
 
-Pass the connection to the collection. Device models encode their
-commands and call `async_send_downlink(data=..., f_port=...)`. The method requests a
-confirmed downlink and completes after its device ACK. It returns `None` on success.
-Use `wait_for_ack=False` to send an unconfirmed command and return after enqueueing.
-Callers can bound the wait with `asyncio.timeout()`. Device reports update model
-attributes; an ACK confirms delivery, not the resulting device state.
+Models encode commands and call `async_send_downlink(data=..., f_port=...)`.
+By default, the call requests a confirmed downlink and waits for its ACK. Use
+`wait_for_ack=False` to return after enqueueing an unconfirmed command.
+
+An ACK confirms delivery; device reports update model attributes. A caller can
+limit its wait with `asyncio.timeout()`, but the queued command may still execute.
+Optional `expires_at` limits queue retention on ChirpStack. TTS rejects explicit expiry.
 
 The [Dragino example](https://home-assistant-libs.github.io/lorawan-connection/modelling/overview/#complete-device-example)
 models the LT-22222-L with identities from both the ChirpStack and TTS catalogs.
@@ -114,10 +98,6 @@ Seed it with device descriptors, then call the collection's `async_setup()`.
 are recorded in `connection.downlinks`, keyed by queue ID. Send ACK events explicitly
 to test command completion; `connection.disconnect()` simulates connection loss.
 See the [testing guide](https://home-assistant-libs.github.io/lorawan-connection/patterns/testing/).
-
-Construct `DeviceEventData` with keyword arguments. Supply `descriptor=...` to derive
-`network_id` and `dev_eui`, or pass both identifiers explicitly for an event without
-a descriptor. Conflicting explicit identifiers raise `ValueError`.
 
 ## Device-library CLI
 
@@ -132,18 +112,10 @@ if __name__ == "__main__":
     run(Sensors.DEVICES)
 ```
 
-The helper discovers supported devices and prints their state. Models supply catalog
-identity and update listeners through the shared `Device` base. The CLI reads public
-model attributes and properties.
-Select the server with `--backend chirpstack` or `--backend tts`. ChirpStack is
-the default. TTS requires explicit `--application` IDs and uses `TTS_API_KEY`. The helper imports the selected
-adapter only when connecting. `--help` works without backend extras installed.
-By default, it discovers applications across all accessible tenants and streams
-live updates. Use `--tenant UUID` or repeat `--application UUID` to restrict the
-selection. Keys that cannot list tenants require `--tenant`.
-Use `--list` to print inventory and exit, or `--json` for machine-readable output.
-Unmapped devices from supported vendors produce a warning on stderr, once per
-device per run. Each warning includes the device name, DevEUI, brand ID, and model ID.
+The helper prints public model attributes and properties as updates arrive.
+Select `--backend chirpstack` (the default) or `--backend tts`. Add `--list` for
+inventory only, or `--json` for machine-readable output. `--help` works without
+backend extras installed.
 
 ```sh
 pip install "lorawan-connection[chirpstack]"
@@ -152,25 +124,6 @@ python -m my_sensors --server https://chirpstack.example.com:443 --api-key-file 
 
 See the [CLI guide](https://home-assistant-libs.github.io/lorawan-connection/patterns/cli/)
 and [Connecting to ChirpStack](https://home-assistant-libs.github.io/lorawan-connection/connection/chirpstack/).
-
-## Collection subscriptions
-
-Pass a connection to the collection, then call `await devices.async_setup()`.
-The collection selects stack and brand pairs from its registered model classes and receives
-existing devices before setup returns. Later events reach models automatically.
-`devices.close()` unsubscribes and closes the models without closing the connection.
-Listen for a model's removal with `device.add_remove_listener(callback)`. It fires
-after removal or replacement closes that model, but not during ordinary shutdown.
-
-`Connection` exposes only `async_subscribe(*, brands, callback)`,
-`on_disconnect(callback)`, and `async_send_downlink(downlink)`.
-Collections fail pending commands when the connection is lost and keep models open.
-Applications own connection startup, recovery, and shutdown. The ChirpStack backend
-retries transient polling and device-stream failures before reporting connection loss.
-
-For ChirpStack, call `await connection.async_connect()` before setting up collections.
-Register disconnect notifications with `connection.on_disconnect(callback)`;
-the callback takes no arguments. Use `await devices.async_setup()` to deliver events to models. Several collections can share one connection.
 
 ## Add a backend
 
@@ -181,24 +134,12 @@ Adapters implement the connection protocol without importing an application fram
 
 ## Home Assistant
 
-The [device implementation guide](https://home-assistant-libs.github.io/lorawan-connection/home-assistant/device-implementations/)
-covers registered connections, discovery, coordinators, and entities. Server
-integrations register connections with `lorawan`. One vendor entry handles all
-registered servers through `DeviceManager`, with one collection per connection.
-Platforms subscribe to ready coordinators. Temporary disconnection preserves
-models and registry records; reconnection reconciles the device list.
+These APIs are proposed and are not yet part of Home Assistant:
 
-Server integrations use their config entry ID as `network_id` and call
-`await lorawan.async_register_connection(hass, entry, connection=connection)`
-after connecting. The returned callback withdraws the registration. The server
-integration calls it before closing its transport and owns retries and reauthentication.
-The [connection provider guide](https://home-assistant-libs.github.io/lorawan-connection/home-assistant/connection-providers/)
-shows how to add a backend to HA, including manifest dependencies, config-flow
-validation, registration, recovery, cleanup, and vendor discovery.
-
-Vendor coordinators and the manager use `device_identifier()` for registry identity.
-It returns one identifier tuple; wrap it in a set for `DeviceInfo.identifiers`.
-These Home Assistant APIs are proposals and are not yet part of Home Assistant.
+- [Connection providers](https://home-assistant-libs.github.io/lorawan-connection/home-assistant/connection-providers/)
+  configure backends and register them with `lorawan.async_register_connection()`.
+- [Device implementations](https://home-assistant-libs.github.io/lorawan-connection/home-assistant/device-implementations/)
+  use `DeviceManager` to access matching devices on all available connections.
 
 ## Development
 

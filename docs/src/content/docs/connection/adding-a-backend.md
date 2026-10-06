@@ -3,17 +3,16 @@ title: Add a backend
 description: Implement server inventory, subscriptions, downlinks, and transport lifecycle behind the shared connection interface.
 ---
 
-A backend adapts a LoRaWAN server API to `lorawan_connection.Connection`.
-It supplies device inventory, live events, and downlinks. Device libraries own
-payload decoding and model state. Applications own credentials, server selection,
-and reconnection policy.
+A backend implements `lorawan_connection.Connection` to supply inventory, events,
+and downlinks from a server. Keep payload decoding in device libraries and
+configuration and reconnection policy in applications.
 
-Implement the adapter without importing an application framework. Use the
+Use the
 [ChirpStack adapter](https://github.com/home-assistant-libs/lorawan-connection/blob/main/src/lorawan_connection/backend/chirpstack.py)
 and [TTS adapter](https://github.com/home-assistant-libs/lorawan-connection/blob/main/src/lorawan_connection/backend/tts.py)
-as concrete implementations of the contracts below.
+as implementation examples.
 
-## Package the adapter separately from shared imports
+## Package the adapter
 
 For an adapter included in this repository:
 
@@ -29,8 +28,8 @@ backend registration API is required. Its transport dependencies belong to that 
 
 ## Implement the connection contract
 
-`Connection` is a structural protocol. These are the consumer methods, with
-`None` support added to inventory subscriptions for applications that discover all brands:
+Implement these methods. `brands=None` extends the consumer protocol for
+applications that need inventory across all brands:
 
 ```python
 from collections.abc import Callable
@@ -113,9 +112,8 @@ connection. A DevEUI identifies one device within that connection. Reject ambigu
 duplicate DevEUIs within the selected scope. Define how the adapter handles
 registry records without a usable DevEUI.
 
-Read every page and selected application before replacing the current inventory.
-A partial read or failed page must not make devices appear deleted. Compare the
-complete snapshot with the previous one and emit `ADDED`, `UPDATED`, and `REMOVED`.
+Read every page and selected application before replacing inventory, so failed reads
+cannot appear as deletions. Compare complete snapshots to emit `ADDED`, `UPDATED`, and `REMOVED`.
 Retain devices with unknown catalog identity in inventory; leave `brand_id=None`
 and `model_id=""` when those fields are absent.
 
@@ -129,8 +127,7 @@ receive an uplink before its device descriptor.
 
 For activity from an unknown device, refresh inventory before delivery. Bound any
 buffer and define how stale events are discarded. Use server receipt timestamps
-when available. Describe any startup gap or replay limitation instead of assuming
-that opening a socket proves the stream is ready.
+when available, and document startup gaps and replay limitations.
 
 If a descriptor's brand changes, notify subscribers that matched its old identity
 with `REMOVED`. Deliver the updated descriptor to subscribers matching its new
@@ -144,9 +141,9 @@ Unsubscribing one collection must not close the shared transport or other subscr
 ## Translate messages and commands
 
 Map server messages to the [event and payload contracts](/lorawan-connection/connection/reference/).
-Forward raw application payload bytes, not server-decoded JSON. Generated SDK
-payloads can pass by reference if their attributes match the protocol. Otherwise,
-construct the shared payload dataclasses. Never mutate an event after delivery.
+Forward raw application bytes. Generated SDK payloads can pass by reference if
+their attributes match the protocol; otherwise use the shared dataclasses.
+Never mutate an event after delivery.
 
 `async_send_downlink()` receives the device's DevEUI, FPort, bytes, confirmation
 flag, and optional expiry. Validate that the device belongs to the selected scope.
@@ -163,7 +160,7 @@ is rejected. Do not silently drop `expires_at`: either enforce it through the
 server or reject it. A caller timeout does not cancel an already queued command.
 Do not retry an enqueue automatically when acceptance is uncertain.
 
-## Own transport resources
+## Transport lifecycle
 
 `async_connect()` validates credentials and selected scope, reads inventory, and
 starts the required streams or polling tasks. Clean up partially opened resources
@@ -195,7 +192,7 @@ third-party backends. For a new bundled adapter, extend `add_connection_args()` 
 Imports needed only for type annotations belong under `TYPE_CHECKING`.
 Check that CLI help and shared imports still work with no optional extras installed.
 
-## Verify the boundary
+## Tests
 
 Test the adapter against fake SDK responses and a disposable server. Cover:
 
@@ -207,6 +204,5 @@ Test the adapter against fake SDK responses and a disposable server. Cover:
 - Stream loss, pending commands, setup cancellation, and repeated close.
 - Installation with only the backend's own extra, including packaged SDK schemas.
 
-Use `MockConnection` to test vendor libraries. Backend tests need the actual
-adapter with its server client replaced or a real disposable server; a mock
-connection alone cannot verify protocol translation or transport cleanup.
+Replace the adapter's SDK client for unit tests. `MockConnection` is for device
+library tests and does not exercise an adapter's protocol translation or cleanup.
