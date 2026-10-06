@@ -161,8 +161,8 @@ async def test_ack_correlation(
             **{field: {"correlation_ids": ["other", "lorawan-connection:test"]}},
         )
     )
-    assert events[-1].data.queue_item_id == "lorawan-connection:test"
-    assert events[-1].data.acknowledged is ack
+    assert events[-1].queue_item_id == "lorawan-connection:test"
+    assert events[-1].acknowledged is ack
 
 
 async def test_downlink_failure_fails_wait(connection: TTSConnection) -> None:
@@ -370,3 +370,290 @@ async def test_dragino_output_command(
     assert model.relays == {1: None, 2: None}
     assert model.digital_outputs == {1: None, 2: None}
     models.close()
+
+
+@pytest.mark.parametrize("endpoint", ["http://localhost", "https://localhost"])
+async def test_shared_channel(endpoint: str) -> None:
+    """Equal default and explicit ports use one channel and close it once."""
+    from unittest.mock import patch
+
+    channel = Mock(close=AsyncMock())
+    with (
+        patch("grpc.aio.insecure_channel", return_value=channel),
+        patch("grpc.aio.secure_channel", return_value=channel),
+    ):
+        connection = TTSConnection(
+            endpoint,
+            "key",
+            identity_server=endpoint
+            + (":443" if endpoint.startswith("https") else ":80"),
+            application_ids=["app"],
+            network_id="test",
+        )
+    assert connection.channel is connection._identity_channel
+    assert len(connection._channels) == 1
+    await connection.close()
+    channel.close.assert_awaited_once()
+
+
+async def test_overlapping_refreshes(connection: TTSConnection) -> None:
+    """Requests during a scan share a follow-up that sees changes missed by it."""
+    started = asyncio.Event()
+    release = asyncio.Event()
+    response = message("EndDevices", end_devices=[device()])
+
+    async def scan(*args, **kwargs):
+        snapshot = response
+        started.set()
+        await release.wait()
+        return snapshot
+
+    connection._registry.List = AsyncMock(side_effect=scan)
+    first = asyncio.create_task(connection.refresh())
+    await started.wait()
+    response = message("EndDevices", end_devices=[device("Renamed")])
+    waiting = [asyncio.create_task(connection.refresh()) for _ in range(3)]
+    await asyncio.sleep(0)
+    release.set()
+    await asyncio.gather(first, *waiting)
+    assert connection._registry.List.await_count == 2
+    assert connection.devices[EUI].name == "Renamed"
+
+
+async def test_failed_refresh_does_not_satisfy_waiters(
+    connection: TTSConnection,
+) -> None:
+    """A queued refresh retries after a failed snapshot without losing inventory."""
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def fail(*args, **kwargs):
+        started.set()
+        await release.wait()
+        raise ConnectionUnavailable("offline")
+
+    connection._registry.List = AsyncMock(side_effect=fail)
+    first = asyncio.create_task(connection.refresh())
+    await started.wait()
+    second = asyncio.create_task(connection.refresh())
+    await asyncio.sleep(0)
+    connection._registry.List.side_effect = None
+    connection._registry.List.return_value = message(
+        "EndDevices", end_devices=[device("Recovered")]
+    )
+    release.set()
+    with pytest.raises(ConnectionUnavailable):
+        await first
+    await second
+    assert connection.devices[EUI].name == "Recovered"
+    assert connection._registry.List.await_count == 2
+
+
+class QueueStream:
+    """Control gRPC stream delivery without a network or timers."""
+
+    def __init__(self):
+        self.queue = asyncio.Queue()
+
+    async def initial_metadata(self):
+        return ()
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        value = await self.queue.get()
+        if isinstance(value, Exception):
+            raise value
+        if value is None:
+            raise StopAsyncIteration
+        return value
+
+
+async def test_connect_streams_reconcile_and_close(connection: TTSConnection) -> None:
+    """Startup waits for subscription, reconciles changes and routes live traffic."""
+    from unittest.mock import patch
+
+    lifecycle, traffic = QueueStream(), QueueStream()
+    connection._events.Stream = Mock(return_value=lifecycle)
+    connection._application.Subscribe = Mock(return_value=traffic)
+    lifecycle.queue.put_nowait(message("Event", name="events.stream.start"))
+    with patch.object(connection.channel, "channel_ready", new=AsyncMock()):
+        await connection.async_connect()
+    assert connection.available
+    with pytest.raises(ConnectionUnavailable, match="already started"):
+        await connection.async_connect()
+    events = []
+    updated = asyncio.Event()
+
+    def receive(event):
+        events.append(event)
+        updated.set()
+
+    await connection.async_subscribe(brands=None, callback=receive)
+    updated.clear()
+    connection._registry.List.return_value = message(
+        "EndDevices", end_devices=[device("Renamed")]
+    )
+    lifecycle.queue.put_nowait(message("Event", name="end_device.update"))
+    await asyncio.wait_for(updated.wait(), 1)
+    assert events[-1].descriptor.name == "Renamed"
+    updated.clear()
+    traffic.queue.put_nowait(
+        message(
+            "ApplicationUp",
+            end_device_ids=IDS,
+            uplink_message={"frm_payload": b"hello", "f_port": 1},
+        )
+    )
+    await asyncio.wait_for(updated.wait(), 1)
+    assert events[-1].data == b"hello"
+    disconnect = Mock()
+    connection.on_disconnect(disconnect)
+    await connection.close()
+    disconnect.assert_not_called()
+    with pytest.raises(ConnectionUnavailable):
+        await connection.async_subscribe(brands=None, callback=receive)
+    with pytest.raises(ConnectionUnavailable):
+        connection.on_disconnect(disconnect)
+    with pytest.raises(DownlinkError, match="unavailable"):
+        await connection.async_send_downlink(Downlink(EUI, 1, b"x"))
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        TimeoutError(),
+        grpc.aio.AioRpcError(grpc.StatusCode.UNAVAILABLE, (), (), "offline"),
+    ],
+)
+async def test_channel_startup_failure(
+    connection: TTSConnection, error: Exception
+) -> None:
+    from unittest.mock import patch
+
+    with patch.object(
+        connection.channel, "channel_ready", new=AsyncMock(side_effect=error)
+    ):
+        with pytest.raises(ConnectionUnavailable):
+            await connection.async_connect()
+    assert connection._closed
+    assert not connection.available
+
+
+@pytest.mark.parametrize("fail_after_ready", [False, True])
+async def test_stream_failure_during_startup(
+    connection: TTSConnection, fail_after_ready: bool
+) -> None:
+    from unittest.mock import patch
+
+    async def lifecycle():
+        connection._ready.set()
+        if not fail_after_ready:
+            connection._failed(ConnectionUnavailable("stream failed"))
+
+    async def reconcile():
+        connection._failed(ConnectionUnavailable("stream failed"))
+
+    with (
+        patch.object(connection.channel, "channel_ready", new=AsyncMock()),
+        patch.object(connection, "inventory", new=AsyncMock()),
+        patch.object(connection, "_lifecycle", new=lifecycle),
+        patch.object(connection, "_traffic", new=AsyncMock()),
+        patch.object(connection, "refresh", new=reconcile),
+    ):
+        with pytest.raises(ConnectionUnavailable, match="stream failed"):
+            await connection.async_connect()
+    assert connection._closed
+
+
+async def test_traffic_stream_end_disconnects(connection: TTSConnection) -> None:
+    stream = QueueStream()
+    stream.queue.put_nowait(None)
+    connection._application.Subscribe = Mock(return_value=stream)
+    await connection._traffic("app")
+    assert isinstance(connection.error, ConnectionUnavailable)
+    assert not connection.available
+
+
+async def test_poll_failure_disconnects(connection: TTSConnection) -> None:
+    from unittest.mock import patch
+
+    connection.poll_interval = 0
+    with patch.object(
+        connection,
+        "refresh",
+        new=AsyncMock(side_effect=ConnectionUnavailable("offline")),
+    ):
+        await connection._poll()
+    assert not connection.available
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"application_ids": []},
+        {"application_ids": [" "]},
+        {"application_ids": ["app", "app"]},
+        {"poll_interval": 0},
+    ],
+)
+def test_invalid_options(options) -> None:
+    with pytest.raises(ValueError):
+        TTSConnection(
+            "http://localhost:1",
+            "key",
+            network_id="test",
+            **{"application_ids": ["app"], **options},
+        )
+
+
+@pytest.mark.parametrize(
+    "up",
+    [
+        message("ApplicationUp", end_device_ids={**IDS, "dev_eui": b""}),
+        message(
+            "ApplicationUp",
+            end_device_ids={**IDS, "device_id": "different"},
+            uplink_message={"f_port": 1},
+        ),
+        message("ApplicationUp", end_device_ids=IDS, location_solved={}),
+        message(
+            "ApplicationUp",
+            end_device_ids=IDS,
+            downlink_ack={"correlation_ids": ["unrelated"]},
+        ),
+        message("ApplicationUp", end_device_ids=IDS),
+    ],
+)
+async def test_irrelevant_traffic(connection: TTSConnection, up) -> None:
+    events = []
+    await connection.async_subscribe(brands=None, callback=events.append)
+    await connection.handle_message(up)
+    assert len(events) == 1
+
+
+async def test_pagination_and_missing_eui(connection: TTSConnection) -> None:
+    connection._registry.List.side_effect = [
+        message(
+            "EndDevices",
+            end_devices=[
+                message("EndDevice", ids={"device_id": str(index)})
+                for index in range(100)
+            ],
+        ),
+        message("EndDevices", end_devices=[device()]),
+    ]
+    await connection.refresh()
+    assert list(connection.devices) == [EUI]
+    assert connection._registry.List.call_args.args[0].page == 2
+
+
+async def test_unknown_device_stays_absent(connection: TTSConnection) -> None:
+    connection._registry.List.return_value = message("EndDevices")
+    connection.devices.clear()
+    await connection.handle_message(
+        message("ApplicationUp", end_device_ids=IDS, uplink_message={"f_port": 1})
+    )
+    with pytest.raises(DownlinkError, match="no longer exists"):
+        await connection.async_send_downlink(Downlink(EUI, 1, b"x"))

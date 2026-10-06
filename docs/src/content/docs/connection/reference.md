@@ -1,6 +1,6 @@
 ---
 title: Event reference
-description: Exact fields for descriptors, event envelopes, and payload contracts.
+description: Descriptor fields, typed event dispatch, and migration from envelope events.
 ---
 
 Import these types from `lorawan_connection`. For transport and subscription requirements, see
@@ -27,92 +27,51 @@ Construction removes colons from `dev_eui` and lowercases it. The result must ha
 exactly 16 hexadecimal characters; otherwise construction raises `ValueError`.
 Other fields are supplied by the provider and are not validated by this dataclass.
 
-## DeviceEvent and DeviceEventData
+## DeviceEvent
 
-`DeviceEvent` is a read-only protocol; `DeviceEventData` is its frozen, slotted dataclass implementation.
+`DeviceEvent` is a union of `AddedEvent`, `UpdatedEvent`, `RemovedEvent`,
+`UplinkEvent`, `JoinEvent`, `StatusEvent`, `AckEvent`, `TxAckEvent`, `LogEvent`,
+and `LocationEvent`. Construct one of these classes; the union itself is not a constructor.
 
-| Field | Type | Dataclass default |
-| --- | --- | --- |
-| `network_id` | `str` | From `descriptor`; otherwise required |
-| `dev_eui` | `str` | From `descriptor`; otherwise required |
-| `type` | `EventType` | Required |
-| `received_at` | `datetime` | Required |
-| `descriptor` | `DeviceDescriptor \| None` | `None` |
-| `data` | `Payload \| None` | `None` |
+The [events page](/lorawan-connection/connection/events/) lists every field,
+default, and event type. `EventType` remains a `StrEnum` with the same string values.
+All event classes are frozen and slotted. Their `type` field is fixed at construction
+and cannot be supplied or changed with `dataclasses.replace()`.
 
-Pass constructor arguments by keyword. When `descriptor` is supplied, the event
-derives `network_id` and `dev_eui` from it. Explicit identifiers must match that
-descriptor; conflicting values raise `ValueError`. DevEUI comparisons ignore
-colons and letter case. Without a descriptor, both identifiers are required.
+Use the event class or its discriminator to narrow the type. No payload cast is needed:
 
-Providers use timezone-aware timestamps and canonical DevEUIs. The envelope
-retains its inputs without copying or runtime payload validation. Supply a
-descriptor for `ADDED` and `UPDATED`. `REMOVED` can omit it. Activity must carry
-the payload that corresponds to its event type.
+```python
+from lorawan_connection import DeviceEvent, EventType
 
-## EventType and Payload
 
-`EventType` is a `StrEnum`. `Payload` is the union of the seven activity Protocols.
-The Protocols are not runtime-checkable. Dispatch on the event type, then use
-`typing.cast` for static narrowing when needed.
+def handle_event(event: DeviceEvent) -> None:
+    if event.type == EventType.UPLINK:
+        print(event.f_port, event.data.hex())
+    elif event.type == EventType.ACK:
+        print(event.queue_item_id, event.acknowledged)
+```
 
-| Member | String | Payload Protocol | Fixture |
-| --- | --- | --- | --- |
-| `ADDED` | `added` | None | Descriptor in envelope |
-| `UPDATED` | `updated` | None | Descriptor in envelope |
-| `REMOVED` | `removed` | None | Optional descriptor |
-| `UPLINK` | `up` | `Uplink` | `UplinkData` |
-| `JOIN` | `join` | `Join` | `JoinData` |
-| `STATUS` | `status` | `Status` | `StatusData` |
-| `ACK` | `ack` | `Ack` | `AckData` |
-| `TX_ACK` | `txack` | `TxAck` | `TxAckData` |
-| `LOG` | `log` | `Log` | `LogData` |
-| `LOCATION` | `location` | `Location` | `LocationData` |
+Inventory constructors accept only `descriptor` and `received_at`. Their identity
+properties read from the descriptor. Activity constructors accept a descriptor or
+explicit network and device identifiers. Explicit identifiers must match a supplied
+descriptor. Construction normalizes DevEUIs and rejects invalid ones.
 
-### Uplink
+Timestamps and radio ranges are not validated by the dataclasses. Backends provide
+timezone-aware timestamps; device libraries validate wire formats and measurements.
 
-`data: bytes` contains raw application bytes. `f_port: int` contains the application
-port. `UplinkData(data: bytes, f_port: int = 1)` implements this contract.
-The provider forwards all ports. The device library decides which it understands.
+## Changes from 0.10
 
-### Join
+The typed event API is prepared for the next release. The current PyPI release,
+0.10.0, still uses the envelope and payload API.
 
-`dev_addr: str` contains the joined device address. Fixture: `JoinData(dev_addr)`.
+Replace `DeviceEventData(type=EventType.UPLINK, data=UplinkData(...), ...)`
+with `UplinkEvent(data=..., f_port=..., ...)`. Other activity events follow the same
+pattern. Location coordinates move directly onto `LocationEvent`.
 
-### Status
+Replace inventory envelopes with `AddedEvent`, `UpdatedEvent`, or `RemovedEvent`.
+Pass the descriptor and timestamp; omit identifiers and the `type` argument.
+Construct a new event to change its type. Use `dataclasses.replace()` only to
+change fields within the same event class.
 
-Fields: `margin: int`, `external_power_source: bool`,
-`battery_level_unavailable: bool`, and `battery_level: float`.
-
-`StatusData(margin=0, external_power_source=False,
-battery_level_unavailable=True, battery_level=0)` defaults to unknown battery.
-A zero battery value with `battery_level_unavailable=False` is a known zero.
-Interpret the two flags before using a battery reading. `battery_level` is a
-percentage when available; it is not the raw LoRaWAN MAC battery byte.
-
-### Ack
-
-`queue_item_id: str` and `acknowledged: bool` describe a device acknowledgement.
-Fixture: `AckData(queue_item_id, acknowledged)`.
-
-### TxAck
-
-`gateway_id: str` and `downlink_id: int` describe a gateway transmission
-acknowledgement. This does not establish device receipt.
-Fixture: `TxAckData(gateway_id, downlink_id)`.
-
-### Log
-
-`description: str`, `level: int`, and `code: int` describe a backend log message.
-Fixture: `LogData(description, level, code)`. Numeric level and code values retain
-the backend's enums. The library does not define a cross-backend enum mapping.
-
-### Location and Coordinates
-
-`Location.location` is a `Coordinates` object with `latitude: float`,
-`longitude: float`, and `altitude: float`. Latitude and longitude are degrees;
-altitude is meters. Fixtures: `CoordinatesData(latitude, longitude, altitude)`
-and `LocationData(location)`. The coordinates object is borrowed by reference.
-
-Fixture dataclasses do not validate radio ranges, checksums, or payload authenticity.
-Validate wire formats in the vendor decoder.
+`DeviceEventData`, `Payload`, the payload protocols, and their `*Data` fixtures
+are removed. Device models consume typed events instead of generated SDK messages.

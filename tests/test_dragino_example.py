@@ -1,24 +1,27 @@
 """LT-22222-L input modes, output states, and payload validation."""
 
-from dataclasses import replace
 from datetime import UTC, datetime
 from unittest.mock import Mock
 
 import pytest
 
 from dragino_lorawan import LT22222
-from lorawan_connection import AckData, DeviceEventData, EventType, UplinkData
+from lorawan_connection import (
+    AckEvent,
+    DeviceEvent,
+    UplinkEvent,
+)
 
 from .conftest import DESCRIPTOR
 
 
-def event(data: bytes, port: int = 2) -> DeviceEventData:
-    return DeviceEventData(
+def event(data: bytes, port: int = 2) -> DeviceEvent:
+    return UplinkEvent(
         network_id="network",
         dev_eui=DESCRIPTOR.dev_eui,
-        type=EventType.UPLINK,
         received_at=datetime.now(UTC),
-        data=UplinkData(data, port),
+        data=data,
+        f_port=port,
     )
 
 
@@ -60,7 +63,12 @@ def test_unsupported_data(data: bytes, port: int) -> None:
 def test_ack_does_not_set_state() -> None:
     model = LT22222(DESCRIPTOR)
     model.handle_event(
-        replace(event(b""), type=EventType.ACK, data=AckData("queue-id", True))
+        AckEvent(
+            descriptor=DESCRIPTOR,
+            received_at=datetime.now(UTC),
+            queue_item_id="queue-id",
+            acknowledged=True,
+        )
     )
     assert model.relays == {1: None, 2: None}
 

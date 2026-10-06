@@ -5,11 +5,13 @@ from datetime import UTC, datetime
 import pytest
 
 from lorawan_connection import (
+    AddedEvent,
     Device,
     DeviceDescriptor,
     DeviceEvent,
-    DeviceEventData,
     EventType,
+    RemovedEvent,
+    UpdatedEvent,
 )
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
@@ -27,8 +29,12 @@ DESCRIPTOR = DeviceDescriptor(
 
 def inventory(
     descriptor: DeviceDescriptor = DESCRIPTOR, kind: EventType = EventType.ADDED
-) -> DeviceEventData:
-    return DeviceEventData(type=kind, received_at=NOW, descriptor=descriptor)
+) -> DeviceEvent:
+    return {
+        EventType.ADDED: AddedEvent,
+        EventType.UPDATED: UpdatedEvent,
+        EventType.REMOVED: RemovedEvent,
+    }[kind](received_at=NOW, descriptor=descriptor)
 
 
 class DeviceModel(Device):

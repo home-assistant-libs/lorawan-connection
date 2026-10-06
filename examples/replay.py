@@ -3,7 +3,11 @@
 import asyncio
 from datetime import UTC, datetime
 
-from lorawan_connection import DeviceDescriptor, DeviceEventData, EventType, UplinkData
+from lorawan_connection import (
+    AddedEvent,
+    DeviceDescriptor,
+    UplinkEvent,
+)
 from lorawan_connection.mock import MockConnection
 from sensecap_lorawan import S2101, SenseCapDeviceCollection
 
@@ -36,18 +40,13 @@ async def main() -> None:
     now = datetime.now(UTC)
     try:
         await devices.async_setup()
+        connection.emit(AddedEvent(received_at=now, descriptor=descriptor))
         connection.emit(
-            DeviceEventData(
-                type=EventType.ADDED, received_at=now, descriptor=descriptor
-            )
-        )
-        connection.emit(
-            DeviceEventData(
+            UplinkEvent(
                 network_id="home",
                 dev_eui=descriptor.dev_eui,
-                type=EventType.UPLINK,
                 received_at=now,
-                data=UplinkData(bytes.fromhex("01011098530000010210A87A0000AF51")),
+                data=bytes.fromhex("01011098530000010210A87A0000AF51"),
             )
         )
         device = devices.devices[descriptor.dev_eui]

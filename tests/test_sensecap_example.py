@@ -7,10 +7,13 @@ from unittest.mock import Mock
 import pytest
 
 from lorawan_connection import (
+    AddedEvent,
     DeviceDescriptor,
-    DeviceEventData,
+    DeviceEvent,
     EventType,
-    UplinkData,
+    RemovedEvent,
+    UpdatedEvent,
+    UplinkEvent,
 )
 from lorawan_connection.mock import MockConnection
 from sensecap_lorawan import (
@@ -35,9 +38,13 @@ PAYLOAD = bytes.fromhex("01011098530000010210A87A0000AF51")
 
 def inventory(
     descriptor: DeviceDescriptor = DESCRIPTOR, kind: EventType = EventType.ADDED
-) -> DeviceEventData:
+) -> DeviceEvent:
     """Build an inventory fixture."""
-    return DeviceEventData(type=kind, received_at=NOW, descriptor=descriptor)
+    return {
+        EventType.ADDED: AddedEvent,
+        EventType.UPDATED: UpdatedEvent,
+        EventType.REMOVED: RemovedEvent,
+    }[kind](received_at=NOW, descriptor=descriptor)
 
 
 def test_collection_lifecycle() -> None:
@@ -73,34 +80,28 @@ def test_collection_lifecycle() -> None:
     assert not collection.devices
 
 
-@pytest.mark.parametrize("generated", [False, True])
-def test_zero_copy_payload_and_partial_state(generated: bool) -> None:
-    """The same model consumes fixture and generated payloads by reference."""
-    payload_type = UplinkData
-    if generated:
-        integration = pytest.importorskip("chirpstack_api.integration")
-        payload_type = integration.UplinkEvent
+def test_uplink_and_partial_state() -> None:
+    """Typed uplinks preserve payload bytes and partial device updates."""
     collection = SenseCapDeviceCollection(MockConnection())
     collection.handle_event(inventory())
     device = collection.devices[DESCRIPTOR.dev_eui]
     listener = Mock()
     stop = device.add_update_listener(listener)
-    payload = payload_type(data=PAYLOAD, f_port=1)
-    event = DeviceEventData(
+    event = UplinkEvent(
         network_id="network",
         dev_eui=DESCRIPTOR.dev_eui,
-        type=EventType.UPLINK,
         received_at=NOW,
-        data=payload,
+        data=PAYLOAD,
+        f_port=1,
     )
-    assert event.data is payload
+    assert event.data is PAYLOAD
     collection.handle_event(event)
     assert device.temperature == 21.4
     assert device.humidity == 31.4
     listener.assert_called_once()
     collection.handle_event(event)
     assert listener.call_count == 2
-    partial = payload_type(data=bytes.fromhex("010110F0D8FFFF0000"), f_port=1)
+    partial = bytes.fromhex("010110F0D8FFFF0000")
     collection.handle_event(
         replace(event, received_at=NOW + timedelta(seconds=1), data=partial)
     )
@@ -131,12 +132,12 @@ def test_zero_unknown_fields_and_port() -> None:
     collection = SenseCapDeviceCollection(MockConnection())
     collection.handle_event(inventory())
     collection.handle_event(
-        DeviceEventData(
+        UplinkEvent(
             network_id="network",
             dev_eui=DESCRIPTOR.dev_eui,
-            type=EventType.UPLINK,
             received_at=NOW,
-            data=UplinkData(PAYLOAD, 2),
+            data=PAYLOAD,
+            f_port=2,
         )
     )
     assert collection.devices[DESCRIPTOR.dev_eui].temperature is None
@@ -146,12 +147,11 @@ def test_unknown_device_network_and_vendor() -> None:
     """Payload, name, or wrong vendor cannot create an unrecognized model."""
     collection = SenseCapDeviceCollection(MockConnection())
     collection.handle_event(
-        DeviceEventData(
+        UplinkEvent(
             network_id="network",
             dev_eui=DESCRIPTOR.dev_eui,
-            type=EventType.UPLINK,
             received_at=NOW,
-            data=UplinkData(PAYLOAD),
+            data=PAYLOAD,
         )
     )
     collection.handle_event(inventory(replace(DESCRIPTOR, network_id="other")))
@@ -180,17 +180,11 @@ def test_same_millisecond_partial_updates() -> None:
     """Different live readings may share a server receipt timestamp."""
     collection = SenseCapDeviceCollection(MockConnection())
     collection.handle_event(inventory())
-    event = DeviceEventData(
-        network_id="network",
-        dev_eui=DESCRIPTOR.dev_eui,
-        type=EventType.UPLINK,
-        received_at=NOW,
-        data=UplinkData(PAYLOAD),
+    event = UplinkEvent(
+        network_id="network", dev_eui=DESCRIPTOR.dev_eui, received_at=NOW, data=PAYLOAD
     )
     collection.handle_event(event)
-    collection.handle_event(
-        replace(event, data=UplinkData(bytes.fromhex("010110000000000000")))
-    )
+    collection.handle_event(replace(event, data=bytes.fromhex("010110000000000000")))
     device = collection.devices[DESCRIPTOR.dev_eui]
     assert device.temperature == 0
     assert device.humidity == 31.4
@@ -200,17 +194,13 @@ def test_same_millisecond_partial_updates() -> None:
 def test_invalid_and_older_frames_preserve_model_state() -> None:
     collection = SenseCapDeviceCollection(MockConnection())
     collection.handle_event(inventory())
-    event = DeviceEventData(
-        network_id="network",
-        dev_eui=DESCRIPTOR.dev_eui,
-        type=EventType.UPLINK,
-        received_at=NOW,
-        data=UplinkData(PAYLOAD),
+    event = UplinkEvent(
+        network_id="network", dev_eui=DESCRIPTOR.dev_eui, received_at=NOW, data=PAYLOAD
     )
     collection.handle_event(event)
     device = collection.devices[DESCRIPTOR.dev_eui]
     original = (device.temperature, device.humidity)
-    collection.handle_event(replace(event, data=UplinkData(b"invalid")))
+    collection.handle_event(replace(event, data=b"invalid"))
     collection.handle_event(replace(event, received_at=NOW - timedelta(seconds=1)))
     assert (device.temperature, device.humidity) == original
 
@@ -243,12 +233,8 @@ def test_fault_does_not_discard_other_measurement() -> None:
         + bytes.fromhex("01021088f400000000")
     )
     collection.handle_event(
-        DeviceEventData(
-            network_id="network",
-            dev_eui=DESCRIPTOR.dev_eui,
-            type=EventType.UPLINK,
-            received_at=NOW,
-            data=UplinkData(data),
+        UplinkEvent(
+            network_id="network", dev_eui=DESCRIPTOR.dev_eui, received_at=NOW, data=data
         )
     )
     assert device.temperature is None

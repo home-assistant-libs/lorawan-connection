@@ -1,6 +1,6 @@
 ---
 title: Testing
-description: Test device libraries using fixture events and real generated payloads.
+description: Test device libraries using typed events and captured application bytes.
 ---
 
 `MockConnection` replays inventory, delivers events, and records commands without
@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 import pytest
 import pytest_asyncio
 
-from lorawan_connection import DeviceDescriptor, DeviceEventData, EventType, UplinkData
+from lorawan_connection import DeviceDescriptor, UplinkEvent
 from lorawan_connection.mock import MockConnection
 from sensecap_lorawan import S2101, SenseCapDeviceCollection
 
@@ -53,12 +53,11 @@ async def test_s2101(
     devices: SenseCapDeviceCollection, connection: MockConnection
 ) -> None:
     connection.emit(
-        DeviceEventData(
-            type=EventType.UPLINK,
+        UplinkEvent(
             received_at=datetime.now(UTC),
             network_id="network",
             dev_eui=DEV_EUI,
-            data=UplinkData(bytes.fromhex("01011098530000010210A87A0000AF51")),
+            data=bytes.fromhex("01011098530000010210A87A0000AF51"),
         )
     )
     model = devices.devices[DEV_EUI]
@@ -97,7 +96,7 @@ from datetime import UTC, datetime
 import pytest
 
 from dragino_lorawan import DraginoDevices, LT22222
-from lorawan_connection import AckData, DeviceDescriptor, DeviceEventData, EventType
+from lorawan_connection import AckEvent, DeviceDescriptor
 from lorawan_connection.mock import MockConnection
 
 
@@ -127,11 +126,11 @@ async def test_relay_command() -> None:
             assert downlink.confirmed
             assert not command.done()
             connection.emit(
-                DeviceEventData(
-                    type=EventType.ACK,
+                AckEvent(
                     received_at=datetime.now(UTC),
                     descriptor=descriptor,
-                    data=AckData(queue_id, True),
+                    queue_item_id=queue_id,
+                    acknowledged=True,
                 )
             )
             await command
@@ -147,8 +146,8 @@ unchanged and that a later uplink updates it. To simulate a send failure, patch
 ## Simulate removal and disconnects
 
 Emit `ADDED`, `UPDATED`, and `REMOVED` events to change which devices are available.
-Pass a descriptor for additions and metadata changes. For removals, either supply
-the descriptor or the network and device identifiers.
+Pass a descriptor for additions and metadata changes. For removals, supply
+the last descriptor.
 
 `connection.disconnect()` stops event delivery and calls registered disconnect
 listeners once. Later subscriptions raise `ConnectionUnavailable`; command sends

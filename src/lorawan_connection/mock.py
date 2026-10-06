@@ -7,7 +7,13 @@ from datetime import UTC, datetime
 from .callbacks import Unsubscribe, notify, subscribe
 from .connection import ConnectionUnavailable
 from .downlink import Downlink, DownlinkError
-from .events import DeviceDescriptor, DeviceEvent, DeviceEventData, EventType
+from .events import (
+    AddedEvent,
+    DeviceDescriptor,
+    DeviceEvent,
+    EventType,
+    RemovedEvent,
+)
 
 
 @dataclass(eq=False)
@@ -28,13 +34,7 @@ class MockConnection:
         self._disconnect_listeners: list[Callable[[None], None]] = []
         self._queue_id = 0
         for descriptor in devices:
-            self.emit(
-                DeviceEventData(
-                    type=EventType.ADDED,
-                    received_at=datetime.now(UTC),
-                    descriptor=descriptor,
-                )
-            )
+            self.emit(AddedEvent(received_at=datetime.now(UTC), descriptor=descriptor))
 
     async def async_subscribe(
         self,
@@ -52,11 +52,7 @@ class MockConnection:
             if (descriptor.stack, descriptor.brand_id) in brands:
                 notify(
                     [callback],
-                    DeviceEventData(
-                        type=EventType.ADDED,
-                        received_at=datetime.now(UTC),
-                        descriptor=descriptor,
-                    ),
+                    AddedEvent(received_at=datetime.now(UTC), descriptor=descriptor),
                 )
 
         def unsubscribe() -> None:
@@ -91,12 +87,6 @@ class MockConnection:
         descriptor = previous
         if event.type in (EventType.ADDED, EventType.UPDATED):
             descriptor = event.descriptor
-            if (
-                descriptor is None
-                or descriptor.dev_eui != dev_eui
-                or descriptor.network_id != event.network_id
-            ):
-                raise ValueError("Device event requires a matching descriptor")
             self.devices[dev_eui] = descriptor
         if descriptor is None:
             raise ValueError("Add the device before emitting its events")
@@ -114,11 +104,7 @@ class MockConnection:
             ):
                 notify(
                     [subscriber.callback],
-                    DeviceEventData(
-                        type=EventType.REMOVED,
-                        received_at=event.received_at,
-                        descriptor=previous,
-                    ),
+                    RemovedEvent(received_at=event.received_at, descriptor=previous),
                 )
 
     def disconnect(self) -> None:

@@ -7,28 +7,21 @@ from unittest.mock import Mock
 import pytest
 
 from lorawan_connection import (
-    AckData,
+    AckEvent,
     ConnectionUnavailable,
     DeviceCollection,
-    DeviceEventData,
     Downlink,
     DownlinkError,
     EventType,
-    UplinkData,
+    UplinkEvent,
 )
 from lorawan_connection.mock import MockConnection
 
 from .conftest import DESCRIPTOR, NOW, DeviceModel, inventory
 
 
-def activity(kind: EventType = EventType.UPLINK) -> DeviceEventData:
-    return DeviceEventData(
-        type=kind,
-        received_at=NOW,
-        network_id=DESCRIPTOR.network_id,
-        dev_eui=DESCRIPTOR.dev_eui,
-        data=UplinkData(b"reading"),
-    )
+def activity() -> UplinkEvent:
+    return UplinkEvent(received_at=NOW, descriptor=DESCRIPTOR, data=b"reading")
 
 
 async def test_replay_live_updates_and_unsubscribe() -> None:
@@ -72,7 +65,7 @@ async def test_vendor_filters_and_changes() -> None:
     connection.emit(activity())
     assert original.call_count == 2
     assert other.call_count == 2
-    connection.emit(activity(EventType.REMOVED))
+    connection.emit(inventory(kind=EventType.REMOVED))
     assert other.call_args.args[0].type == EventType.REMOVED
     assert not connection.devices
     late = Mock()
@@ -132,11 +125,11 @@ async def test_commands_wait_for_explicit_ack() -> None:
     queue_id, downlink = next(iter(connection.downlinks.items()))
     assert downlink == Downlink(DESCRIPTOR.dev_eui, 2, b"command", confirmed=True)
     connection.emit(
-        DeviceEventData(
-            type=EventType.ACK,
+        AckEvent(
             received_at=NOW,
             descriptor=DESCRIPTOR,
-            data=AckData(queue_id, True),
+            queue_item_id=queue_id,
+            acknowledged=True,
         )
     )
     assert await pending is None
@@ -189,8 +182,6 @@ async def test_unknown_device_and_mixed_networks_are_rejected() -> None:
     connection = MockConnection()
     with pytest.raises(ValueError, match="Add the device"):
         connection.emit(activity())
-    with pytest.raises(ValueError, match="matching descriptor"):
-        connection.emit(activity(EventType.ADDED))
     with pytest.raises(DownlinkError, match="Unknown device"):
         await connection.async_send_downlink(
             Downlink(DESCRIPTOR.dev_eui, 2, b"command")

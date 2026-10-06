@@ -8,8 +8,7 @@ from typing import ClassVar
 
 from .callbacks import Unsubscribe, notify, subscribe
 from .downlink import Downlink, DownlinkError, SendDownlink
-from .events import DeviceDescriptor, DeviceEvent
-from .payloads import Ack
+from .events import AckEvent, DeviceDescriptor, DeviceEvent
 
 
 class Device(ABC):
@@ -102,7 +101,7 @@ class Device(ABC):
         finally:
             self._pending_acks.pop(queue_id, None)
 
-    def _handle_ack(self, ack: Ack) -> None:
+    def _handle_ack(self, ack: AckEvent) -> None:
         """Resolve command waits without changing reported device state."""
         if (result := self._pending_acks.get(ack.queue_item_id)) is not None:
             if not result.done():

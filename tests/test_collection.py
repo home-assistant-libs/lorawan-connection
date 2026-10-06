@@ -2,17 +2,23 @@
 
 import asyncio
 from dataclasses import replace
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from lorawan_connection import (
+    AckEvent,
     ConnectionUnavailable,
     DeviceCollection,
     DeviceDescriptor,
-    DeviceEventData,
+    DeviceEvent,
     EventType,
+    JoinEvent,
+    LocationEvent,
+    LogEvent,
+    StatusEvent,
+    TxAckEvent,
+    UplinkEvent,
 )
 from lorawan_connection.mock import MockConnection
 
@@ -53,24 +59,37 @@ def test_inventory_creates_models_and_replays() -> None:
 
 
 @pytest.mark.parametrize(
-    "kind",
+    "event",
     [
-        kind
-        for kind in EventType
-        if kind not in {EventType.ADDED, EventType.UPDATED, EventType.REMOVED}
+        UplinkEvent(descriptor=DESCRIPTOR, received_at=NOW, data=b"payload"),
+        JoinEvent(descriptor=DESCRIPTOR, received_at=NOW, dev_addr="12345678"),
+        StatusEvent(descriptor=DESCRIPTOR, received_at=NOW),
+        AckEvent(
+            descriptor=DESCRIPTOR,
+            received_at=NOW,
+            queue_item_id="queue",
+            acknowledged=True,
+        ),
+        TxAckEvent(
+            descriptor=DESCRIPTOR, received_at=NOW, gateway_id="gateway", downlink_id=1
+        ),
+        LogEvent(
+            descriptor=DESCRIPTOR,
+            received_at=NOW,
+            description="message",
+            level=1,
+            code=2,
+        ),
+        LocationEvent(
+            descriptor=DESCRIPTOR, received_at=NOW, latitude=52, longitude=4, altitude=3
+        ),
     ],
 )
-def test_all_activity_routes_by_identity(kind: EventType) -> None:
+def test_all_activity_routes_by_identity(event: DeviceEvent) -> None:
     collection = Collection(MockConnection())
     collection.handle_event(inventory())
     other = replace(DESCRIPTOR, dev_eui="0000000000000002")
     collection.handle_event(inventory(other))
-    event = DeviceEventData(
-        network_id="network",
-        dev_eui="02:01:01:01:01:01:01:01",
-        type=kind,
-        received_at=NOW,
-    )
     collection.handle_event(event)
     assert collection.devices[DESCRIPTOR.dev_eui].events[-1] is event
     assert len(collection.devices[other.dev_eui].events) == 1
@@ -79,11 +98,8 @@ def test_all_activity_routes_by_identity(kind: EventType) -> None:
 def test_unknown_activity_never_creates_a_device() -> None:
     collection = Collection(MockConnection())
     collection.handle_event(
-        DeviceEventData(
-            network_id="network",
-            dev_eui=DESCRIPTOR.dev_eui,
-            type=EventType.UPLINK,
-            received_at=NOW,
+        UplinkEvent(
+            network_id="network", dev_eui=DESCRIPTOR.dev_eui, received_at=NOW, data=b""
         )
     )
     assert not collection.devices
@@ -92,24 +108,11 @@ def test_unknown_activity_never_creates_a_device() -> None:
 @pytest.mark.parametrize(
     "event",
     [
-        SimpleNamespace(
-            network_id="other",
-            dev_eui=DESCRIPTOR.dev_eui,
-            type=EventType.ADDED,
-            descriptor=DESCRIPTOR,
-        ),
-        replace(inventory(), descriptor=None),
-        SimpleNamespace(
-            network_id="network",
-            dev_eui="0000000000000002",
-            type=EventType.ADDED,
-            descriptor=DESCRIPTOR,
-        ),
         inventory(replace(DESCRIPTOR, brand_id=42)),
         inventory(replace(DESCRIPTOR, model_id="unsupported")),
     ],
 )
-def test_unusable_identity_is_ignored(event: DeviceEventData) -> None:
+def test_unusable_identity_is_ignored(event: DeviceEvent) -> None:
     collection = Collection(MockConnection())
     collection.handle_event(event)
     assert not collection.devices

@@ -2,13 +2,11 @@
 
 import logging
 from collections.abc import Callable, Sequence
-from typing import cast
 
 from .callbacks import Unsubscribe, notify, subscribe
 from .connection import Connection
 from .device import Device
 from .events import DeviceDescriptor, DeviceEvent, EventType
-from .payloads import Ack
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -117,12 +115,6 @@ class DeviceCollection[DeviceT: Device]:
         device = self.devices.get(eui)
         if event.type in (EventType.ADDED, EventType.UPDATED):
             descriptor = event.descriptor
-            if (
-                descriptor is None
-                or descriptor.network_id != event.network_id
-                or descriptor.dev_eui != eui
-            ):
-                return
             if device is not None and (
                 device.descriptor.stack,
                 device.descriptor.model_id,
@@ -142,8 +134,8 @@ class DeviceCollection[DeviceT: Device]:
                 device.descriptor = descriptor
                 device.notify()
         if device is not None and self.devices.get(eui) is device:
-            if event.type == EventType.ACK and event.data is not None:
-                device._handle_ack(cast(Ack, event.data))
+            if event.type == EventType.ACK:
+                device._handle_ack(event)
             device.handle_event(event)
 
     def _connection_lost(self) -> None:

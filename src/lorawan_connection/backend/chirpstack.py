@@ -14,14 +14,23 @@ from google.protobuf.json_format import Parse, ParseError
 from google.protobuf.message import Message
 
 from lorawan_connection import (
+    AckEvent,
+    AddedEvent,
     ConnectionUnavailable,
     DeviceDescriptor,
     DeviceEvent,
-    DeviceEventData,
     Downlink,
     DownlinkError,
     EventType,
+    JoinEvent,
+    LocationEvent,
+    LogEvent,
+    RemovedEvent,
+    StatusEvent,
+    TxAckEvent,
     Unsubscribe,
+    UpdatedEvent,
+    UplinkEvent,
     notify,
     subscribe,
 )
@@ -35,6 +44,24 @@ _MESSAGES = {
     "txack": integration.TxAckEvent,
     "log": integration.LogEvent,
     "location": integration.LocationEvent,
+}
+
+_EVENTS = {
+    "up": (UplinkEvent, ("data", "f_port")),
+    "join": (JoinEvent, ("dev_addr",)),
+    "status": (
+        StatusEvent,
+        (
+            "margin",
+            "external_power_source",
+            "battery_level_unavailable",
+            "battery_level",
+        ),
+    ),
+    "ack": (AckEvent, ("queue_item_id", "acknowledged")),
+    "txack": (TxAckEvent, ("gateway_id", "downlink_id")),
+    "log": (LogEvent, ("description", "level", "code")),
+    "location": (LocationEvent, ("latitude", "longitude", "altitude")),
 }
 
 
@@ -238,6 +265,8 @@ class ChirpStackConnection:
                 "Selected application is no longer accessible in the selected tenants"
             )
         profiles = {}
+        catalog_devices = {}
+        vendors = {}
         snapshot = {}
         for application_id in self.application_ids:
             items = await self._list(
@@ -256,22 +285,26 @@ class ChirpStackConnection:
                     vendor_id, model, manufacturer = None, "", ""
                     if profile.device_id:
                         try:
-                            catalog = (
-                                await self._call(
-                                    self._profile_api.GetDevice,
-                                    api.GetDeviceProfileDeviceRequest(
-                                        id=profile.device_id
-                                    ),
-                                )
-                            ).device
-                            vendor = (
-                                await self._call(
-                                    self._profile_api.GetVendor,
-                                    api.GetDeviceProfileVendorRequest(
-                                        id=catalog.vendor_id
-                                    ),
-                                )
-                            ).vendor
+                            if profile.device_id not in catalog_devices:
+                                catalog_devices[profile.device_id] = (
+                                    await self._call(
+                                        self._profile_api.GetDevice,
+                                        api.GetDeviceProfileDeviceRequest(
+                                            id=profile.device_id
+                                        ),
+                                    )
+                                ).device
+                            catalog = catalog_devices[profile.device_id]
+                            if catalog.vendor_id not in vendors:
+                                vendors[catalog.vendor_id] = (
+                                    await self._call(
+                                        self._profile_api.GetVendor,
+                                        api.GetDeviceProfileVendorRequest(
+                                            id=catalog.vendor_id
+                                        ),
+                                    )
+                                ).vendor
+                            vendor = vendors[catalog.vendor_id]
                             vendor_id, model, manufacturer = (
                                 vendor.vendor_id,
                                 catalog.name,
@@ -325,10 +358,15 @@ class ChirpStackConnection:
 
     def _inventory_event(
         self, kind: EventType, descriptor: DeviceDescriptor
-    ) -> DeviceEventData:
-        return DeviceEventData(
-            type=kind, received_at=datetime.now(UTC), descriptor=descriptor
-        )
+    ) -> DeviceEvent:
+        event_classes: dict[
+            EventType, type[AddedEvent | UpdatedEvent | RemovedEvent]
+        ] = {
+            EventType.ADDED: AddedEvent,
+            EventType.UPDATED: UpdatedEvent,
+            EventType.REMOVED: RemovedEvent,
+        }
+        return event_classes[kind](received_at=datetime.now(UTC), descriptor=descriptor)
 
     async def refresh(self) -> None:
         """Commit complete snapshots without blocking live activity during reads."""
@@ -485,7 +523,7 @@ class ChirpStackConnection:
             else:
                 return
 
-    async def _read_stream(self, dev_eui: str) -> AsyncIterator[DeviceEventData]:
+    async def _read_stream(self, dev_eui: str) -> AsyncIterator[DeviceEvent]:
         # Remove this filter when ChirpStack supports disabling retained events.
         cutoff = datetime.now(UTC) - timedelta(seconds=5)
         async for item in self._internal_api.StreamDeviceEvents(
@@ -507,12 +545,13 @@ class ChirpStackConnection:
                 continue
             if message.device_info.dev_eui.lower() != dev_eui.lower():
                 continue
-            yield DeviceEventData(
+            event_class, fields = _EVENTS[item.description]
+            payload = message.location if item.description == "location" else message
+            yield event_class(
                 network_id=self.network_id,
                 dev_eui=dev_eui,
-                type=EventType(item.description),
                 received_at=recorded_at,
-                data=message,
+                **{name: getattr(payload, name) for name in fields},
             )
         if dev_eui in self.devices:
             raise ConnectionUnavailable("ChirpStack event stream closed")

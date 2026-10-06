@@ -9,7 +9,11 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 import connect_sensors
-from lorawan_connection import DeviceEvent, DeviceEventData, EventType, UplinkData
+from lorawan_connection import (
+    AddedEvent,
+    DeviceEvent,
+    UplinkEvent,
+)
 from lorawan_connection.backend.chirpstack import (
     ChirpStackConnection,
     ConnectionUnavailable,
@@ -55,18 +59,13 @@ async def test_connection_example(
         devices = callback.__self__
         devices.subscribe_device_added(models.append)
         now = datetime.now(UTC)
+        callback(AddedEvent(received_at=now, descriptor=descriptor))
         callback(
-            DeviceEventData(
-                type=EventType.ADDED, received_at=now, descriptor=descriptor
-            )
-        )
-        callback(
-            DeviceEventData(
+            UplinkEvent(
                 network_id=descriptor.network_id,
                 dev_eui=descriptor.dev_eui,
-                type=EventType.UPLINK,
                 received_at=now,
-                data=UplinkData(PAYLOAD),
+                data=PAYLOAD,
             )
         )
         connection.error = ConnectionUnavailable("Disconnected")

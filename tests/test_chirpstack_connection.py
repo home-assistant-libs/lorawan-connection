@@ -11,7 +11,10 @@ from chirpstack_api import api, integration
 from google.protobuf.json_format import MessageToJson
 from google.protobuf.message import Message
 
-from lorawan_connection import DeviceEventData, EventType
+from lorawan_connection import (
+    EventType,
+    UplinkEvent,
+)
 from lorawan_connection.backend.chirpstack import (
     AuthenticationError,
     ChirpStackConnection,
@@ -56,12 +59,12 @@ async def test_activity_does_not_wait_for_snapshot(
     ):
         task = asyncio.create_task(connection.refresh())
         await started.wait()
-        event = DeviceEventData(
+        event = UplinkEvent(
             network_id="network",
             dev_eui=DESCRIPTOR.dev_eui,
-            type=EventType.UPLINK,
             received_at=datetime.now(UTC),
-            data=integration.UplinkEvent(data=PAYLOAD, f_port=1),
+            data=integration.UplinkEvent(data=PAYLOAD, f_port=1).data,
+            f_port=integration.UplinkEvent(data=PAYLOAD, f_port=1).f_port,
         )
         await connection.handle_activity(event)
         assert callback.call_args.args[0] == event
@@ -199,7 +202,7 @@ async def test_stream_decode_replay_and_disconnect(
     ]
     event = callback.call_args.args[0]
     assert event.type == kind
-    assert event.data == message
+    assert event.dev_eui == message.device_info.dev_eui
     assert event.received_at == datetime.fromtimestamp(
         int(live.id.split("-", 1)[0]) / 1000, UTC
     )
@@ -371,12 +374,12 @@ async def test_all_tenants_subscription(connection: ChirpStackConnection) -> Non
             )
             for dev_eui in device_ids.values():
                 await connection.handle_activity(
-                    DeviceEventData(
+                    UplinkEvent(
                         network_id="network",
                         dev_eui=dev_eui,
-                        type=EventType.UPLINK,
                         received_at=datetime.now(UTC),
-                        data=integration.UplinkEvent(data=PAYLOAD, f_port=1),
+                        data=integration.UplinkEvent(data=PAYLOAD, f_port=1).data,
+                        f_port=integration.UplinkEvent(data=PAYLOAD, f_port=1).f_port,
                     )
                 )
             events = [call.args[0] for call in callback.call_args_list]
@@ -571,11 +574,11 @@ async def test_vendor_filters_and_identity_changes(
         assert first.call_args.args[0].type == EventType.REMOVED
         assert second.call_args.args[0].type == EventType.UPDATED
         await connection.handle_activity(
-            DeviceEventData(
+            UplinkEvent(
                 network_id="network",
                 dev_eui=changed.dev_eui,
-                type=EventType.UPLINK,
                 received_at=datetime.now(UTC),
+                data=b"",
             )
         )
         assert first.call_count == 2
@@ -665,3 +668,48 @@ async def test_disconnect_owner_can_close_before_consumers_are_notified(
     connection._failed(ConnectionUnavailable())
     await asyncio.gather(*tasks)
     consumer.assert_called_once_with()
+
+
+async def test_catalog_cache_per_snapshot(connection: ChirpStackConnection) -> None:
+    """Shared models and vendors are read once, then refreshed on the next scan."""
+    connection.applications = AsyncMock(return_value={"application": "Test"})
+    connection._device_api.List = AsyncMock(
+        return_value=api.ListDevicesResponse(
+            total_count=3,
+            result=[
+                api.DeviceListItem(
+                    dev_eui=f"{index:016x}", device_profile_id=str(index)
+                )
+                for index in range(3)
+            ],
+        )
+    )
+    connection._profile_api.Get = AsyncMock(
+        side_effect=[
+            api.GetDeviceProfileResponse(
+                device_profile=api.DeviceProfile(device_id=model)
+            )
+            for model in ("one", "one", "two") * 2
+        ]
+    )
+    connection._profile_api.GetDevice = AsyncMock(
+        return_value=api.GetDeviceProfileDeviceResponse(
+            device=api.DeviceProfileDevice(vendor_id="vendor", name="Sensor")
+        )
+    )
+    connection._profile_api.GetVendor = AsyncMock(
+        side_effect=[
+            api.GetDeviceProfileVendorResponse(
+                vendor=api.DeviceProfileVendor(vendor_id=744, name=name)
+            )
+            for name in ("Old name", "New name")
+        ]
+    )
+    first = await connection._snapshot()
+    assert {item.manufacturer for item in first.values()} == {"Old name"}
+    assert connection._profile_api.GetDevice.await_count == 2
+    assert connection._profile_api.GetVendor.await_count == 1
+    second = await connection._snapshot()
+    assert {item.manufacturer for item in second.values()} == {"New name"}
+    assert connection._profile_api.GetDevice.await_count == 4
+    assert connection._profile_api.GetVendor.await_count == 2

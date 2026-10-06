@@ -11,8 +11,7 @@ from chirpstack_api import api
 
 from dragino_lorawan import LT22222, DraginoDevices
 from lorawan_connection import (
-    AckData,
-    DeviceEventData,
+    AckEvent,
     Downlink,
     DownlinkError,
     EventType,
@@ -55,11 +54,11 @@ async def test_output_commands(
     await asyncio.sleep(0)
     queue_id, request = next(iter(mock_connection.downlinks.items()))
     mock_connection.emit(
-        DeviceEventData(
-            type=EventType.ACK,
+        AckEvent(
             received_at=datetime.now(UTC),
             descriptor=descriptor,
-            data=AckData(queue_id, True),
+            queue_item_id=queue_id,
+            acknowledged=True,
         )
     )
     assert await pending is None
@@ -191,6 +190,13 @@ async def test_output_explicit_expiry(method: str) -> None:
     pending = asyncio.create_task(getattr(device, method)(1, True, expires_at=expiry))
     await asyncio.sleep(0)
     assert device._send_downlink.call_args.args[0].expires_at == expiry
-    device._handle_ack(AckData("queue", True))
+    device._handle_ack(
+        AckEvent(
+            descriptor=DESCRIPTOR,
+            received_at=datetime.now(UTC),
+            queue_item_id="queue",
+            acknowledged=True,
+        )
+    )
     await pending
     device.close()

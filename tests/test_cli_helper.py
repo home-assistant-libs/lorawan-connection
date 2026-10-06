@@ -11,7 +11,14 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from lorawan_connection import DeviceCollection, DeviceEventData, EventType, UplinkData
+from lorawan_connection import (
+    AddedEvent,
+    DeviceCollection,
+    EventType,
+    RemovedEvent,
+    UpdatedEvent,
+    UplinkEvent,
+)
 from lorawan_connection.backend.chirpstack import ChirpStackConnection
 from lorawan_connection.cli_helper import (
     _watch,
@@ -218,25 +225,17 @@ async def test_live_state_removal_and_disconnect(
 
     async def subscribe(*, brands, callback):
         now = datetime.now(UTC)
+        callback(AddedEvent(received_at=now, descriptor=DESCRIPTOR))
         callback(
-            DeviceEventData(
-                type=EventType.ADDED, received_at=now, descriptor=DESCRIPTOR
-            )
-        )
-        callback(
-            DeviceEventData(
+            UplinkEvent(
                 network_id="network",
                 dev_eui=DESCRIPTOR.dev_eui,
-                type=EventType.UPLINK,
                 received_at=now,
-                data=UplinkData(PAYLOAD, 1),
+                data=PAYLOAD,
+                f_port=1,
             )
         )
-        callback(
-            DeviceEventData(
-                type=EventType.REMOVED, received_at=now, descriptor=DESCRIPTOR
-            )
-        )
+        callback(RemovedEvent(received_at=now, descriptor=DESCRIPTOR))
         connection.error = RuntimeError("offline")
         for registration in tuple(connection.on_disconnect.call_args_list):
             registration.args[0]()
@@ -293,11 +292,11 @@ async def test_warn_unmapped_devices_from_supported_vendors(
         for event_type in (EventType.ADDED, EventType.UPDATED):
             for descriptor in descriptors:
                 callback(
-                    DeviceEventData(
-                        type=event_type,
-                        received_at=datetime.now(UTC),
-                        descriptor=descriptor,
-                    )
+                    {
+                        EventType.ADDED: AddedEvent,
+                        EventType.UPDATED: UpdatedEvent,
+                        EventType.REMOVED: RemovedEvent,
+                    }[event_type](received_at=datetime.now(UTC), descriptor=descriptor)
                 )
         connection.error = RuntimeError("offline")
         for registration in tuple(connection.on_disconnect.call_args_list):
@@ -343,13 +342,7 @@ async def test_cancellation_closes_models_and_connection(connection: Mock) -> No
     subscribed = asyncio.Event()
 
     async def subscribe(*, brands, callback):
-        callback(
-            DeviceEventData(
-                type=EventType.ADDED,
-                received_at=datetime.now(UTC),
-                descriptor=DESCRIPTOR,
-            )
-        )
+        callback(AddedEvent(received_at=datetime.now(UTC), descriptor=DESCRIPTOR))
         subscribed.set()
         return stop
 
@@ -426,11 +419,7 @@ def test_models_can_share_catalog_ids_across_vendors() -> None:
     ]
     for descriptor in descriptors:
         collection.handle_event(
-            DeviceEventData(
-                type=EventType.ADDED,
-                received_at=datetime.now(UTC),
-                descriptor=descriptor,
-            )
+            AddedEvent(received_at=datetime.now(UTC), descriptor=descriptor)
         )
     assert type(collection.devices[DESCRIPTOR.dev_eui]) is S2101
     assert type(collection.devices["0000000000000002"]) is OtherVendor
@@ -487,20 +476,8 @@ async def test_removed_after_initial_output_failure(
             raise ValueError("No reading yet")
 
     async def subscribe(*, brands, callback):
-        callback(
-            DeviceEventData(
-                type=EventType.ADDED,
-                received_at=datetime.now(UTC),
-                descriptor=DESCRIPTOR,
-            )
-        )
-        callback(
-            DeviceEventData(
-                type=EventType.REMOVED,
-                received_at=datetime.now(UTC),
-                descriptor=DESCRIPTOR,
-            )
-        )
+        callback(AddedEvent(received_at=datetime.now(UTC), descriptor=DESCRIPTOR))
+        callback(RemovedEvent(received_at=datetime.now(UTC), descriptor=DESCRIPTOR))
         for registration in tuple(connection.on_disconnect.call_args_list):
             registration.args[0]()
         return Mock()

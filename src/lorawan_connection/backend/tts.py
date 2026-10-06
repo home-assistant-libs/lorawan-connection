@@ -10,19 +10,20 @@ from uuid import uuid4
 import grpc
 
 from lorawan_connection import (
-    AckData,
+    AckEvent,
+    AddedEvent,
     ConnectionUnavailable,
-    CoordinatesData,
     DeviceDescriptor,
     DeviceEvent,
-    DeviceEventData,
     Downlink,
     DownlinkError,
     EventType,
-    JoinData,
-    LocationData,
+    JoinEvent,
+    LocationEvent,
+    RemovedEvent,
     Unsubscribe,
-    UplinkData,
+    UpdatedEvent,
+    UplinkEvent,
     notify,
     subscribe,
 )
@@ -83,13 +84,16 @@ class TTSConnection:
             raise ValueError("Application IDs must be unique")
         if poll_interval <= 0:
             raise ValueError("poll_interval must be positive")
-        self._channels = [
-            grpc.aio.secure_channel(target, grpc.ssl_channel_credentials())
-            if secure
-            else grpc.aio.insecure_channel(target)
-            for target, secure in targets
-        ]
-        self.channel, self._identity_channel = self._channels
+        channels = {
+            (target, secure): (
+                grpc.aio.secure_channel(target, grpc.ssl_channel_credentials())
+                if secure
+                else grpc.aio.insecure_channel(target)
+            )
+            for target, secure in dict.fromkeys(targets)
+        }
+        self._channels = list(channels.values())
+        self.channel, self._identity_channel = (channels[target] for target in targets)
         self.metadata = (("authorization", f"Bearer {api_key}"),)
         self.application_ids = list(application_ids)
         self.network_id = network_id
@@ -104,6 +108,8 @@ class TTSConnection:
         self._disconnect: list[Callable[[None], None]] = []
         self._tasks: list[asyncio.Task[None]] = []
         self._lock = asyncio.Lock()
+        self._refresh_generation = 0
+        self._completed_refresh = 0
         self._ready = asyncio.Event()
         self._closed = False
         self._started = False
@@ -184,13 +190,23 @@ class TTSConnection:
             elif previous and (previous.stack, previous.brand_id) in brands:
                 notify([callback], self._event(EventType.REMOVED, previous))
 
-    def _event(self, kind: EventType, descriptor: DeviceDescriptor) -> DeviceEventData:
-        return DeviceEventData(
-            type=kind, descriptor=descriptor, received_at=datetime.now(UTC)
-        )
+    def _event(self, kind: EventType, descriptor: DeviceDescriptor) -> DeviceEvent:
+        event_classes: dict[
+            EventType, type[AddedEvent | UpdatedEvent | RemovedEvent]
+        ] = {
+            EventType.ADDED: AddedEvent,
+            EventType.UPDATED: UpdatedEvent,
+            EventType.REMOVED: RemovedEvent,
+        }
+        return event_classes[kind](descriptor=descriptor, received_at=datetime.now(UTC))
 
     async def refresh(self) -> None:
+        generation = self._refresh_generation
         async with self._lock:
+            if self._completed_refresh > generation:
+                return
+            # Requests arriving during this scan require one subsequent scan.
+            self._refresh_generation += 1
             devices = {}
             identifiers = {}
             for app in self.application_ids:
@@ -241,6 +257,7 @@ class TTSConnection:
                     self._emit(
                         self._event(EventType.UPDATED, descriptor), previous[eui]
                     )
+            self._completed_refresh = self._refresh_generation
 
     async def _lifecycle(self) -> None:
         try:
@@ -291,7 +308,7 @@ class TTSConnection:
             self._failed(error)
 
     async def handle_message(self, up: Any) -> None:
-        """Translate raw upstream traffic to the shared payload contracts."""
+        """Translate upstream traffic to immutable typed events."""
         app = up.end_device_ids.application_ids.application_id
         if app not in self.application_ids:
             return
@@ -307,33 +324,29 @@ class TTSConnection:
             or self.devices[eui].application_id != app
         ):
             return
-        payload: Any
+        fields: dict[str, Any]
+        event_class: type[UplinkEvent | JoinEvent | LocationEvent | AckEvent]
         if up.HasField("uplink_message"):
             uplink = up.uplink_message
             if uplink.HasField("app_s_key"):
                 raise ConnectionUnavailable(
                     "TTS supplied an encrypted application payload"
                 )
-            kind, payload = (
-                EventType.UPLINK,
-                UplinkData(bytes(uplink.frm_payload), uplink.f_port),
-            )
+            event_class = UplinkEvent
+            fields = {"data": bytes(uplink.frm_payload), "f_port": uplink.f_port}
         elif up.HasField("join_accept"):
-            kind, payload = EventType.JOIN, JoinData(up.end_device_ids.dev_addr.hex())
+            event_class = JoinEvent
+            fields = {"dev_addr": up.end_device_ids.dev_addr.hex()}
         elif up.HasField("location_solved"):
             if not up.location_solved.HasField("location"):
                 return
             location = up.location_solved.location
-            kind, payload = (
-                EventType.LOCATION,
-                LocationData(
-                    CoordinatesData(
-                        location.latitude,
-                        location.longitude,
-                        location.altitude,
-                    )
-                ),
-            )
+            event_class = LocationEvent
+            fields = {
+                "latitude": location.latitude,
+                "longitude": location.longitude,
+                "altitude": location.altitude,
+            }
         elif any(
             up.HasField(name)
             for name in ("downlink_ack", "downlink_nack", "downlink_failed")
@@ -356,14 +369,14 @@ class TTSConnection:
             )
             if correlation is None:
                 return
-            kind, payload = EventType.ACK, AckData(correlation, confirmed)
+            event_class = AckEvent
+            fields = {"queue_item_id": correlation, "acknowledged": confirmed}
         else:
             return
         self._emit(
-            DeviceEventData(
-                type=kind,
+            event_class(
                 descriptor=self.devices[eui],
-                data=payload,
+                **fields,
                 received_at=up.received_at.ToDatetime(tzinfo=UTC)
                 if up.HasField("received_at")
                 else datetime.now(UTC),

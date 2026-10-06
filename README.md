@@ -52,6 +52,20 @@ Applications observe models through `add_update_listener()`. Models decode readi
 update their attributes, then call `notify()`. Closing the collection removes
 subscriptions and closes models, leaving the connection open.
 
+## Events
+
+Events are typed dataclasses. An `UplinkEvent` exposes `data: bytes` and `f_port`
+directly; an `AckEvent` exposes `queue_item_id` and `acknowledged`. Dispatch on
+`event.type` or use `isinstance()` to narrow the event type without a cast.
+
+Inventory events take only `descriptor` and `received_at`. Their network and device
+identifiers are properties derived from the descriptor. The
+[event guide](https://home-assistant-libs.github.io/lorawan-connection/connection/events/)
+lists every field.
+
+This API is prepared for the next release. PyPI 0.10.0 still uses event envelopes;
+see the [migration notes](https://home-assistant-libs.github.io/lorawan-connection/connection/reference/#changes-from-010).
+
 ## Install
 
 ```sh
@@ -155,7 +169,7 @@ npm ci
 npm run build
 ```
 
-CI tests Python 3.12, 3.13, and 3.14. Compatibility tests check the payload contracts
+CI tests Python 3.12, 3.13, and 3.14. Compatibility tests check event translation
 against `chirpstack-api==4.19.0`. The optional backend uses the same bindings.
 The documentation build validates internal links and produces `llms.txt`.
 

@@ -42,8 +42,8 @@ event stream for each device. Catalog profiles supply model and vendor identitie
 An incomplete read preserves the previous device list. Custom profiles without
 catalog identity remain visible but do not select a device model.
 
-Generated protobuf payloads pass through the event envelope by reference. The internal
-stream returns JSON, so each payload must first be parsed into a generated message.
+The internal stream returns JSON. The adapter parses each message and constructs
+a typed event with the relevant fields. SDK messages stay inside the adapter.
 Newly observed devices receive an `ADDED` event before their activity is delivered.
 
 The internal API is a compatibility dependency, tested against ChirpStack 4.19.2 and

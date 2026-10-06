@@ -1,78 +1,88 @@
-"""Generated payload compatibility, without a server or runtime dependency."""
+"""Translate generated ChirpStack messages into flat immutable events."""
 
-from typing import cast
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, Mock
 
 import pytest
+from chirpstack_api import api, common, integration
+from google.protobuf.json_format import MessageToJson
 
-from lorawan_connection import (
-    Ack,
-    Coordinates,
-    DeviceEventData,
-    EventType,
-    Join,
-    Location,
-    Log,
-    Status,
-    TxAck,
-    Uplink,
+from lorawan_connection import EventType
+from lorawan_connection.backend.chirpstack import ChirpStackConnection
+
+from .conftest import DESCRIPTOR
+
+
+@pytest.mark.parametrize(
+    "kind,message,fields",
+    [
+        (
+            "up",
+            integration.UplinkEvent(data=b"\x00\xff", f_port=42),
+            {"data": b"\x00\xff", "f_port": 42},
+        ),
+        ("join", integration.JoinEvent(dev_addr="abcdef01"), {"dev_addr": "abcdef01"}),
+        (
+            "status",
+            integration.StatusEvent(margin=-2, battery_level=0),
+            {
+                "margin": -2,
+                "battery_level": 0,
+                "battery_level_unavailable": False,
+                "external_power_source": False,
+            },
+        ),
+        (
+            "ack",
+            integration.AckEvent(queue_item_id="queue", acknowledged=True),
+            {"queue_item_id": "queue", "acknowledged": True},
+        ),
+        (
+            "txack",
+            integration.TxAckEvent(gateway_id="gateway", downlink_id=123),
+            {"gateway_id": "gateway", "downlink_id": 123},
+        ),
+        (
+            "log",
+            integration.LogEvent(description="diagnostic", level=1, code=2),
+            {"description": "diagnostic", "level": 1, "code": 2},
+        ),
+        (
+            "location",
+            integration.LocationEvent(
+                location=common.Location(latitude=52.5, longitude=4.5, altitude=2)
+            ),
+            {"latitude": 52.5, "longitude": 4.5, "altitude": 2},
+        ),
+    ],
 )
+async def test_event_conversion(kind, message, fields) -> None:
+    message.device_info.dev_eui = DESCRIPTOR.dev_eui
 
-from .conftest import DESCRIPTOR, NOW
+    async def stream(*args, **kwargs) -> AsyncIterator[api.LogItem]:
+        yield api.LogItem(
+            id=f"{int(datetime.now(UTC).timestamp() * 1000)}-1",
+            description=kind,
+            body=MessageToJson(message),
+        )
 
-integration = pytest.importorskip("chirpstack_api.integration")
-common = pytest.importorskip("chirpstack_api.common")
-
-
-def test_uplink_protocol() -> None:
-    message = integration.UplinkEvent(data=b"\x00\xff", f_port=42)
-    payload = cast(Uplink, message)
-    assert payload.data == b"\x00\xff"
-    assert payload.f_port == 42
-    event = DeviceEventData(
+    connection = ChirpStackConnection(
+        "http://localhost:1",
+        "key",
+        application_ids=["app"],
         network_id="network",
-        dev_eui=DESCRIPTOR.dev_eui,
-        type=EventType.UPLINK,
-        received_at=NOW,
-        data=payload,
+        channel=Mock(close=AsyncMock()),
     )
-    assert event.data is message
-
-
-def test_status_presence_and_values() -> None:
-    unavailable = cast(Status, integration.StatusEvent(battery_level_unavailable=True))
-    assert unavailable.battery_level_unavailable
-    payload = cast(
-        Status,
-        integration.StatusEvent(
-            margin=-2, battery_level=0, external_power_source=False
-        ),
-    )
-    assert payload.margin == -2
-    assert payload.battery_level == 0
-    assert not payload.battery_level_unavailable
-    assert not payload.external_power_source
-
-
-def test_other_generated_payload_shapes() -> None:
-    join = cast(Join, integration.JoinEvent(dev_addr="abcdef01"))
-    assert join.dev_addr == "abcdef01"
-    ack = cast(Ack, integration.AckEvent(queue_item_id="queue", acknowledged=True))
-    assert ack.queue_item_id == "queue"
-    assert ack.acknowledged is True
-    tx_ack = cast(TxAck, integration.TxAckEvent(gateway_id="gateway", downlink_id=123))
-    assert tx_ack.gateway_id == "gateway"
-    assert tx_ack.downlink_id == 123
-    log = cast(Log, integration.LogEvent(description="diagnostic", level=1, code=2))
-    assert log.description == "diagnostic"
-    assert log.level == 1
-    assert log.code == 2
-    location = cast(
-        Location,
-        integration.LocationEvent(
-            location=common.Location(latitude=52.5, longitude=4.5, altitude=2)
-        ),
-    )
-    coordinates: Coordinates = location.location
-    assert coordinates.latitude == 52.5
-    assert coordinates.longitude == 4.5
-    assert coordinates.altitude == 2
+    connection._internal_api.StreamDeviceEvents = stream
+    events = [event async for event in connection._read_stream(DESCRIPTOR.dev_eui)]
+    assert len(events) == 1
+    event = events[0]
+    assert event.type is EventType(kind)
+    assert event.dev_eui == DESCRIPTOR.dev_eui
+    for name, value in fields.items():
+        assert getattr(event, name) == value
+    message.Clear()
+    for name, value in fields.items():
+        assert getattr(event, name) == value
+    await connection.close()

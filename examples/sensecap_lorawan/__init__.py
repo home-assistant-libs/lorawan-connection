@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime
-from typing import cast, override
+from typing import override
 
 from lorawan_connection import (
     Device,
@@ -10,7 +10,6 @@ from lorawan_connection import (
     DeviceDescriptor,
     DeviceEvent,
     EventType,
-    Uplink,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -66,13 +65,12 @@ class S2101(Device):
     @override
     def handle_event(self, event: DeviceEvent) -> None:
         """Merge a valid partial measurement without clearing other values."""
-        if self.closed or event.type != EventType.UPLINK or event.data is None:
+        if self.closed or event.type != EventType.UPLINK:
             return
-        uplink = cast(Uplink, event.data)
-        if uplink.f_port != 1:
+        if event.f_port != 1:
             return
         try:
-            values = decode_s2101(uplink.data)
+            values = decode_s2101(event.data)
         except ValueError:
             return
         values = {

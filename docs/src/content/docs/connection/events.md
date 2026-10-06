@@ -1,84 +1,104 @@
 ---
 title: Understanding events
-description: What LoRaWAN events contain and how they reach device models.
+description: Typed LoRaWAN events, their fields, and how they reach device models.
 ---
 
-Backends deliver device inventory and activity through a common event interface.
-Collections use inventory events to create and remove models. Models decode
-activity events into readings and command results.
+These event classes are prepared for 0.11.0. PyPI 0.10.0 uses the former envelope API.
+See the [migration notes](/lorawan-connection/connection/reference/#changes-from-010).
 
-## Event types
+Backends deliver inventory and activity as frozen, slotted dataclasses.
+`DeviceEvent` is the union of these classes. Import them from `lorawan_connection`.
+Each class fixes its own `type`; callers do not pass it to the constructor.
 
-Inventory events:
+## Shared fields
 
-| Event | Meaning |
-| --- | --- |
-| `ADDED` | A device is among the subscribed devices. This also reports existing devices when a subscription starts. |
-| `UPDATED` | A device's metadata changed, such as its name or assigned profile. |
-| `REMOVED` | A device is no longer among the subscribed devices. |
+Every event exposes these fields:
 
-Activity events:
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `network_id` | `str` | Application-owned identity of the logical network. |
+| `dev_eui` | `str` | Device identifier, normalized to 16 lowercase hexadecimal characters. |
+| `received_at` | `datetime` | Time the server received the event. Backends supply a timezone-aware timestamp. |
+| `type` | `EventType` | Fixed by the event class. |
+| `descriptor` | `DeviceDescriptor \| None` | Inventory metadata, when available. |
 
-| Event | Meaning |
-| --- | --- |
-| `UPLINK` | The device sent application bytes, such as encoded sensor readings. |
-| `JOIN` | The device joined the LoRaWAN network. |
-| `STATUS` | A device status report, including battery information and radio link margin. |
-| `ACK` | The outcome of waiting for a device to acknowledge a confirmed downlink. Check `acknowledged` for the result. |
-| `TX_ACK` | A gateway acknowledgement for a downlink transmission. This does not confirm device receipt. |
-| `LOG` | A backend log message associated with the device. |
-| `LOCATION` | A location update for the device. |
+All constructor arguments are keyword-only. Inventory events take `descriptor`
+and `received_at`. Their `network_id` and `dev_eui` are properties of the descriptor,
+not constructor arguments.
+
+Activity events accept a descriptor or explicit `network_id` and `dev_eui` values.
+With a descriptor, identifiers are derived from it. Conflicting explicit values
+raise `ValueError`. Without one, both identifiers are required.
+
+## Inventory events
+
+| Class | Fixed type | Required fields | Meaning |
+| --- | --- | --- | --- |
+| `AddedEvent` | `ADDED` (`"added"`) | `descriptor`, `received_at` | A device is available to the subscriber. Also replays existing devices when a subscription starts. |
+| `UpdatedEvent` | `UPDATED` (`"updated"`) | `descriptor`, `received_at` | Device metadata changed, such as its name or assigned profile. |
+| `RemovedEvent` | `REMOVED` (`"removed"`) | `descriptor`, `received_at` | A device left the subscription. Carries its last descriptor. |
+
+```python
+from datetime import UTC, datetime
+
+from lorawan_connection import AddedEvent
+
+added = AddedEvent(descriptor=descriptor, received_at=datetime.now(UTC))
+assert added.dev_eui == descriptor.dev_eui
+```
+
+The [descriptor reference](/lorawan-connection/connection/reference/#devicedescriptor)
+lists its name, server application, profile, and catalog fields.
+
+## Activity events
+
+The fields below are direct attributes of each event, in addition to the shared
+fields above. Fields are required unless a default is shown.
+
+| Class | Fixed type | Fields |
+| --- | --- | --- |
+| `UplinkEvent` | `UPLINK` (`"up"`) | `data: bytes`, `f_port: int = 1` |
+| `JoinEvent` | `JOIN` (`"join"`) | `dev_addr: str` |
+| `StatusEvent` | `STATUS` (`"status"`) | `margin: int = 0`, `external_power_source: bool = False`, `battery_level_unavailable: bool = True`, `battery_level: float = 0` |
+| `AckEvent` | `ACK` (`"ack"`) | `queue_item_id: str`, `acknowledged: bool` |
+| `TxAckEvent` | `TX_ACK` (`"txack"`) | `gateway_id: str`, `downlink_id: int` |
+| `LogEvent` | `LOG` (`"log"`) | `description: str`, `level: int`, `code: int` |
+| `LocationEvent` | `LOCATION` (`"location"`) | `latitude: float`, `longitude: float`, `altitude: float` |
+
+`UplinkEvent.data` contains raw application bytes. The device library decides which
+ports and byte layouts it supports. `JoinEvent.dev_addr` is the joined device address.
+
+`StatusEvent.margin` is the radio link margin in dB. Check the power-source and
+battery-unavailable flags before reading `battery_level`, which is a percentage.
+Zero with `battery_level_unavailable=False` is a known zero, not a missing reading.
+
+`AckEvent` reports the outcome of a confirmed downlink. Match `queue_item_id` to
+the returned command ID and check `acknowledged`. A `TxAckEvent` reports gateway
+transmission; it does not confirm device receipt.
+
+`LogEvent.level` and `code` retain the backend's numeric values.
+`LocationEvent.latitude` and `longitude` use degrees; `altitude` uses meters.
+
+```python
+from datetime import UTC, datetime
+
+from lorawan_connection import UplinkEvent
+
+event = UplinkEvent(
+    network_id="home",
+    dev_eui="0201010101010101",
+    received_at=datetime.now(UTC),
+    data=bytes.fromhex("01011098530000010210A87A0000AF51"),
+    f_port=1,
+)
+```
+
+Use the same classes for live events, tests, and capture replays. Backends convert
+SDK messages into these classes before delivery. Raw application bytes are retained
+without copying; mutable SDK messages are not exposed.
 
 Sending a command is a separate operation; see
 [sending commands](/lorawan-connection/modelling/overview/#send-commands).
-
-## Event fields
-
-Every event identifies its network and device, gives its `EventType`, and includes
-a timezone-aware `received_at` timestamp. The device identifier is its DevEUI.
-The network identifier distinguishes one logical network from another.
-
-An `ADDED` or `UPDATED` event also carries a `DeviceDescriptor`. This describes the
-device's name, server application, profile, and catalog identity. The collection
-uses the catalog identity to choose a device class.
-
-Pass the descriptor when constructing that event. The event takes its `dev_eui`
-and `network_id` from the descriptor:
-
-```python
-from datetime import UTC, datetime
-
-from lorawan_connection import DeviceEventData, EventType
-
-added = DeviceEventData(
-    type=EventType.ADDED,
-    received_at=datetime.now(UTC),
-    descriptor=descriptor,
-)
-```
-
-Activity payloads go in `data`. An uplink carries raw application bytes and the
-application port, `f_port`. Without a descriptor, supply the identifiers explicitly:
-
-```python
-from datetime import UTC, datetime
-
-from lorawan_connection import DeviceEventData, EventType, UplinkData
-
-event = DeviceEventData(
-    network_id="home",
-    dev_eui="0201010101010101",
-    type=EventType.UPLINK,
-    received_at=datetime.now(UTC),
-    data=UplinkData(
-        data=bytes.fromhex("01011098530000010210A87A0000AF51"),
-        f_port=1,
-    ),
-)
-```
-
-Use these dataclasses for tests and capture replays. The
-[event reference](/lorawan-connection/connection/reference/) lists all fields and payload types.
 
 ## How events reach a device
 

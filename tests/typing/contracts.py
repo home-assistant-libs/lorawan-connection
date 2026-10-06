@@ -1,52 +1,28 @@
-"""Static conformance of every supplied fixture to its read-only Protocol."""
+"""Typed event narrowing and collection model types."""
 
-from datetime import UTC, datetime
+from typing import assert_type
 
 from lorawan_connection import (
-    Ack,
-    AckData,
     Connection,
-    Coordinates,
-    CoordinatesData,
     DeviceCollection,
     DeviceEvent,
-    DeviceEventData,
     EventType,
-    Join,
-    JoinData,
-    Location,
-    LocationData,
-    Log,
-    LogData,
-    Status,
-    StatusData,
-    TxAck,
-    TxAckData,
-    Uplink,
-    UplinkData,
+    UplinkEvent,
 )
 from lorawan_connection.backend.chirpstack import ChirpStackConnection
 from lorawan_connection.mock import MockConnection
 from sensecap_lorawan import S2101, SenseCapDeviceCollection
 
-uplink: Uplink = UplinkData(b"\x00")
-join: Join = JoinData("01234567")
-status: Status = StatusData()
-ack: Ack = AckData("queue", True)
-tx_ack: TxAck = TxAckData("gateway", 1)
-log: Log = LogData("message", 1, 1)
-coordinates: Coordinates = CoordinatesData(1, 2, 3)
-location: Location = LocationData(coordinates)
-event: DeviceEvent = DeviceEventData(
-    network_id="network",
-    dev_eui="0000000000000001",
-    type=EventType.UPLINK,
-    received_at=datetime.now(UTC),
-    data=uplink,
-)
 
+def narrow(event: DeviceEvent) -> None:
+    if event.type == EventType.UPLINK:
+        assert_type(event, UplinkEvent)
+        assert_type(event.data, bytes)
+        assert_type(event.f_port, int)
+    if event.type == EventType.ACK:
+        assert_type(event.queue_item_id, str)
+        assert_type(event.acknowledged, bool)
 
-# The class registry preserves the concrete model type for callers.
 
 connection: Connection = ChirpStackConnection(
     "http://localhost:8080", "key", application_ids=[], network_id="network"

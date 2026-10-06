@@ -6,15 +6,13 @@ from dataclasses import replace
 from unittest.mock import AsyncMock
 
 import pytest
-from chirpstack_api import integration
 
 from lorawan_connection import (
-    AckData,
+    AckEvent,
     DeviceCollection,
-    DeviceEventData,
     DownlinkError,
     EventType,
-    TxAckData,
+    TxAckEvent,
 )
 from lorawan_connection.mock import MockConnection
 
@@ -43,12 +41,12 @@ def ack(
     dev_eui: str = DESCRIPTOR.dev_eui,
 ) -> None:
     devices.handle_event(
-        DeviceEventData(
+        AckEvent(
             network_id="network",
             dev_eui=dev_eui,
-            type=EventType.ACK,
             received_at=NOW,
-            data=AckData(queue_id, acknowledged),
+            queue_item_id=queue_id,
+            acknowledged=acknowledged,
         )
     )
 
@@ -62,12 +60,12 @@ async def test_waits_for_matching_device_ack(devices, sender) -> None:
     ack(devices, "another-command")
     ack(devices, dev_eui="0000000000000002")
     devices.handle_event(
-        DeviceEventData(
+        TxAckEvent(
             network_id="network",
             dev_eui=DESCRIPTOR.dev_eui,
-            type=EventType.TX_ACK,
             received_at=NOW,
-            data=TxAckData("gateway", 1),
+            gateway_id="gateway",
+            downlink_id=1,
         )
     )
     await asyncio.sleep(0)
@@ -81,14 +79,12 @@ async def test_waits_for_matching_device_ack(devices, sender) -> None:
 async def test_ack_before_enqueue_returns(devices, sender, acknowledged) -> None:
     async def send(downlink):
         devices.handle_event(
-            DeviceEventData(
+            AckEvent(
                 network_id="network",
                 dev_eui=DESCRIPTOR.dev_eui,
-                type=EventType.ACK,
                 received_at=NOW,
-                data=integration.AckEvent(
-                    queue_item_id="queue-id", acknowledged=acknowledged
-                ),
+                queue_item_id="queue-id",
+                acknowledged=acknowledged,
             )
         )
         return "queue-id"

@@ -14,13 +14,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from . import (
+    AddedEvent,
     Connection,
     ConnectionUnavailable,
     Device,
     DeviceCollection,
     DeviceDescriptor,
-    DeviceEventData,
-    EventType,
 )
 from .callbacks import Unsubscribe
 
@@ -232,11 +231,7 @@ async def _watch(args: argparse.Namespace, models: Sequence[type[Device]]) -> No
         if args.list:
             for descriptor in await connection.inventory():
                 collection.handle_event(
-                    DeviceEventData(
-                        type=EventType.ADDED,
-                        received_at=datetime.now(UTC),
-                        descriptor=descriptor,
-                    )
+                    AddedEvent(received_at=datetime.now(UTC), descriptor=descriptor)
                 )
             return
         connection.on_disconnect(on_disconnect)

@@ -77,9 +77,8 @@ from datetime import UTC, datetime
 
 from lorawan_connection import (
     DeviceDescriptor,
-    DeviceEventData,
-    EventType,
-    UplinkData,
+    AddedEvent,
+    UplinkEvent,
 )
 
 # Replace these values with a device record from your server's registry.
@@ -94,16 +93,15 @@ descriptor = DeviceDescriptor(
     model_id="temperature-v1",
 )
 
-added = DeviceEventData(
-    type=EventType.ADDED,
+added = AddedEvent(
     descriptor=descriptor,
     received_at=datetime.now(UTC),
 )
-uplink = DeviceEventData(
-    type=EventType.UPLINK,
+uplink = UplinkEvent(
     descriptor=descriptor,
     received_at=datetime.now(UTC),
-    data=UplinkData(data=b"\x00\xd6", f_port=1),
+    data=b"\x00\xd6",
+    f_port=1,
 )
 ```
 
@@ -140,19 +138,19 @@ Unsubscribing one collection must not close the shared transport or other subscr
 
 ## Translate messages and commands
 
-Map server messages to the [event and payload contracts](/lorawan-connection/connection/reference/).
-Forward raw application bytes. Generated SDK payloads can pass by reference if
-their attributes match the protocol; otherwise use the shared dataclasses.
+Map server messages to the [event classes](/lorawan-connection/connection/reference/).
+Forward raw application bytes in `UplinkEvent`. Copy the relevant scalar fields
+from SDK messages into the matching event class.
 Never mutate an event after delivery.
 
 `async_send_downlink()` receives the device's DevEUI, FPort, bytes, confirmation
 flag, and optional expiry. Validate that the device belongs to the selected scope.
 Return the server queue ID, or a correlation ID that the server preserves in its
-acknowledgement stream. Use that same value in `AckData.queue_item_id`.
+acknowledgement stream. Use that same value in `AckEvent.queue_item_id`.
 
 Only a device ACK completes a confirmed command successfully. Queue acceptance
 and a gateway `TX_ACK` are different events. Translate a correlated negative ACK
-or delivery failure to `AckData(queue_item_id, False)` when supported.
+or delivery failure to an `AckEvent` with `acknowledged=False` when supported.
 
 Raise `DownlinkError` for rejected writes, unknown devices, unavailable transport,
 or unsupported requested options. Keep read-only monitoring available when a write
