@@ -4,9 +4,11 @@ from typing import assert_type
 
 from lorawan_connection import (
     Connection,
+    Device,
     DeviceCollection,
     DeviceEvent,
     EventType,
+    StatusEvent,
     UplinkEvent,
 )
 from lorawan_connection.backend.chirpstack import ChirpStackConnection
@@ -36,3 +38,11 @@ declared: DeviceCollection[S2101] = SenseCapDeviceCollection(connection)
 def observe(model: S2101) -> None:
     model.add_update_listener(lambda: print(model.temperature))
     model.close()
+
+
+overview = DeviceCollection(connection, fallback_model=Device)
+assert_type(overview, DeviceCollection[Device])
+mixed = DeviceCollection[Device](connection, [S2101], fallback_model=Device)
+assert_type(mixed.devices["0201010101010101"], Device)
+assert_type(overview.devices["0201010101010101"].latest_status, StatusEvent | None)
+assert_type(overview.devices["0201010101010101"].battery_level, float | None)

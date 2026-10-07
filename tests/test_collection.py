@@ -9,6 +9,7 @@ import pytest
 from lorawan_connection import (
     AckEvent,
     ConnectionUnavailable,
+    Device,
     DeviceCollection,
     DeviceDescriptor,
     DeviceEvent,
@@ -376,3 +377,70 @@ def test_device_remove_callback_can_close_collection() -> None:
     collection.handle_event(inventory(kind=EventType.REMOVED))
     other.assert_called_once_with()
     assert not collection.devices
+
+
+async def test_fallback_includes_unknown_devices_and_stores_status() -> None:
+    unknown = replace(
+        DESCRIPTOR, brand_id=None, model_id="", dev_eui="0000000000000002"
+    )
+    other_brand = replace(DESCRIPTOR, brand_id=123, dev_eui="0000000000000003")
+    connection = MockConnection([DESCRIPTOR, unknown, other_brand])
+    collection = DeviceCollection[Device](
+        connection, [DeviceModel], fallback_model=Device
+    )
+    added = []
+    collection.subscribe_device_added(added.append)
+    await collection.async_setup()
+    assert len(added) == 3
+    assert isinstance(collection.devices[DESCRIPTOR.dev_eui], DeviceModel)
+    generic = collection.devices[unknown.dev_eui]
+    assert type(generic) is Device
+    assert type(collection.devices[other_brand.dev_eui]) is Device
+    seen = []
+    generic.add_update_listener(lambda: seen.append(generic.battery_level))
+    status = StatusEvent(
+        descriptor=unknown,
+        received_at=NOW,
+        battery_level=70,
+        battery_level_unavailable=False,
+    )
+    connection.emit(status)
+    assert seen == [70]
+    assert generic.latest_status is status
+    renamed = replace(unknown, name="Unrecognized sensor")
+    connection.emit(inventory(renamed, EventType.UPDATED))
+    assert collection.devices[unknown.dev_eui] is generic
+    assert generic.descriptor.name == "Unrecognized sensor"
+    assert generic.latest_status is status
+
+    # A registered catalog identity replaces the generic model.
+    recognized = replace(renamed, brand_id=744, model_id="model")
+    connection.emit(inventory(recognized, EventType.UPDATED))
+    assert generic.closed
+    recognized_device = collection.devices[unknown.dev_eui]
+    assert isinstance(recognized_device, DeviceModel)
+    connection.emit(inventory(renamed, EventType.UPDATED))
+    assert recognized_device.closed
+    assert type(collection.devices[unknown.dev_eui]) is Device
+    connection.emit(inventory(renamed, EventType.REMOVED))
+    assert unknown.dev_eui not in collection.devices
+    collection.close()
+    connection.emit(inventory(unknown))
+    assert not collection.devices
+
+
+async def test_fallback_and_vendor_collections_share_connection() -> None:
+    unknown = replace(DESCRIPTOR, brand_id=None, dev_eui="0000000000000002")
+    connection = MockConnection([DESCRIPTOR, unknown])
+    overview = DeviceCollection(connection, fallback_model=Device)
+    vendor = DeviceCollection(connection, [DeviceModel])
+    await overview.async_setup()
+    await vendor.async_setup()
+    assert set(overview.devices) == {DESCRIPTOR.dev_eui, unknown.dev_eui}
+    assert set(vendor.devices) == {DESCRIPTOR.dev_eui}
+    assert all(type(device) is Device for device in overview.devices.values())
+    overview.close()
+    event = StatusEvent(descriptor=DESCRIPTOR, received_at=NOW)
+    connection.emit(event)
+    assert vendor.devices[DESCRIPTOR.dev_eui].latest_status is event
+    vendor.close()

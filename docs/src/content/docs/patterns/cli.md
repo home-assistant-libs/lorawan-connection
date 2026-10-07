@@ -44,7 +44,20 @@ require `--tenant`; this includes tenant-scoped keys with the tested ChirpStack 
 Add `--json` for one JSON object per line:
 
 ```json
-{"type":"state","dev_eui":"0102030405060708","name":"Greenhouse","model":"S2101","state":{"temperature":21.4,"humidity":31.4}}
+{
+  "type": "state",
+  "dev_eui": "0102030405060708",
+  "name": "Greenhouse",
+  "model": "S2101",
+  "state": {
+    "temperature": 21.4,
+    "humidity": 31.4,
+    "battery_level": null,
+    "external_power_source": null,
+    "downlink_margin": null,
+    "latest_status": null
+  }
+}
 ```
 
 Output types are `added`, `state`, and `removed`. Only supported models appear.

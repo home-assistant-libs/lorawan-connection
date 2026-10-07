@@ -12,7 +12,7 @@ device. This example implements a Dragino LT-22222-L.
 ## Complete device example
 
 Subclass `Device` and implement `handle_event()` to decode incoming events.
-The base class provides identity, update subscriptions, and command delivery.
+The base class provides identity, LoRaWAN status, update subscriptions, and command delivery.
 
 Save this as `dragino_lorawan.py`. It includes the `DraginoDevices` collection used below.
 
@@ -35,6 +35,20 @@ One message can update several values. Update them all before calling `notify()`
 so listeners see the complete update. Notify for valid reports even when values
 are unchanged. Models choose their own timestamp ordering
 and stale-data rules; the collection does not impose them.
+
+## Read LoRaWAN device status
+
+The base device stores `StatusEvent` before calling your `handle_event()` method.
+It exposes battery percentage, external power, and the device's downlink SNR.
+Your handler does not need to call `super()` for status or acknowledgement handling.
+
+Read `device.battery_level`, `device.external_power_source`, and
+`device.downlink_margin`. These start as `None`. `device.latest_status` contains
+the complete report and its timestamp. Status reports notify update listeners
+after your handler finishes.
+
+These values come from LoRaWAN device-status reports. Keep battery readings decoded
+from a vendor payload in the model's own attributes.
 
 ## Read values and observe changes
 
@@ -174,6 +188,45 @@ collection = DeviceCollection(connection, [LT22222])
 
 Backends and test doubles implement the same `Connection` protocol. Several
 collections can share a connection; closing one leaves the others and the transport open.
+
+## Include unrecognized devices
+
+For a device listing, use `Device` as the fallback model. The collection then
+includes all devices exposed by the connection, even without a catalog identity:
+
+```python
+from lorawan_connection import Connection, Device, DeviceCollection
+
+
+async def create_inventory(connection: Connection) -> DeviceCollection[Device]:
+    collection = DeviceCollection(connection, fallback_model=Device)
+
+    def device_added(device: Device) -> None:
+        def show_status() -> None:
+            print(device.descriptor.name, device.battery_level)
+
+        device.add_update_listener(show_status)
+        show_status()
+
+    collection.subscribe_device_added(device_added)
+    await collection.async_setup()
+    return collection
+```
+
+Generic devices retain reported LoRaWAN status without decoding application bytes.
+A battery value remains unknown until a usable status report arrives.
+
+Pass registered models too when the same collection should decode known devices:
+
+```python
+collection = DeviceCollection[Device](
+    connection, [LT22222], fallback_model=Device
+)
+```
+
+Matching models take precedence over the fallback. A catalog identity change
+retires the previous model and selects a new one. Close the collection when the
+listing no longer needs live updates.
 
 ## Device lifecycle
 

@@ -1,20 +1,19 @@
 """Device identity and synchronous update notifications."""
 
 import asyncio
-from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from datetime import datetime
 from typing import ClassVar
 
 from .callbacks import Unsubscribe, notify, subscribe
 from .downlink import Downlink, DownlinkError, SendDownlink
-from .events import AckEvent, DeviceDescriptor, DeviceEvent
+from .events import AckEvent, DeviceDescriptor, DeviceEvent, StatusEvent
 
 
-class Device(ABC):
+class Device:
     """Own identity and listeners; subclasses define data and interpret events."""
 
-    identifiers: ClassVar[Mapping[str, tuple[int | str, str]]]
+    identifiers: ClassVar[Mapping[str, tuple[int | str, str]]] = {}
 
     def __init__(self, descriptor: DeviceDescriptor) -> None:
         self.descriptor = descriptor
@@ -26,6 +25,38 @@ class Device(ABC):
         self._early_acks: dict[str, bool] = {}
         self._enqueuing = 0
         self._connection_generation = 0
+        self._latest_status: StatusEvent | None = None
+        self._receive_depth = 0
+        self._notify_pending = False
+
+    @property
+    def latest_status(self) -> StatusEvent | None:
+        """The last received LoRaWAN device-status report, including its timestamp."""
+        return self._latest_status
+
+    @property
+    def battery_level(self) -> float | None:
+        """LoRaWAN battery percentage, or None when unknown or externally powered."""
+        status = self._latest_status
+        if (
+            status is None
+            or status.external_power_source
+            or status.battery_level_unavailable
+        ):
+            return None
+        return status.battery_level
+
+    @property
+    def external_power_source(self) -> bool | None:
+        """Whether the last status report indicates external power."""
+        status = self._latest_status
+        return status.external_power_source if status is not None else None
+
+    @property
+    def downlink_margin(self) -> int | None:
+        """Device-reported SNR in dB for the received LoRaWAN status request."""
+        status = self._latest_status
+        return status.margin if status is not None else None
 
     @property
     def closed(self) -> bool:
@@ -56,7 +87,10 @@ class Device(ABC):
     def notify(self) -> None:
         """Notify listeners after a complete update, even if state is unchanged."""
         if not self._closed:
-            notify(self._listeners, None)
+            if self._receive_depth:
+                self._notify_pending = True
+            else:
+                notify(self._listeners, None)
 
     async def async_send_downlink(
         self,
@@ -109,9 +143,26 @@ class Device(ABC):
         elif self._enqueuing:
             self._early_acks[ack.queue_item_id] = ack.acknowledged
 
-    @abstractmethod
+    def _receive_event(self, event: DeviceEvent) -> None:
+        """Store common state and resolve ACKs before the model handles an event."""
+        if self._closed:
+            return
+        self._receive_depth += 1
+        try:
+            if isinstance(event, StatusEvent):
+                self._latest_status = event
+                self.notify()
+            elif isinstance(event, AckEvent):
+                self._handle_ack(event)
+            self.handle_event(event)
+        finally:
+            self._receive_depth -= 1
+            if not self._receive_depth and self._notify_pending:
+                self._notify_pending = False
+                self.notify()
+
     def handle_event(self, event: DeviceEvent) -> None:
-        """Interpret an event, commit state, then notify listeners as needed."""
+        """Override to decode model data and call notify; no super call is needed."""
 
     def _connection_lost(self) -> None:
         """Fail commands on a lost connection without retiring this model."""

@@ -6,10 +6,35 @@ description: Collection lifecycle, callback order, and cleanup behavior.
 ## Device
 
 Subclass `Device`, declare `identifiers: Mapping[str, tuple[int | str, str]]`, and
-implement `handle_event(event)`. Each identifier maps a stack to its `(brand_id, model_id)`.
+override `handle_event(event)` to decode application data. Each identifier maps a stack to its `(brand_id, model_id)`.
 
 Call `super().__init__(descriptor)` to initialize identity and listeners, then define
 the model's data attributes. The collection replaces `descriptor` on metadata updates.
+
+`Device` can also be instantiated directly as a generic model. Its `identifiers`
+mapping is empty and its `handle_event()` does nothing.
+
+### Status properties
+
+The collection delivers events through an internal receive method. It stores
+`StatusEvent` and resolves acknowledgements before calling `handle_event()`.
+Overrides do not need to call `super().handle_event()`.
+
+| Property | Type | Meaning |
+| --- | --- | --- |
+| `latest_status` | `StatusEvent \| None` | Last received status event, including its timestamp. |
+| `battery_level` | `float \| None` | Battery percentage; `None` when unavailable or externally powered. |
+| `external_power_source` | `bool \| None` | External-power flag; `None` before the first status report. |
+| `downlink_margin` | `int \| None` | Device-reported SNR in dB for the received status request. |
+
+These read-only properties describe LoRaWAN MAC status. Application payload
+readings belong to the vendor model. A known zero battery level remains `0`.
+An unavailable reading clears the exposed battery level to `None`.
+
+Each received status replaces the previous report and schedules an update
+notification. Other events leave status unchanged. Reports are stored in delivery
+order; use `latest_status.received_at` to inspect their age. State lasts for the
+model's lifetime and is not persisted across replacement or collection recreation.
 
 ### add_update_listener(listener) → Unsubscribe
 
@@ -33,6 +58,11 @@ Call current update listeners with no arguments. This method does not compare or
 modify state. Notify after committing a complete model update. Removed listeners
 are skipped, new listeners wait for the next notification, and failures are logged
 without stopping other listeners. Closed devices ignore notifications.
+
+During internal event delivery, notification calls are combined and delivered
+after `handle_event()` returns. A status report notifies automatically, even if the
+model handler does nothing. If the handler raises, the stored status still notifies
+listeners and the exception propagates.
 
 ### async_send_downlink(*, data, f_port, wait_for_ack=True, expires_at=None) → None
 
@@ -58,9 +88,15 @@ additional resources can override this method and call `super().close()`.
 
 ### Construction and attributes
 
-`DeviceCollection(connection, models=None)` creates a collection for one logical
+`DeviceCollection(connection, models=None, *, fallback_model=None)` creates a collection for one logical
 network. `models` is a sequence of model classes; when omitted, the collection uses
-its `DEVICES` declaration. An explicit empty sequence accepts no models.
+its `DEVICES` declaration. An explicit empty sequence registers no model classes.
+
+`fallback_model` is an optional `type[DeviceT]` for unmatched descriptors, including
+those with no brand or model ID. Set it to `Device` for an inventory with common
+LoRaWAN status. Registered models take precedence. A fallback subscribes to all
+devices exposed by the connection; without one, vendor filtering is unchanged.
+Use `DeviceCollection[Device]` when mixing vendor models with the base fallback.
 
 - `DEVICES` is a sequence of supported model classes, usually declared as a tuple.
 - `connection` implements the `Connection` protocol. The collection uses it to
@@ -77,8 +113,8 @@ Registered models inherit `Device` and accept a descriptor as their constructor 
 
 The backend-neutral `Connection` protocol exposes:
 
-- `async_subscribe(*, brands, callback) -> Unsubscribe` takes a `frozenset[tuple[str, int | str]]` and reports matching existing
-  devices before returning, then live events. Arguments are keyword-only.
+- `async_subscribe(*, brands, callback) -> Unsubscribe` takes a `frozenset[tuple[str, int | str]]` or `None` and reports matching existing
+  devices before returning, then live events. `None` selects all devices; an empty set selects none. Arguments are keyword-only.
 - `on_disconnect(callback) -> Unsubscribe` registers a notification callback with no arguments.
 - `async_send_downlink(downlink: Downlink) -> str` queues a command and returns its
   queue ID for internal ACK correlation.
@@ -89,7 +125,7 @@ Read-only connections raise `DownlinkError` on attempted writes.
 
 ### async_setup() → None
 
-Subscribe to the stack and brand pairs declared by the registered model classes. Existing
+Subscribe to the registered stack and brand pairs, or all devices when a fallback is configured. Existing
 models are ready when setup returns. Later events reach `handle_event()` automatically.
 Setup is allowed once per collection. Calling it again or after close raises `RuntimeError`.
 A failed or cancelled setup closes any models already created and propagates the error.
@@ -100,7 +136,7 @@ its connection supports recovery, or close it when ending the session.
 ### _create_device(descriptor)
 
 The default factory matches `(stack, brand_id, model_id)` and constructs the
-registered class with the descriptor. An unknown identity returns `None`.
+registered class with the descriptor. An unknown identity uses `fallback_model`, or returns `None` when no fallback is configured.
 Override this method for custom matching. Return a model with the supplied descriptor,
 or `None`. Do not perform I/O or feed events back into the collection from the factory.
 
@@ -108,7 +144,7 @@ or `None`. Do not perform I/O or feed events back into the collection from the f
 
 - Closed collections ignore events. The connection scopes events to its network.
 - Event DevEUIs are compared after removing colons and lowercasing.
-- `ADDED` and `UPDATED` need a matching descriptor. Missing or mismatched descriptors are ignored.
+- `ADDED` and `UPDATED` carry the descriptor used to select a registered or fallback model.
 - Either `ADDED` or `UPDATED` can create a model. Repeated descriptions do not create duplicates.
 - A changed `(stack, brand_id, model_id)` closes and removes the previous model before calling the factory.
 - An unchanged identity updates `device.descriptor` in place.

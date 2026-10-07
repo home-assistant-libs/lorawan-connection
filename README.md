@@ -52,6 +52,21 @@ Applications observe models through `add_update_listener()`. Models decode readi
 update their attributes, then call `notify()`. Closing the collection removes
 subscriptions and closes models, leaving the connection open.
 
+The base device stores each `StatusEvent` before calling the model's `handle_event()`.
+Read `latest_status`, `battery_level`, `external_power_source`, and `downlink_margin`
+without implementing a status handler. These properties describe LoRaWAN MAC
+status; device-specific battery readings stay in the vendor model.
+
+To list devices without a known decoder, use a fallback model:
+
+```python
+devices = DeviceCollection(connection, fallback_model=Device)
+await devices.async_setup()
+```
+
+This collection includes every device exposed by the connection. Pass model
+classes alongside `fallback_model=Device` to decode recognized devices too.
+
 ## Events
 
 Events are typed dataclasses. An `UplinkEvent` exposes `data: bytes` and `f_port`

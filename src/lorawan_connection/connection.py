@@ -18,10 +18,10 @@ class Connection(Protocol):
     async def async_subscribe(
         self,
         *,
-        brands: frozenset[tuple[str, int | str]],
+        brands: frozenset[tuple[str, int | str]] | None,
         callback: Callable[[DeviceEvent], None],
     ) -> Unsubscribe:
-        """Deliver matching existing devices before returning, then live events."""
+        """Deliver inventory then live events; brands=None selects all devices."""
         ...
 
     def on_disconnect(self, callback: Callable[[], None]) -> Unsubscribe:

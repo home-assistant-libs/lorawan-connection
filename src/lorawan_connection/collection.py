@@ -20,9 +20,12 @@ class DeviceCollection[DeviceT: Device]:
         self,
         connection: Connection,
         models: Sequence[type[DeviceT]] | None = None,
+        *,
+        fallback_model: type[DeviceT] | None = None,
     ) -> None:
         """Own one network; use explicit model classes or the subclass's DEVICES."""
         self._connection = connection
+        self._fallback_model = fallback_model
         self._unsubscribe: Unsubscribe | None = None
         self._unsubscribe_disconnect: Unsubscribe | None = None
         self._setup_started = False
@@ -49,7 +52,9 @@ class DeviceCollection[DeviceT: Device]:
                 self._connection_lost
             )
             unsubscribe = await self._connection.async_subscribe(
-                brands=frozenset(
+                brands=None
+                if self._fallback_model is not None
+                else frozenset(
                     (stack, brand_id) for stack, brand_id, _ in self._models
                 ),
                 callback=self.handle_event,
@@ -63,15 +68,17 @@ class DeviceCollection[DeviceT: Device]:
         self._unsubscribe = unsubscribe
 
     def _create_device(self, descriptor: DeviceDescriptor) -> DeviceT | None:
-        """Construct a registered model, or leave an unknown identity unsupported."""
-        if descriptor.brand_id is None:
-            return None
-        model = self._models.get(
-            (descriptor.stack, descriptor.brand_id, descriptor.model_id)
+        """Construct a registered model, or use the configured fallback."""
+        model = (
+            self._models.get(
+                (descriptor.stack, descriptor.brand_id, descriptor.model_id)
+            )
+            if descriptor.brand_id is not None
+            else None
         )
         if model is None:
-            return None
-        return model(descriptor)
+            model = self._fallback_model
+        return model(descriptor) if model is not None else None
 
     def subscribe_device_added(
         self, callback: Callable[[DeviceT], None]
@@ -134,9 +141,7 @@ class DeviceCollection[DeviceT: Device]:
                 device.descriptor = descriptor
                 device.notify()
         if device is not None and self.devices.get(eui) is device:
-            if event.type == EventType.ACK:
-                device._handle_ack(event)
-            device.handle_event(event)
+            device._receive_event(event)
 
     def _connection_lost(self) -> None:
         for device in tuple(self.devices.values()):

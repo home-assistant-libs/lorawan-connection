@@ -16,6 +16,7 @@ from lorawan_connection import (
     DeviceCollection,
     EventType,
     RemovedEvent,
+    StatusEvent,
     UpdatedEvent,
     UplinkEvent,
 )
@@ -199,7 +200,14 @@ async def test_list_supported_models_only(
             "dev_eui": DESCRIPTOR.dev_eui,
             "name": DESCRIPTOR.name,
             "model": "S2101",
-            "state": {"temperature": None, "humidity": None},
+            "state": {
+                "temperature": None,
+                "humidity": None,
+                "latest_status": None,
+                "battery_level": None,
+                "external_power_source": None,
+                "downlink_margin": None,
+            },
         }
     ]
     connection.async_subscribe.assert_not_awaited()
@@ -235,6 +243,15 @@ async def test_live_state_removal_and_disconnect(
                 f_port=1,
             )
         )
+        callback(
+            StatusEvent(
+                descriptor=DESCRIPTOR,
+                received_at=now,
+                battery_level=75,
+                battery_level_unavailable=False,
+                margin=-4,
+            )
+        )
         callback(RemovedEvent(received_at=now, descriptor=DESCRIPTOR))
         connection.error = RuntimeError("offline")
         for registration in tuple(connection.on_disconnect.call_args_list):
@@ -253,8 +270,22 @@ async def test_live_state_removal_and_disconnect(
     ):
         await _watch(parsed, SenseCapDeviceCollection.DEVICES)
     rows = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
-    assert [row["type"] for row in rows] == ["added", "state", "removed"]
-    assert rows[1]["state"] == {"temperature": 21.4, "humidity": 31.4}
+    assert [row["type"] for row in rows] == ["added", "state", "state", "removed"]
+    assert rows[1]["state"] == {
+        "temperature": 21.4,
+        "humidity": 31.4,
+        "latest_status": None,
+        "battery_level": None,
+        "external_power_source": None,
+        "downlink_margin": None,
+    }
+    status_state = rows[2]["state"]
+    assert status_state["temperature"] == 21.4
+    assert status_state["battery_level"] == 75
+    assert status_state["external_power_source"] is False
+    assert status_state["downlink_margin"] == -4
+    assert status_state["latest_status"]["type"] == "status"
+    assert status_state["latest_status"]["received_at"]
     stop.assert_called_once()
     connection.close.assert_awaited_once()
 
@@ -462,6 +493,10 @@ def test_cli_reports_vendor_attributes_and_properties() -> None:
         "temperature": None,
         "humidity": None,
         "channels": {1: {"temperature": 20.0, "humidity": 40.0}},
+        "latest_status": None,
+        "battery_level": None,
+        "external_power_source": None,
+        "downlink_margin": None,
     }
 
 

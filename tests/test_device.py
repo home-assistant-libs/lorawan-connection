@@ -5,10 +5,17 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from lorawan_connection import Device, DeviceCollection, DeviceDescriptor, DeviceEvent
+from lorawan_connection import (
+    Device,
+    DeviceCollection,
+    DeviceDescriptor,
+    DeviceEvent,
+    StatusEvent,
+    UplinkEvent,
+)
 from lorawan_connection.mock import MockConnection
 
-from .conftest import DESCRIPTOR, inventory
+from .conftest import DESCRIPTOR, NOW, inventory
 
 
 class Sensor(Device):
@@ -185,3 +192,99 @@ async def test_collections_share_connection_without_owning_it() -> None:
     second.close()
     connection.close.assert_not_called()
     connection.async_subscribe.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("level", "unavailable", "external", "expected"),
+    [
+        (72.5, False, False, 72.5),
+        (0, False, False, 0),
+        (50, True, False, None),
+        (50, False, True, None),
+    ],
+)
+def test_status_is_stored_before_model_handler(
+    level: float, unavailable: bool, external: bool, expected: float | None
+) -> None:
+    class StatusSensor(Sensor):
+        def handle_event(self, event: DeviceEvent) -> None:
+            if isinstance(event, StatusEvent):
+                assert self.latest_status is event
+                assert self.battery_level == expected
+                self.temperature = 21
+                self.notify()
+
+    collection = DeviceCollection(MockConnection(), [StatusSensor])
+    collection.handle_event(inventory())
+    device = collection.devices[DESCRIPTOR.dev_eui]
+    assert device.latest_status is None
+    assert device.battery_level is None
+    assert device.external_power_source is None
+    assert device.downlink_margin is None
+    seen = []
+    device.add_update_listener(
+        lambda: seen.append((device.temperature, device.battery_level))
+    )
+    event = StatusEvent(
+        descriptor=DESCRIPTOR,
+        received_at=NOW,
+        margin=-12,
+        battery_level=level,
+        battery_level_unavailable=unavailable,
+        external_power_source=external,
+    )
+    collection.handle_event(event)
+    assert device.latest_status is event
+    assert device.external_power_source is external
+    assert device.downlink_margin == -12
+    assert seen == [(21, expected)]
+
+
+def test_status_updates_without_model_super_or_notify() -> None:
+    collection = Sensors(MockConnection())
+    collection.handle_event(inventory())
+    device = collection.devices[DESCRIPTOR.dev_eui]
+    listener = Mock()
+    device.add_update_listener(listener)
+    status = StatusEvent(
+        descriptor=DESCRIPTOR,
+        received_at=NOW,
+        battery_level=50,
+        battery_level_unavailable=False,
+    )
+    collection.handle_event(status)
+    assert device.battery_level == 50
+    listener.assert_called_once_with()
+    collection.handle_event(
+        UplinkEvent(descriptor=DESCRIPTOR, received_at=NOW, data=b"")
+    )
+    assert device.latest_status is status
+    assert device.battery_level == 50
+    missing = replace(status, battery_level_unavailable=True)
+    collection.handle_event(missing)
+    assert device.latest_status is missing
+    assert device.battery_level is None
+    assert listener.call_count == 2
+    device.close()
+    collection.handle_event(status)
+    assert device.latest_status is missing
+    assert listener.call_count == 2
+
+
+def test_status_notification_survives_model_error() -> None:
+    class BrokenSensor(Sensor):
+        def handle_event(self, event: DeviceEvent) -> None:
+            if isinstance(event, StatusEvent):
+                raise ValueError("bad vendor handler")
+
+    collection = DeviceCollection(MockConnection(), [BrokenSensor])
+    collection.handle_event(inventory())
+    device = collection.devices[DESCRIPTOR.dev_eui]
+    listener = Mock()
+    device.add_update_listener(listener)
+    with pytest.raises(ValueError, match="bad vendor handler"):
+        collection.handle_event(StatusEvent(descriptor=DESCRIPTOR, received_at=NOW))
+    assert device.latest_status is not None
+    listener.assert_called_once_with()
+    device.notify()
+    assert listener.call_count == 2
