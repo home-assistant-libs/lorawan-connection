@@ -32,11 +32,21 @@ raise `ValueError`. Without one, both identifiers are required.
 
 ## Inventory events
 
-| Class | Fixed type | Required fields | Meaning |
-| --- | --- | --- | --- |
-| `AddedEvent` | `ADDED` (`"added"`) | `descriptor`, `received_at` | A device is available to the subscriber. Also replays existing devices when a subscription starts. |
-| `UpdatedEvent` | `UPDATED` (`"updated"`) | `descriptor`, `received_at` | Device metadata changed, such as its name or assigned profile. |
-| `RemovedEvent` | `REMOVED` (`"removed"`) | `descriptor`, `received_at` | A device left the subscription. Carries its last descriptor. |
+Both constructor fields are required. The
+[descriptor reference](/lorawan-connection/connection/reference/#devicedescriptor)
+lists the device's name, server application, profile, and catalog fields.
+
+### AddedEvent
+
+A device is available to the subscriber. Subscriptions also replay existing
+devices with this event.
+
+Fixed type: `EventType.ADDED` (`"added"`).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `descriptor` | `DeviceDescriptor` | Current device metadata. |
+| `received_at` | `datetime` | Event timestamp. |
 
 ```python
 from datetime import UTC, datetime
@@ -47,37 +57,49 @@ added = AddedEvent(descriptor=descriptor, received_at=datetime.now(UTC))
 assert added.dev_eui == descriptor.dev_eui
 ```
 
-The [descriptor reference](/lorawan-connection/connection/reference/#devicedescriptor)
-lists its name, server application, profile, and catalog fields.
+### UpdatedEvent
+
+Device metadata changed, such as its name or assigned profile.
+
+Fixed type: `EventType.UPDATED` (`"updated"`).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `descriptor` | `DeviceDescriptor` | Updated device metadata. |
+| `received_at` | `datetime` | Event timestamp. |
+
+### RemovedEvent
+
+A device left the subscription.
+
+Fixed type: `EventType.REMOVED` (`"removed"`).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `descriptor` | `DeviceDescriptor` | Last known device metadata. |
+| `received_at` | `datetime` | Event timestamp. |
 
 ## Activity events
 
-The fields below are direct attributes of each event, in addition to the shared
-fields above. Fields are required unless a default is shown.
+Each class adds the fields below to the [shared fields](#shared-fields).
+`received_at` is required. `descriptor` defaults to `None`; supply either a
+descriptor or both `network_id` and `dev_eui`.
 
-| Class | Fixed type | Fields |
+Backends convert SDK messages into these classes before delivery. Use the same
+classes for live events, tests, and capture replays.
+
+### UplinkEvent
+
+Raw application bytes received from a device. The device library decides which
+ports and byte layouts it supports. `data` retains the bytes without copying;
+mutable SDK messages are not exposed.
+
+Fixed type: `EventType.UPLINK` (`"up"`).
+
+| Field | Type | Default |
 | --- | --- | --- |
-| `UplinkEvent` | `UPLINK` (`"up"`) | `data: bytes`, `f_port: int = 1` |
-| `JoinEvent` | `JOIN` (`"join"`) | `dev_addr: str` |
-| `StatusEvent` | `STATUS` (`"status"`) | `margin: int = 0`, `external_power_source: bool = False`, `battery_level_unavailable: bool = True`, `battery_level: float = 0` |
-| `AckEvent` | `ACK` (`"ack"`) | `queue_item_id: str`, `acknowledged: bool` |
-| `TxAckEvent` | `TX_ACK` (`"txack"`) | `gateway_id: str`, `downlink_id: int` |
-| `LogEvent` | `LOG` (`"log"`) | `description: str`, `level: int`, `code: int` |
-| `LocationEvent` | `LOCATION` (`"location"`) | `latitude: float`, `longitude: float`, `altitude: float` |
-
-`UplinkEvent.data` contains raw application bytes. The device library decides which
-ports and byte layouts it supports. `JoinEvent.dev_addr` is the joined device address.
-
-`StatusEvent.margin` is the radio link margin in dB. Check the power-source and
-battery-unavailable flags before reading `battery_level`, which is a percentage.
-Zero with `battery_level_unavailable=False` is a known zero, not a missing reading.
-
-`AckEvent` reports the outcome of a confirmed downlink. Match `queue_item_id` to
-the returned command ID and check `acknowledged`. A `TxAckEvent` reports gateway
-transmission; it does not confirm device receipt.
-
-`LogEvent.level` and `code` retain the backend's numeric values.
-`LocationEvent.latitude` and `longitude` use degrees; `altitude` uses meters.
+| `data` | `bytes` | Required |
+| `f_port` | `int` | `1` |
 
 ```python
 from datetime import UTC, datetime
@@ -93,12 +115,82 @@ event = UplinkEvent(
 )
 ```
 
-Use the same classes for live events, tests, and capture replays. Backends convert
-SDK messages into these classes before delivery. Raw application bytes are retained
-without copying; mutable SDK messages are not exposed.
+### JoinEvent
 
-Sending a command is a separate operation; see
-[sending commands](/lorawan-connection/modelling/overview/#send-commands).
+A device joined the network. `dev_addr` is the joined device address.
+
+Fixed type: `EventType.JOIN` (`"join"`).
+
+| Field | Type | Default |
+| --- | --- | --- |
+| `dev_addr` | `str` | Required |
+
+### StatusEvent
+
+Device battery and radio link status. `margin` is the radio link margin in dB.
+`battery_level` is a percentage; check the power-source and battery-unavailable
+flags before reading it. Zero with `battery_level_unavailable=False` is a known
+zero, not a missing reading.
+
+Fixed type: `EventType.STATUS` (`"status"`).
+
+| Field | Type | Default |
+| --- | --- | --- |
+| `margin` | `int` | `0` |
+| `external_power_source` | `bool` | `False` |
+| `battery_level_unavailable` | `bool` | `True` |
+| `battery_level` | `float` | `0` |
+
+### AckEvent
+
+The outcome of a confirmed downlink. Match `queue_item_id` to the returned command
+ID and check `acknowledged`.
+
+Fixed type: `EventType.ACK` (`"ack"`).
+
+| Field | Type | Default |
+| --- | --- | --- |
+| `queue_item_id` | `str` | Required |
+| `acknowledged` | `bool` | Required |
+
+See [sending commands](/lorawan-connection/modelling/overview/#send-commands)
+for command submission.
+
+### TxAckEvent
+
+A gateway acknowledged transmission. This does not confirm device receipt.
+
+Fixed type: `EventType.TX_ACK` (`"txack"`).
+
+| Field | Type | Default |
+| --- | --- | --- |
+| `gateway_id` | `str` | Required |
+| `downlink_id` | `int` | Required |
+
+### LogEvent
+
+A backend log message. `level` and `code` retain the backend's numeric values.
+
+Fixed type: `EventType.LOG` (`"log"`).
+
+| Field | Type | Default |
+| --- | --- | --- |
+| `description` | `str` | Required |
+| `level` | `int` | Required |
+| `code` | `int` | Required |
+
+### LocationEvent
+
+A device location estimate. `latitude` and `longitude` use degrees;
+`altitude` uses meters.
+
+Fixed type: `EventType.LOCATION` (`"location"`).
+
+| Field | Type | Default |
+| --- | --- | --- |
+| `latitude` | `float` | Required |
+| `longitude` | `float` | Required |
+| `altitude` | `float` | Required |
 
 ## How events reach a device
 
