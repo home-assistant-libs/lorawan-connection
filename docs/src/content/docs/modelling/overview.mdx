@@ -191,15 +191,15 @@ collections can share a connection; closing one leaves the others and the transp
 
 ## Include unrecognized devices
 
-For a device listing, use `Device` as the fallback model. The collection then
-includes all devices exposed by the connection, even without a catalog identity:
+For a device listing, omit model classes. The collection creates a generic
+`Device` for every device exposed by the connection, even without a catalog identity:
 
 ```python
 from lorawan_connection import Connection, Device, DeviceCollection
 
 
 async def create_inventory(connection: Connection) -> DeviceCollection[Device]:
-    collection = DeviceCollection(connection, fallback_model=Device)
+    collection = DeviceCollection(connection)
 
     def device_added(device: Device) -> None:
         def show_status() -> None:
@@ -216,17 +216,9 @@ async def create_inventory(connection: Connection) -> DeviceCollection[Device]:
 Generic devices retain reported LoRaWAN status without decoding application bytes.
 A battery value remains unknown until a usable status report arrives.
 
-Pass registered models too when the same collection should decode known devices:
-
-```python
-collection = DeviceCollection[Device](
-    connection, [LT22222], fallback_model=Device
-)
-```
-
-Matching models take precedence over the fallback. A catalog identity change
-retires the previous model and selects a new one. Close the collection when the
-listing no longer needs live updates.
+Collections with registered models include only matching devices. A generic
+collection and a vendor collection can share the same connection. Close each
+collection when its consumer no longer needs live updates.
 
 ## Device lifecycle
 

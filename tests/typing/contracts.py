@@ -40,9 +40,9 @@ def observe(model: S2101) -> None:
     model.close()
 
 
-overview = DeviceCollection(connection, fallback_model=Device)
+overview = DeviceCollection(connection)
 assert_type(overview, DeviceCollection[Device])
-mixed = DeviceCollection[Device](connection, [S2101], fallback_model=Device)
-assert_type(mixed.devices["0201010101010101"], Device)
 assert_type(overview.devices["0201010101010101"].latest_status, StatusEvent | None)
 assert_type(overview.devices["0201010101010101"].battery_level, float | None)
+
+assert_type(SenseCapDeviceCollection(connection).devices["0201010101010101"], S2101)

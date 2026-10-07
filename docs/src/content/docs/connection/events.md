@@ -198,8 +198,8 @@ Fixed type: `EventType.LOCATION` (`"location"`).
 ## How events reach a device
 
 Call `await collection.async_setup()` to subscribe to events for the vendors
-represented by the collection's model classes. A collection with a fallback model
-subscribes to all devices exposed by the connection. The collection creates supported
+represented by the collection's model classes. A collection without model classes
+creates generic devices for all inventory exposed by the connection. The collection creates supported
 models and routes each event to its device automatically. The
 [ChirpStack connection example](/lorawan-connection/connection/chirpstack/)
 shows connection startup and collection setup.

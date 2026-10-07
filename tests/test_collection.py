@@ -224,8 +224,8 @@ def test_replay_skips_models_removed_by_a_callback() -> None:
     assert len(seen) == 1
 
 
-def test_empty_registry_ignores_unknown_devices() -> None:
-    collection = DeviceCollection[DeviceModel](MockConnection())
+def test_explicit_empty_registry_ignores_unknown_devices() -> None:
+    collection = DeviceCollection[DeviceModel](MockConnection(), [])
     collection.handle_event(inventory())
     assert not collection.devices
 
@@ -379,20 +379,18 @@ def test_device_remove_callback_can_close_collection() -> None:
     assert not collection.devices
 
 
-async def test_fallback_includes_unknown_devices_and_stores_status() -> None:
+async def test_generic_collection_includes_all_devices_and_stores_status() -> None:
     unknown = replace(
         DESCRIPTOR, brand_id=None, model_id="", dev_eui="0000000000000002"
     )
     other_brand = replace(DESCRIPTOR, brand_id=123, dev_eui="0000000000000003")
     connection = MockConnection([DESCRIPTOR, unknown, other_brand])
-    collection = DeviceCollection[Device](
-        connection, [DeviceModel], fallback_model=Device
-    )
+    collection = DeviceCollection(connection)
     added = []
     collection.subscribe_device_added(added.append)
     await collection.async_setup()
     assert len(added) == 3
-    assert isinstance(collection.devices[DESCRIPTOR.dev_eui], DeviceModel)
+    assert type(collection.devices[DESCRIPTOR.dev_eui]) is Device
     generic = collection.devices[unknown.dev_eui]
     assert type(generic) is Device
     assert type(collection.devices[other_brand.dev_eui]) is Device
@@ -413,12 +411,12 @@ async def test_fallback_includes_unknown_devices_and_stores_status() -> None:
     assert generic.descriptor.name == "Unrecognized sensor"
     assert generic.latest_status is status
 
-    # A registered catalog identity replaces the generic model.
+    # Catalog identities do not select vendor models in a generic collection.
     recognized = replace(renamed, brand_id=744, model_id="model")
     connection.emit(inventory(recognized, EventType.UPDATED))
     assert generic.closed
     recognized_device = collection.devices[unknown.dev_eui]
-    assert isinstance(recognized_device, DeviceModel)
+    assert type(recognized_device) is Device
     connection.emit(inventory(renamed, EventType.UPDATED))
     assert recognized_device.closed
     assert type(collection.devices[unknown.dev_eui]) is Device
@@ -429,10 +427,10 @@ async def test_fallback_includes_unknown_devices_and_stores_status() -> None:
     assert not collection.devices
 
 
-async def test_fallback_and_vendor_collections_share_connection() -> None:
+async def test_generic_and_vendor_collections_share_connection() -> None:
     unknown = replace(DESCRIPTOR, brand_id=None, dev_eui="0000000000000002")
     connection = MockConnection([DESCRIPTOR, unknown])
-    overview = DeviceCollection(connection, fallback_model=Device)
+    overview = DeviceCollection(connection)
     vendor = DeviceCollection(connection, [DeviceModel])
     await overview.async_setup()
     await vendor.async_setup()

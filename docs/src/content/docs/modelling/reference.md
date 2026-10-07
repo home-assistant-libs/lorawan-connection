@@ -88,15 +88,14 @@ additional resources can override this method and call `super().close()`.
 
 ### Construction and attributes
 
-`DeviceCollection(connection, models=None, *, fallback_model=None)` creates a collection for one logical
+`DeviceCollection(connection, models=None)` creates a collection for one logical
 network. `models` is a sequence of model classes; when omitted, the collection uses
-its `DEVICES` declaration. An explicit empty sequence registers no model classes.
+its `DEVICES` declaration.
 
-`fallback_model` is an optional `type[DeviceT]` for unmatched descriptors, including
-those with no brand or model ID. Set it to `Device` for an inventory with common
-LoRaWAN status. Registered models take precedence. A fallback subscribes to all
-devices exposed by the connection; without one, vendor filtering is unchanged.
-Use `DeviceCollection[Device]` when mixing vendor models with the base fallback.
+With neither explicit models nor a `DEVICES` declaration, the collection subscribes
+to all devices and creates generic `Device` instances. With model classes, it
+subscribes to their vendors and creates only matching models. An explicit empty
+sequence selects no devices, including when it overrides a subclass's `DEVICES`.
 
 - `DEVICES` is a sequence of supported model classes, usually declared as a tuple.
 - `connection` implements the `Connection` protocol. The collection uses it to
@@ -125,7 +124,7 @@ Read-only connections raise `DownlinkError` on attempted writes.
 
 ### async_setup() → None
 
-Subscribe to the registered stack and brand pairs, or all devices when a fallback is configured. Existing
+Subscribe to the registered stack and brand pairs, or all devices for a generic collection. Existing
 models are ready when setup returns. Later events reach `handle_event()` automatically.
 Setup is allowed once per collection. Calling it again or after close raises `RuntimeError`.
 A failed or cancelled setup closes any models already created and propagates the error.
@@ -136,7 +135,8 @@ its connection supports recovery, or close it when ending the session.
 ### _create_device(descriptor)
 
 The default factory matches `(stack, brand_id, model_id)` and constructs the
-registered class with the descriptor. An unknown identity uses `fallback_model`, or returns `None` when no fallback is configured.
+registered class with the descriptor. An unknown identity returns `None`.
+A generic collection constructs `Device` for every descriptor.
 Override this method for custom matching. Return a model with the supplied descriptor,
 or `None`. Do not perform I/O or feed events back into the collection from the factory.
 
@@ -144,7 +144,7 @@ or `None`. Do not perform I/O or feed events back into the collection from the f
 
 - Closed collections ignore events. The connection scopes events to its network.
 - Event DevEUIs are compared after removing colons and lowercasing.
-- `ADDED` and `UPDATED` carry the descriptor used to select a registered or fallback model.
+- `ADDED` and `UPDATED` carry the descriptor used to construct a generic device or select a registered model.
 - Either `ADDED` or `UPDATED` can create a model. Repeated descriptions do not create duplicates.
 - A changed `(stack, brand_id, model_id)` closes and removes the previous model before calling the factory.
 - An unchanged identity updates `device.descriptor` in place.

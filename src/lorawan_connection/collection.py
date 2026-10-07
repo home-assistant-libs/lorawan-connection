@@ -2,6 +2,7 @@
 
 import logging
 from collections.abc import Callable, Sequence
+from typing import cast, overload
 
 from .callbacks import Unsubscribe, notify, subscribe
 from .connection import Connection
@@ -16,16 +17,28 @@ class DeviceCollection[DeviceT: Device]:
 
     DEVICES: Sequence[type[DeviceT]] = ()
 
+    @overload
+    def __init__(
+        self: "DeviceCollection[Device]",
+        connection: Connection,
+        models: None = None,
+    ) -> None: ...
+
+    @overload
     def __init__(
         self,
         connection: Connection,
         models: Sequence[type[DeviceT]] | None = None,
-        *,
-        fallback_model: type[DeviceT] | None = None,
+    ) -> None: ...
+
+    def __init__(
+        self,
+        connection: Connection,
+        models: Sequence[type[DeviceT]] | None = None,
     ) -> None:
         """Own one network; use explicit model classes or the subclass's DEVICES."""
         self._connection = connection
-        self._fallback_model = fallback_model
+        self._generic = models is None and not self.DEVICES
         self._unsubscribe: Unsubscribe | None = None
         self._unsubscribe_disconnect: Unsubscribe | None = None
         self._setup_started = False
@@ -53,7 +66,7 @@ class DeviceCollection[DeviceT: Device]:
             )
             unsubscribe = await self._connection.async_subscribe(
                 brands=None
-                if self._fallback_model is not None
+                if self._generic
                 else frozenset(
                     (stack, brand_id) for stack, brand_id, _ in self._models
                 ),
@@ -68,7 +81,9 @@ class DeviceCollection[DeviceT: Device]:
         self._unsubscribe = unsubscribe
 
     def _create_device(self, descriptor: DeviceDescriptor) -> DeviceT | None:
-        """Construct a registered model, or use the configured fallback."""
+        """Construct a generic device or match a registered model."""
+        if self._generic:
+            return cast(DeviceT, Device(descriptor))
         model = (
             self._models.get(
                 (descriptor.stack, descriptor.brand_id, descriptor.model_id)
@@ -76,8 +91,6 @@ class DeviceCollection[DeviceT: Device]:
             if descriptor.brand_id is not None
             else None
         )
-        if model is None:
-            model = self._fallback_model
         return model(descriptor) if model is not None else None
 
     def subscribe_device_added(

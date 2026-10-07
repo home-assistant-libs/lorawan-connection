@@ -57,15 +57,15 @@ Read `latest_status`, `battery_level`, `external_power_source`, and `downlink_ma
 without implementing a status handler. These properties describe LoRaWAN MAC
 status; device-specific battery readings stay in the vendor model.
 
-To list devices without a known decoder, use a fallback model:
+To list all devices without selecting model classes:
 
 ```python
-devices = DeviceCollection(connection, fallback_model=Device)
+devices = DeviceCollection(connection)
 await devices.async_setup()
 ```
 
-This collection includes every device exposed by the connection. Pass model
-classes alongside `fallback_model=Device` to decode recognized devices too.
+This collection creates a generic `Device` for every device exposed by the
+connection. Collections with registered model classes include only matching devices.
 
 ## Events
 
