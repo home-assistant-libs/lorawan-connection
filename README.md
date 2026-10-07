@@ -63,8 +63,7 @@ identifiers are properties derived from the descriptor. The
 [event guide](https://home-assistant-libs.github.io/lorawan-connection/connection/events/)
 lists every field.
 
-This API is prepared for the next release. PyPI 0.10.0 still uses event envelopes;
-see the [migration notes](https://home-assistant-libs.github.io/lorawan-connection/connection/reference/#changes-from-010).
+Version 0.11 replaces the event envelopes from 0.10; see the [migration notes](https://home-assistant-libs.github.io/lorawan-connection/connection/reference/#changes-from-010).
 
 ## Install
 

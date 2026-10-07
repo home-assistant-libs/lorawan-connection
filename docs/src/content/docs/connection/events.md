@@ -3,7 +3,7 @@ title: Understanding events
 description: Typed LoRaWAN events, their fields, and how they reach device models.
 ---
 
-These event classes are prepared for 0.11.0. PyPI 0.10.0 uses the former envelope API.
+Version 0.11 introduces these event classes in place of the envelope API from 0.10.
 See the [migration notes](/lorawan-connection/connection/reference/#changes-from-010).
 
 Backends deliver inventory and activity as frozen, slotted dataclasses.

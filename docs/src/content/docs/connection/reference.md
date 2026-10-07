@@ -61,8 +61,7 @@ timezone-aware timestamps; device libraries validate wire formats and measuremen
 
 ## Changes from 0.10
 
-The typed event API is prepared for the next release. The current PyPI release,
-0.10.0, still uses the envelope and payload API.
+Version 0.11 replaces the envelope and payload API from 0.10 with typed events.
 
 Replace `DeviceEventData(type=EventType.UPLINK, data=UplinkData(...), ...)`
 with `UplinkEvent(data=..., f_port=..., ...)`. Other activity events follow the same
