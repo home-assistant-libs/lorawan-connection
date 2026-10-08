@@ -13,7 +13,7 @@ from lorawan_connection import (
 )
 from lorawan_connection.backend.chirpstack import ChirpStackConnection
 from lorawan_connection.mock import MockConnection
-from sensecap_lorawan import S2101, SenseCapDeviceCollection
+from sensecap_lorawan import S2101, S2102, SenseCapDeviceCollection
 
 
 def narrow(event: DeviceEvent) -> None:
@@ -32,7 +32,7 @@ connection: Connection = ChirpStackConnection(
 mock_connection: Connection = MockConnection()
 model_class: type[S2101] = S2101
 collection: DeviceCollection[S2101] = DeviceCollection(connection, [S2101])
-declared: DeviceCollection[S2101] = SenseCapDeviceCollection(connection)
+declared: DeviceCollection[S2101 | S2102] = SenseCapDeviceCollection(connection)
 
 
 def observe(model: S2101) -> None:
@@ -45,4 +45,6 @@ assert_type(overview, DeviceCollection[Device])
 assert_type(overview.devices["0201010101010101"].latest_status, StatusEvent | None)
 assert_type(overview.devices["0201010101010101"].battery_level, float | None)
 
-assert_type(SenseCapDeviceCollection(connection).devices["0201010101010101"], S2101)
+assert_type(
+    SenseCapDeviceCollection(connection).devices["0201010101010101"], S2101 | S2102
+)

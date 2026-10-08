@@ -1,0 +1,10 @@
+{
+  "model": "TS201",
+  "f_port": 85,
+  "payload": "01756103672201",
+  "expected": {
+    "reported_battery_percent": 97,
+    "temperature": 29.0,
+    "temperature_error": false
+  }
+}

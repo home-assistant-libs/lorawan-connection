@@ -191,3 +191,14 @@ The repository follows the packaging, documentation, and release approach of
 [modbus-connection](https://github.com/home-assistant-libs/modbus-connection).
 The source version stays `0.0.0`; the publish workflow sets the version from the
 release tag. See [releasing](RELEASING.md) for release instructions.
+
+## Device library examples
+
+The examples include SenseCAP S2101 and S2102, Dragino LT-22222-L and LHT65,
+and Milesight TS201 and UC51x. They use official catalog identities. S2101 and
+S2102 accept FPorts 1 and 2; TS201 and UC51x use 85; LHT65 uses 2.
+UC51x exposes reported telemetry only.
+
+Captured S2101, S2102, and TS201 payloads are replayed in offline regression tests.
+See the [testing guide](https://home-assistant-libs.github.io/lorawan-connection/patterns/testing/)
+for the fixture format and test coverage.

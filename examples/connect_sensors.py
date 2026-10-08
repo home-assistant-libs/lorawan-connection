@@ -3,9 +3,9 @@
 import asyncio
 import os
 
-from lorawan_connection import ConnectionUnavailable
+from lorawan_connection import ConnectionUnavailable, DeviceCollection
 from lorawan_connection.backend.chirpstack import ChirpStackConnection
-from sensecap_lorawan import S2101, SenseCapDeviceCollection
+from sensecap_lorawan import S2101
 
 
 async def main() -> None:
@@ -16,7 +16,7 @@ async def main() -> None:
         application_ids=[],
         network_id="my-network",
     )
-    devices = SenseCapDeviceCollection(connection)
+    devices = DeviceCollection(connection, [S2101])
     disconnected: asyncio.Future[Exception] = asyncio.get_running_loop().create_future()
 
     def on_disconnect() -> None:

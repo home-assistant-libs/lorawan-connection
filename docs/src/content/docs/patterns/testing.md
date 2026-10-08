@@ -61,11 +61,42 @@ async def test_s2101(
         )
     )
     model = devices.devices[DEV_EUI]
+    assert isinstance(model, S2101)
     assert model.temperature == 21.4
     assert model.humidity == 31.4
 ```
 
 Import your installed device library. This repository uses `examples/` on pytest's path.
+
+## Captured payloads
+
+The example libraries support SenseCAP S2101/S2102, Dragino LT-22222-L/LHT65,
+and Milesight TS201/UC51x. Their model identities come from the public catalogs.
+SenseCAP accepts FPorts 1 and 2. Milesight uses 85; LHT65 uses 2.
+UC51x exposes reported telemetry only.
+
+`tests/fixtures/device_uplinks/` contains raw payloads from physical S2101, S2102,
+and TS201 devices, captured on 8 October 2026. The tests retain the original
+application bytes and FPort, then replay them through `MockConnection` and the
+vendor collection. Descriptors use synthetic identifiers and official model IDs.
+
+For example, the S2101 fixture is:
+
+```json
+{
+  "model": "S2101",
+  "f_port": 2,
+  "payload": "010110645f0000010210305b01001ced",
+  "expected": {"temperature": 24.42, "humidity": 88.88}
+}
+```
+
+Expected readings are fixed in the fixture. Do not generate them with the decoder
+under test. Verify them against the vendor codec or a known device reading.
+Keep credentials and deployment identifiers out of fixtures.
+
+UC51x and LHT65 tests use published TTN codec examples. Physical-device captures
+for those models are not yet available.
 
 ## Event sequences to cover
 
@@ -116,6 +147,7 @@ async def test_relay_command() -> None:
     devices = DraginoDevices(connection)
     await devices.async_setup()
     device = devices.devices[descriptor.dev_eui]
+    assert isinstance(device, LT22222)
     try:
         async with asyncio.TaskGroup() as tasks:
             command = tasks.create_task(device.async_set_relay(1, True))

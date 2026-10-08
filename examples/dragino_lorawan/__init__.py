@@ -12,6 +12,8 @@ from lorawan_connection import (
     EventType,
 )
 
+from .lht65 import LHT65
+
 _LOGGER = logging.getLogger(__name__)
 
 VENDOR_ID = 676
@@ -19,6 +21,8 @@ VENDOR_ID = 676
 
 class LT22222(Device):
     """Model for the Dragino LT-22222-L."""
+
+    model_name = "LT-22222-L"
 
     identifiers = {
         "chirpstack": (VENDOR_ID, "cb0a7bef-eaa0-4c61-a0b6-ce33e6ecbc4f"),
@@ -123,7 +127,10 @@ class LT22222(Device):
         )
 
 
-class DraginoDevices(DeviceCollection[LT22222]):
+type DraginoDevice = LT22222 | LHT65
+
+
+class DraginoDevices(DeviceCollection[DraginoDevice]):
     """Supported Dragino catalog models."""
 
-    DEVICES = (LT22222,)
+    DEVICES = (LT22222, LHT65)

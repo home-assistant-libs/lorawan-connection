@@ -67,7 +67,7 @@ class S2101(Device):
         """Merge a valid partial measurement without clearing other values."""
         if self.closed or event.type != EventType.UPLINK:
             return
-        if event.f_port != 1:
+        if event.f_port not in (1, 2):
             return
         try:
             values = decode_s2101(event.data)
@@ -86,7 +86,57 @@ class S2101(Device):
         self.notify()
 
 
-class SenseCapDeviceCollection(DeviceCollection[S2101]):
-    """A collection automatically admitting reviewed SenseCAP catalog models."""
+class S2102(Device):
+    """SenseCAP light intensity in lux."""
 
-    DEVICES = (S2101,)
+    identifiers = {
+        "chirpstack": (VENDOR_ID, "92e11305-8190-41cc-84d0-ddc452cf1889"),
+        "tts": ("sensecap", "sensecaps2102-light"),
+    }
+
+    def __init__(self, descriptor: DeviceDescriptor) -> None:
+        super().__init__(descriptor)
+        self.illuminance: float | None = None
+        self._updated_at: datetime | None = None
+
+    @override
+    def handle_event(self, event: DeviceEvent) -> None:
+        if self.closed or event.type != EventType.UPLINK or event.f_port not in (1, 2):
+            return
+        if self._updated_at is not None and event.received_at < self._updated_at:
+            return
+        data = event.data
+        if len(data) < 9 or (len(data) - 2) % 7:
+            return
+        observed = False
+        value: float | None = None
+        for offset in range(0, len(data) - 2, 7):
+            if (
+                data[offset] != 1
+                or int.from_bytes(data[offset + 1 : offset + 3], "little") != 4099
+            ):
+                continue
+            reading = (
+                int.from_bytes(data[offset + 3 : offset + 7], "little", signed=True)
+                / 1000
+            )
+            if reading >= 2_000_000:
+                value = None
+            elif 0 <= reading <= 160_000:
+                value = reading
+            else:
+                return
+            observed = True
+        if observed:
+            self.illuminance = value
+            self._updated_at = event.received_at
+            self.notify()
+
+
+type SenseCapDevice = S2101 | S2102
+
+
+class SenseCapDeviceCollection(DeviceCollection[SenseCapDevice]):
+    """Supported SenseCAP catalog models."""
+
+    DEVICES = (S2101, S2102)

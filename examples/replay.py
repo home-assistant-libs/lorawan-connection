@@ -5,16 +5,17 @@ from datetime import UTC, datetime
 
 from lorawan_connection import (
     AddedEvent,
+    DeviceCollection,
     DeviceDescriptor,
     UplinkEvent,
 )
 from lorawan_connection.mock import MockConnection
-from sensecap_lorawan import S2101, SenseCapDeviceCollection
+from sensecap_lorawan import S2101
 
 
 async def main() -> None:
     connection = MockConnection()
-    devices = SenseCapDeviceCollection(connection)
+    devices = DeviceCollection(connection, [S2101])
 
     def device_added(device: S2101) -> None:
         print(f"Device: {device.descriptor.name}")

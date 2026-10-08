@@ -137,7 +137,7 @@ def test_zero_unknown_fields_and_port() -> None:
             dev_eui=DESCRIPTOR.dev_eui,
             received_at=NOW,
             data=PAYLOAD,
-            f_port=2,
+            f_port=99,
         )
     )
     assert collection.devices[DESCRIPTOR.dev_eui].temperature is None
