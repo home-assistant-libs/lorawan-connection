@@ -115,7 +115,7 @@ async def test_authentication_error(
 async def test_inventory_reconciliation(connection: TTSConnection) -> None:
     events = []
     unsubscribe = await connection.async_subscribe(
-        brands=frozenset({("tts", "sensecap")}), callback=events.append
+        brands=frozenset({("tts", "sensecap")}), listener=events.append
     )
     connection._registry.List = AsyncMock(
         return_value=message("EndDevices", end_devices=[device("Renamed")])
@@ -135,7 +135,7 @@ async def test_inventory_reconciliation(connection: TTSConnection) -> None:
 async def test_unknown_device_refresh_before_uplink(connection: TTSConnection) -> None:
     connection.devices.clear()
     events = []
-    await connection.async_subscribe(brands=None, callback=events.append)
+    await connection.async_subscribe(brands=None, listener=events.append)
     await connection.handle_message(
         message(
             "ApplicationUp",
@@ -153,7 +153,7 @@ async def test_ack_correlation(
     connection: TTSConnection, field: str, ack: bool
 ) -> None:
     events = []
-    await connection.async_subscribe(brands=None, callback=events.append)
+    await connection.async_subscribe(brands=None, listener=events.append)
     await connection.handle_message(
         message(
             "ApplicationUp",
@@ -199,7 +199,7 @@ async def test_encrypted_payload_rejected(connection: TTSConnection) -> None:
 
 async def test_unrelated_application_ignored(connection: TTSConnection) -> None:
     events = []
-    await connection.async_subscribe(brands=None, callback=events.append)
+    await connection.async_subscribe(brands=None, listener=events.append)
     ids = {**IDS, "application_ids": {"application_id": "another"}}
     await connection.handle_message(
         message("ApplicationUp", end_device_ids=ids, uplink_message={"f_port": 1})
@@ -303,7 +303,7 @@ async def test_lifecycle_stream_end_disconnects(connection: TTSConnection) -> No
 
     connection._events.Stream = Mock(return_value=Stream())
     disconnected = Mock()
-    connection.on_disconnect(disconnected)
+    connection.on_disconnect(listener=disconnected)
     await connection._lifecycle()
     assert isinstance(connection.error, ConnectionUnavailable)
     assert not connection.available
@@ -321,7 +321,7 @@ async def test_other_application_events(
     connection: TTSConnection, field: str, expected: EventType
 ) -> None:
     received = []
-    await connection.async_subscribe(brands=None, callback=received.append)
+    await connection.async_subscribe(brands=None, listener=received.append)
     fields = {
         "join_accept": {"session_key_id": b"test"},
         "location_solved": {
@@ -490,7 +490,7 @@ async def test_connect_streams_reconcile_and_close(connection: TTSConnection) ->
         events.append(event)
         updated.set()
 
-    await connection.async_subscribe(brands=None, callback=receive)
+    await connection.async_subscribe(brands=None, listener=receive)
     updated.clear()
     connection._registry.List.return_value = message(
         "EndDevices", end_devices=[device("Renamed")]
@@ -513,7 +513,7 @@ async def test_connect_streams_reconcile_and_close(connection: TTSConnection) ->
     await connection.close()
     disconnect.assert_not_called()
     with pytest.raises(ConnectionUnavailable):
-        await connection.async_subscribe(brands=None, callback=receive)
+        await connection.async_subscribe(brands=None, listener=receive)
     with pytest.raises(ConnectionUnavailable):
         connection.on_disconnect(disconnect)
     with pytest.raises(DownlinkError, match="unavailable"):
@@ -628,7 +628,7 @@ def test_invalid_options(options) -> None:
 )
 async def test_irrelevant_traffic(connection: TTSConnection, up) -> None:
     events = []
-    await connection.async_subscribe(brands=None, callback=events.append)
+    await connection.async_subscribe(brands=None, listener=events.append)
     await connection.handle_message(up)
     assert len(events) == 1
 

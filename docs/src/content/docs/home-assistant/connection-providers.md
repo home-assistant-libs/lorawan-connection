@@ -26,7 +26,7 @@ A TTS integration needs these manifest fields:
   "dependencies": ["lorawan"],
   "integration_type": "hub",
   "iot_class": "cloud_push",
-  "requirements": ["lorawan-connection[tts]==0.10.0"]
+  "requirements": ["lorawan-connection[tts]==0.13.0"]
 }
 ```
 
@@ -80,8 +80,8 @@ entry, preserving its ID and scope.
 
 ## Connect, register, and close
 
-Registration requires `async_subscribe(brands=None, callback=...)` to receive all
-devices in the selected scope. The initial inventory must be complete.
+Subscriptions use `async_subscribe(brands=..., listener=...)`. The initial
+inventory must include all devices matching the requested brands.
 
 Set `network_id=entry.entry_id` to distinguish identical DevEUIs on different servers.
 The returned unsubscribe callback withdraws the connection; the server integration

@@ -19,12 +19,12 @@ class Connection(Protocol):
         self,
         *,
         brands: frozenset[tuple[str, int | str]] | None,
-        callback: Callable[[DeviceEvent], None],
+        listener: Callable[[DeviceEvent], None],
     ) -> Unsubscribe:
         """Deliver inventory then live events; brands=None selects all devices."""
         ...
 
-    def on_disconnect(self, callback: Callable[[], None]) -> Unsubscribe:
+    def on_disconnect(self, listener: Callable[[], None]) -> Unsubscribe:
         """Listen for connection loss; return a function to remove the listener."""
         ...
 

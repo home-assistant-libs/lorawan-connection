@@ -43,12 +43,12 @@ class BackendContract(Protocol):
         self,
         *,
         brands: frozenset[tuple[str, int | str]] | None,
-        callback: Callable[[DeviceEvent], None],
+        listener: Callable[[DeviceEvent], None],
     ) -> Unsubscribe:
         """Deliver matching inventory before returning, then deliver live events."""
         ...
 
-    def on_disconnect(self, callback: Callable[[], None]) -> Unsubscribe:
+    def on_disconnect(self, listener: Callable[[], None]) -> Unsubscribe:
         """Subscribe to connection loss; return idempotent cleanup."""
         ...
 

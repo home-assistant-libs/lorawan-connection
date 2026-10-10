@@ -184,11 +184,11 @@ class TTSConnection:
         for item in tuple(self._subscribers):
             if item not in self._subscribers:
                 continue
-            brands, callback = item
+            brands, listener = item
             if brands is None or (descriptor.stack, descriptor.brand_id) in brands:
-                notify([callback], event)
+                notify([listener], event)
             elif previous and (previous.stack, previous.brand_id) in brands:
-                notify([callback], self._event(EventType.REMOVED, previous))
+                notify([listener], self._event(EventType.REMOVED, previous))
 
     def _event(self, kind: EventType, descriptor: DeviceDescriptor) -> DeviceEvent:
         event_classes: dict[
@@ -387,17 +387,17 @@ class TTSConnection:
         self,
         *,
         brands: frozenset[tuple[str, int | str]] | None,
-        callback: Callable[[DeviceEvent], None],
+        listener: Callable[[DeviceEvent], None],
     ) -> Unsubscribe:
         self._check_available()
         # A unique wrapper makes two subscriptions of the same callback independent.
-        item = (brands, lambda event: callback(event))
+        item = (brands, lambda event: listener(event))
         self._subscribers.append(item)
         for descriptor in tuple(self.devices.values()):
             if item not in self._subscribers:
                 break
             if brands is None or (descriptor.stack, descriptor.brand_id) in brands:
-                notify([callback], self._event(EventType.ADDED, descriptor))
+                notify([listener], self._event(EventType.ADDED, descriptor))
 
         def unsubscribe() -> None:
             if item in self._subscribers:
@@ -405,10 +405,10 @@ class TTSConnection:
 
         return unsubscribe
 
-    def on_disconnect(self, callback: Callable[[], None]) -> Unsubscribe:
+    def on_disconnect(self, listener: Callable[[], None]) -> Unsubscribe:
         if self._closed:
             raise ConnectionUnavailable("TTS connection is closed")
-        return subscribe(self._disconnect, lambda _: callback())
+        return subscribe(self._disconnect, lambda _: listener())
 
     async def async_send_downlink(self, downlink: Downlink) -> str:
         """Queue once and retain a correlation ID for application acknowledgements."""

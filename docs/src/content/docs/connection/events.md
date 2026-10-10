@@ -226,7 +226,7 @@ refresh; an incomplete read must not make devices disappear.
 The application owns credentials and the connection lifecycle. Create one collection
 per logical network; a collection can span several server applications.
 
-Register a connection-loss listener with `connection.on_disconnect(callback)`.
+Register a connection-loss listener with `connection.on_disconnect(listener)`.
 The callback takes no arguments. Close the old collection when the connection
 is lost. A new connection supplies existing devices to a new collection. Events missed during the disconnect are not recovered.
 

@@ -231,10 +231,10 @@ async def test_live_state_removal_and_disconnect(
 ) -> None:
     stop = Mock()
 
-    async def subscribe(*, brands, callback):
+    async def subscribe(*, brands, listener):
         now = datetime.now(UTC)
-        callback(AddedEvent(received_at=now, descriptor=DESCRIPTOR))
-        callback(
+        listener(AddedEvent(received_at=now, descriptor=DESCRIPTOR))
+        listener(
             UplinkEvent(
                 network_id="network",
                 dev_eui=DESCRIPTOR.dev_eui,
@@ -243,7 +243,7 @@ async def test_live_state_removal_and_disconnect(
                 f_port=1,
             )
         )
-        callback(
+        listener(
             StatusEvent(
                 descriptor=DESCRIPTOR,
                 received_at=now,
@@ -252,7 +252,7 @@ async def test_live_state_removal_and_disconnect(
                 margin=-4,
             )
         )
-        callback(RemovedEvent(received_at=now, descriptor=DESCRIPTOR))
+        listener(RemovedEvent(received_at=now, descriptor=DESCRIPTOR))
         connection.error = RuntimeError("offline")
         for registration in tuple(connection.on_disconnect.call_args_list):
             registration.args[0]()
@@ -319,10 +319,10 @@ async def test_warn_unmapped_devices_from_supported_vendors(
     ]
     connection.inventory.return_value = descriptors
 
-    async def subscribe(*, brands, callback):
+    async def subscribe(*, brands, listener):
         for event_type in (EventType.ADDED, EventType.UPDATED):
             for descriptor in descriptors:
-                callback(
+                listener(
                     {
                         EventType.ADDED: AddedEvent,
                         EventType.UPDATED: UpdatedEvent,
@@ -372,8 +372,8 @@ async def test_cancellation_closes_models_and_connection(connection: Mock) -> No
     stop = Mock()
     subscribed = asyncio.Event()
 
-    async def subscribe(*, brands, callback):
-        callback(AddedEvent(received_at=datetime.now(UTC), descriptor=DESCRIPTOR))
+    async def subscribe(*, brands, listener):
+        listener(AddedEvent(received_at=datetime.now(UTC), descriptor=DESCRIPTOR))
         subscribed.set()
         return stop
 
@@ -510,9 +510,9 @@ async def test_removed_after_initial_output_failure(
         def unobserved(self):
             raise ValueError("No reading yet")
 
-    async def subscribe(*, brands, callback):
-        callback(AddedEvent(received_at=datetime.now(UTC), descriptor=DESCRIPTOR))
-        callback(RemovedEvent(received_at=datetime.now(UTC), descriptor=DESCRIPTOR))
+    async def subscribe(*, brands, listener):
+        listener(AddedEvent(received_at=datetime.now(UTC), descriptor=DESCRIPTOR))
+        listener(RemovedEvent(received_at=datetime.now(UTC), descriptor=DESCRIPTOR))
         for registration in tuple(connection.on_disconnect.call_args_list):
             registration.args[0]()
         return Mock()

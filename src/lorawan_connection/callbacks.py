@@ -20,17 +20,17 @@ def notify[T](listeners: list[Callable[[T], None]], value: T) -> None:
 
 
 def subscribe[T](
-    listeners: list[Callable[[T], None]], callback: Callable[[T], None]
+    listeners: list[Callable[[T], None]], listener: Callable[[T], None]
 ) -> Unsubscribe:
     """Register one subscription and return its idempotent cleanup function."""
 
-    def listener(value: T) -> None:
-        callback(value)
+    def subscribed_listener(value: T) -> None:
+        listener(value)
 
-    listeners.append(listener)
+    listeners.append(subscribed_listener)
 
     def unsubscribe() -> None:
-        if listener in listeners:
-            listeners.remove(listener)
+        if subscribed_listener in listeners:
+            listeners.remove(subscribed_listener)
 
     return unsubscribe

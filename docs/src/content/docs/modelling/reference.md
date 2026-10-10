@@ -1,7 +1,17 @@
 ---
 title: Collection reference
-description: Collection lifecycle, callback order, and cleanup behavior.
+description: Collection lifecycle, listener order, and cleanup behavior.
 ---
+
+## Changes in 0.13
+
+Subscription parameters are named `listener`. Replace `callback=` with `listener=`
+when calling `Connection.async_subscribe()`, `Connection.on_disconnect()`,
+`DeviceCollection.subscribe_device_added()`, `DeviceCollection.subscribe_device_removed()`,
+and `subscribe()`. Positional calls continue to work.
+
+Custom backends must use the new parameter names to implement `Connection`.
+The ChirpStack, TTS, and mock connections use the same signatures.
 
 ## Device
 
@@ -112,9 +122,9 @@ Registered models inherit `Device` and accept a descriptor as their constructor 
 
 The backend-neutral `Connection` protocol exposes:
 
-- `async_subscribe(*, brands, callback) -> Unsubscribe` takes a `frozenset[tuple[str, int | str]]` or `None` and reports matching existing
+- `async_subscribe(*, brands, listener) -> Unsubscribe` takes a `frozenset[tuple[str, int | str]]` or `None` and reports matching existing
   devices before returning, then live events. `None` selects all devices; an empty set selects none. Arguments are keyword-only.
-- `on_disconnect(callback) -> Unsubscribe` registers a notification callback with no arguments.
+- `on_disconnect(listener) -> Unsubscribe` registers a notification callback with no arguments.
 - `async_send_downlink(downlink: Downlink) -> str` queues a command and returns its
   queue ID for internal ACK correlation.
 
@@ -156,13 +166,13 @@ Factory and `handle_event` exceptions propagate to the caller. A provider can
 isolate each consumer's callback. Models should handle malformed vendor payloads
 without changing state.
 
-### subscribe_device_added(callback) → Unsubscribe
+### subscribe_device_added(listener) → Unsubscribe
 
 The callback takes one `DeviceT` and returns `None`. It immediately receives all
 current models, then future additions. Replay is synchronous, before this method
 returns. A model retired during replay is skipped.
 
-### subscribe_device_removed(callback) → Unsubscribe
+### subscribe_device_removed(listener) → Unsubscribe
 
 The callback takes one `DeviceT` and returns `None`. It receives future retirements,
 after the model is removed and `close()` is called. There is no initial replay.
@@ -186,7 +196,7 @@ other models still close and removal callbacks still run.
 
 An alias for `Callable[[], None]`.
 
-### subscribe(listeners, callback) → Unsubscribe
+### subscribe(listeners, listener) → Unsubscribe
 
 `listeners` is a `list[Callable[[T], None]]`. Registers one subscription without
 replaying any state. Each registration is independent, including repeated use of

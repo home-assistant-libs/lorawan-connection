@@ -68,8 +68,8 @@ poll_interval=30, channel=None)` owns its channel, including an injected test ch
 | `await applications()` | Return `{application_uuid: name}` for the selected tenant, or all accessible tenants when `tenant_id` is `None` (the default). |
 | `await inventory()` | Read descriptors without starting streams or updating the current device list. |
 | `await async_connect()` | Read existing devices and start polling and live events. |
-| `await async_subscribe(*, brands, callback)` | Report matching existing devices, then live events. Return an unsubscribe function. `brands=None` includes all vendors. |
-| `on_disconnect(callback)` | Register a callback with no arguments; return an unsubscribe function. |
+| `await async_subscribe(*, brands, listener)` | Report matching existing devices, then live events. Return an unsubscribe function. `brands=None` includes all vendors. |
+| `on_disconnect(listener)` | Register a callback with no arguments; return an unsubscribe function. |
 | `await async_send_downlink(downlink)` | Validate device scope and enqueue application bytes; return the queue-item UUID. |
 | `await refresh()` | Refresh the connected device list. |
 | `await close()` | Stop tasks, await cleanup, and close the channel. |

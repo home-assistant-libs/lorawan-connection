@@ -8,15 +8,15 @@ from lorawan_connection import notify, subscribe
 
 def test_duplicate_subscriptions_have_independent_cleanup() -> None:
     listeners: list[Callable[[int], None]] = []
-    callback = Mock()
-    stop = subscribe(listeners, callback)
-    second = subscribe(listeners, callback)
+    listener = Mock()
+    stop = subscribe(listeners, listener=listener)
+    second = subscribe(listeners, listener=listener)
     notify(listeners, 1)
-    assert callback.call_count == 2
+    assert listener.call_count == 2
     stop()
     stop()
     notify(listeners, 2)
-    assert callback.call_count == 3
+    assert listener.call_count == 3
     second()
     assert not listeners
 

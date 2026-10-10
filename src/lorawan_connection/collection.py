@@ -70,7 +70,7 @@ class DeviceCollection[DeviceT: Device]:
                 else frozenset(
                     (stack, brand_id) for stack, brand_id, _ in self._models
                 ),
-                callback=self.handle_event,
+                listener=self.handle_event,
             )
         except BaseException:
             self.close()
@@ -94,24 +94,24 @@ class DeviceCollection[DeviceT: Device]:
         return model(descriptor) if model is not None else None
 
     def subscribe_device_added(
-        self, callback: Callable[[DeviceT], None]
+        self, listener: Callable[[DeviceT], None]
     ) -> Unsubscribe:
         """Report existing models immediately, then future additions."""
         if self._closed:
             raise RuntimeError("Device collection is closed")
-        stop = subscribe(self._added, callback)
+        stop = subscribe(self._added, listener)
         for device in tuple(self.devices.values()):
             if self.devices.get(device.descriptor.dev_eui) is device:
-                notify([callback], device)
+                notify([listener], device)
         return stop
 
     def subscribe_device_removed(
-        self, callback: Callable[[DeviceT], None]
+        self, listener: Callable[[DeviceT], None]
     ) -> Unsubscribe:
         """Listen for model retirement."""
         if self._closed:
             raise RuntimeError("Device collection is closed")
-        return subscribe(self._removed, callback)
+        return subscribe(self._removed, listener)
 
     def _remove(self, dev_eui: str, *, removed: bool = True) -> None:
         if (device := self.devices.pop(dev_eui, None)) is not None:

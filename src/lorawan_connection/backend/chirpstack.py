@@ -84,7 +84,7 @@ class AuthenticationError(Exception):
 @dataclass(eq=False)
 class _Subscriber:
     brands: frozenset[tuple[str, int | str]] | None
-    callback: Callable[[DeviceEvent], None]
+    listener: Callable[[DeviceEvent], None]
 
 
 def connection_error(error: Exception) -> Exception:
@@ -347,12 +347,12 @@ class ChirpStackConnection:
                 continue
             vendors = subscriber.brands
             if vendors is None or (descriptor.stack, descriptor.brand_id) in vendors:
-                notify([subscriber.callback], event)
+                notify([subscriber.listener], event)
             elif (
                 previous is not None and (previous.stack, previous.brand_id) in vendors
             ):
                 notify(
-                    [subscriber.callback],
+                    [subscriber.listener],
                     self._inventory_event(EventType.REMOVED, previous),
                 )
 
@@ -416,12 +416,12 @@ class ChirpStackConnection:
         self,
         *,
         brands: frozenset[tuple[str, int | str]] | None,
-        callback: Callable[[DeviceEvent], None],
+        listener: Callable[[DeviceEvent], None],
     ) -> Unsubscribe:
         """Deliver matching inventory, then live events; None selects all vendors."""
         if not self.available or self._closed:
             raise ConnectionUnavailable("Connection is not available")
-        subscriber = _Subscriber(brands, callback)
+        subscriber = _Subscriber(brands, listener)
         self._subscribers.append(subscriber)
 
         def unsubscribe() -> None:
@@ -432,14 +432,14 @@ class ChirpStackConnection:
             if subscriber not in self._subscribers:
                 break
             if brands is None or (descriptor.stack, descriptor.brand_id) in brands:
-                notify([callback], self._inventory_event(EventType.ADDED, descriptor))
+                notify([listener], self._inventory_event(EventType.ADDED, descriptor))
         return unsubscribe
 
-    def on_disconnect(self, callback: Callable[[], None]) -> Unsubscribe:
+    def on_disconnect(self, listener: Callable[[], None]) -> Unsubscribe:
         """Notify after connection loss or closure; callers own recovery."""
         if self._closed:
             raise ConnectionUnavailable("Connection is closed")
-        return subscribe(self._disconnect_listeners, lambda _: callback())
+        return subscribe(self._disconnect_listeners, lambda _: listener())
 
     def _notify_disconnect(self) -> None:
         self._subscribers.clear()

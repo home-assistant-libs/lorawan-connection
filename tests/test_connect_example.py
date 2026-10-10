@@ -52,15 +52,15 @@ async def test_connection_example(
     models: list[S2101] = []
 
     async def subscribe(
-        callback: Callable[[DeviceEvent], None],
+        listener: Callable[[DeviceEvent], None],
         *,
         brands: frozenset[tuple[str, int | str]],
     ) -> Mock:
-        devices = callback.__self__
+        devices = listener.__self__
         devices.subscribe_device_added(models.append)
         now = datetime.now(UTC)
-        callback(AddedEvent(received_at=now, descriptor=descriptor))
-        callback(
+        listener(AddedEvent(received_at=now, descriptor=descriptor))
+        listener(
             UplinkEvent(
                 network_id=descriptor.network_id,
                 dev_eui=descriptor.dev_eui,

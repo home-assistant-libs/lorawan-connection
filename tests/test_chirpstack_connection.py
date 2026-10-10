@@ -42,10 +42,10 @@ async def test_activity_does_not_wait_for_snapshot(
     connection: ChirpStackConnection,
 ) -> None:
     """Live events remain usable while a slow snapshot is in flight."""
-    callback = Mock()
+    listener = Mock()
     connection.devices = {DESCRIPTOR.dev_eui: DESCRIPTOR}
     connection.available = True
-    await connection.async_subscribe(brands=None, callback=callback)
+    await connection.async_subscribe(brands=None, listener=listener)
     started, finish = asyncio.Event(), asyncio.Event()
 
     async def snapshot():
@@ -67,10 +67,10 @@ async def test_activity_does_not_wait_for_snapshot(
             f_port=integration.UplinkEvent(data=PAYLOAD, f_port=1).f_port,
         )
         await connection.handle_activity(event)
-        assert callback.call_args.args[0] == event
+        assert listener.call_args.args[0] == event
         assert not task.done()
         await connection.handle_activity(replace(event, dev_eui="0000000000000001"))
-        assert callback.call_count == 2
+        assert listener.call_count == 2
         finish.set()
         await task
     await connection.close()
@@ -94,7 +94,7 @@ async def test_snapshot_failure_preserves_inventory(
 
 async def test_inventory_changes(connection: ChirpStackConnection) -> None:
     """Emit only changes and stop a removed device's stream."""
-    callback = Mock()
+    listener = Mock()
     with (
         patch.object(
             connection,
@@ -104,16 +104,16 @@ async def test_inventory_changes(connection: ChirpStackConnection) -> None:
         patch.object(connection, "_stream", AsyncMock()),
     ):
         await connection.async_connect()
-        await connection.async_subscribe(brands=None, callback=callback)
+        await connection.async_subscribe(brands=None, listener=listener)
         await connection.refresh()
-        assert callback.call_count == 1
+        assert listener.call_count == 1
         snapshot.return_value = {
             DESCRIPTOR.dev_eui: replace(DESCRIPTOR, name="changed")
         }
         await connection.refresh()
         snapshot.return_value = {}
         await connection.refresh()
-    assert [call.args[0].type for call in callback.call_args_list] == [
+    assert [call.args[0].type for call in listener.call_args_list] == [
         EventType.ADDED,
         EventType.UPDATED,
         EventType.REMOVED,
@@ -181,10 +181,10 @@ async def test_stream_decode_replay_and_disconnect(
         ):
             yield item
 
-    callback, disconnected = Mock(), Mock()
-    connection.on_disconnect(disconnected)
+    listener, disconnected = Mock(), Mock()
+    connection.on_disconnect(listener=disconnected)
     connection.available = True
-    await connection.async_subscribe(brands=None, callback=callback)
+    await connection.async_subscribe(brands=None, listener=listener)
     connection.devices = {DESCRIPTOR.dev_eui: DESCRIPTOR}
     connection._internal_api.StreamDeviceEvents = Mock(return_value=stream())
     with patch(
@@ -194,13 +194,13 @@ async def test_stream_decode_replay_and_disconnect(
         with pytest.raises(ConnectionUnavailable, match="stream closed"):
             async for event in connection._read_stream(DESCRIPTOR.dev_eui):
                 await connection.handle_activity(event)
-    assert callback.call_count == 3
-    assert [call.args[0].received_at for call in callback.call_args_list] == [
+    assert listener.call_count == 3
+    assert [call.args[0].received_at for call in listener.call_args_list] == [
         now - timedelta(seconds=5),
         now - timedelta(milliseconds=1),
         now + timedelta(milliseconds=1),
     ]
-    event = callback.call_args.args[0]
+    event = listener.call_args.args[0]
     assert event.type == kind
     assert event.dev_eui == message.device_info.dev_eui
     assert event.received_at == datetime.fromtimestamp(
@@ -363,11 +363,11 @@ async def test_all_tenants_subscription(connection: ChirpStackConnection) -> Non
     connection._application_api.List = AsyncMock(side_effect=applications)
     connection._device_api.List = AsyncMock(side_effect=devices)
     connection._profile_api.Get = AsyncMock(return_value=api.GetDeviceProfileResponse())
-    callback = Mock()
+    listener = Mock()
     try:
         with patch.object(connection, "_stream", AsyncMock()) as stream:
             await connection.async_connect()
-            stop = await connection.async_subscribe(brands=None, callback=callback)
+            stop = await connection.async_subscribe(brands=None, listener=listener)
             await asyncio.sleep(0)
             assert {call.args[0] for call in stream.call_args_list} == set(
                 device_ids.values()
@@ -382,7 +382,7 @@ async def test_all_tenants_subscription(connection: ChirpStackConnection) -> Non
                         f_port=integration.UplinkEvent(data=PAYLOAD, f_port=1).f_port,
                     )
                 )
-            events = [call.args[0] for call in callback.call_args_list]
+            events = [call.args[0] for call in listener.call_args_list]
             assert [event.type for event in events] == [
                 EventType.ADDED,
                 EventType.ADDED,
@@ -535,8 +535,8 @@ async def test_multiple_subscriptions(connection: ChirpStackConnection) -> None:
     with patch.object(connection, "_snapshot", AsyncMock(return_value={})):
         await connection.async_connect()
         first, second = Mock(), Mock()
-        unsubscribe = await connection.async_subscribe(brands=None, callback=first)
-        await connection.async_subscribe(brands=None, callback=second)
+        unsubscribe = await connection.async_subscribe(brands=None, listener=first)
+        await connection.async_subscribe(brands=None, listener=second)
         unsubscribe()
         unsubscribe()
         connection._emit(connection._inventory_event(EventType.ADDED, DESCRIPTOR))
@@ -562,10 +562,10 @@ async def test_vendor_filters_and_identity_changes(
     ):
         await connection.async_connect()
         await connection.async_subscribe(
-            brands=frozenset({("chirpstack", 744)}), callback=first
+            brands=frozenset({("chirpstack", 744)}), listener=first
         )
         await connection.async_subscribe(
-            brands=frozenset({("chirpstack", 676)}), callback=second
+            brands=frozenset({("chirpstack", 676)}), listener=second
         )
         first.assert_called_once()
         second.assert_not_called()
@@ -608,7 +608,7 @@ async def test_disconnect_listeners_and_stale_connections(
     active.assert_called_once_with()
     with pytest.raises(ConnectionUnavailable):
         await connection.async_subscribe(
-            brands=frozenset({("chirpstack", 744)}), callback=Mock()
+            brands=frozenset({("chirpstack", 744)}), listener=Mock()
         )
     with pytest.raises(ConnectionUnavailable):
         connection.on_disconnect(Mock())
@@ -622,9 +622,9 @@ async def test_bad_listener_does_not_block_other_consumers(
     connection.on_disconnect(good)
     with patch.object(connection, "_snapshot", AsyncMock(return_value={})):
         await connection.async_connect()
-    await connection.async_subscribe(brands=None, callback=Mock(side_effect=ValueError))
+    await connection.async_subscribe(brands=None, listener=Mock(side_effect=ValueError))
     events = Mock()
-    await connection.async_subscribe(brands=None, callback=events)
+    await connection.async_subscribe(brands=None, listener=events)
     connection._emit(connection._inventory_event(EventType.ADDED, DESCRIPTOR))
     events.assert_called_once()
     await connection.close()
@@ -634,15 +634,15 @@ async def test_bad_listener_does_not_block_other_consumers(
 async def test_identical_subscriptions_are_independent(
     connection: ChirpStackConnection,
 ) -> None:
-    callback = Mock()
+    listener = Mock()
     with patch.object(connection, "_snapshot", AsyncMock(return_value={})):
         await connection.async_connect()
-    first = await connection.async_subscribe(brands=None, callback=callback)
-    second = await connection.async_subscribe(brands=None, callback=callback)
+    first = await connection.async_subscribe(brands=None, listener=listener)
+    second = await connection.async_subscribe(brands=None, listener=listener)
     second()
     second()
     connection._emit(connection._inventory_event(EventType.ADDED, DESCRIPTOR))
-    callback.assert_called_once()
+    listener.assert_called_once()
     first()
     await connection.close()
 

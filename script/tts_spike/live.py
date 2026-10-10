@@ -226,7 +226,7 @@ async def main():
         print("PASS confirmed downlink enqueued with caller-generated correlation ID")
         received = []
         await connection.async_subscribe(
-            brands=frozenset({("tts", "sensecap")}), callback=received.append
+            brands=frozenset({("tts", "sensecap")}), listener=received.append
         )
         await application.SimulateUplink(
             messages.ApplicationUp(

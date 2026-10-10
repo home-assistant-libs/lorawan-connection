@@ -101,6 +101,21 @@ activity. Collections select models by catalog identity. Provision devices on th
 server before connecting. The application owns connection startup, recovery, and shutdown;
 missed telemetry is not replayed.
 
+Use `listener` to subscribe directly to connection events:
+
+```python
+unsubscribe = await connection.async_subscribe(
+    brands=None,
+    listener=lambda event: print(event.type, event.dev_eui),
+)
+unsubscribe_disconnect = connection.on_disconnect(
+    listener=lambda: print("Disconnected")
+)
+```
+
+Version 0.13 renames subscription parameters from `callback` to `listener`.
+Update keyword arguments and custom backend implementations to match.
+
 ChirpStack drops retained events older than five seconds before each device stream
 starts. Keep server and client clocks synchronized. TTS supports separate Identity
 and Application Servers.

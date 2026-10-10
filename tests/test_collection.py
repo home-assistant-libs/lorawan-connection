@@ -41,7 +41,7 @@ def test_inventory_creates_models_and_replays() -> None:
     event = inventory()
     collection.handle_event(event)
     added = Mock()
-    stop = collection.subscribe_device_added(added)
+    stop = collection.subscribe_device_added(listener=added)
     model = collection.devices[DESCRIPTOR.dev_eui]
     added.assert_called_once_with(model)
     assert model.events == [event]
@@ -146,7 +146,7 @@ def test_remove_and_close_are_idempotent() -> None:
     collection.handle_event(inventory())
     first = collection.devices[DESCRIPTOR.dev_eui]
     removed = Mock()
-    stop = collection.subscribe_device_removed(removed)
+    stop = collection.subscribe_device_removed(listener=removed)
     collection.handle_event(inventory(kind=EventType.REMOVED))
     collection.handle_event(inventory(kind=EventType.REMOVED))
     assert first.close_count == 1
@@ -187,7 +187,7 @@ def test_close_failure_does_not_leak_other_models(
     first, second = collection.devices.values()
     first.close = Mock(side_effect=ValueError("cleanup error"))
     removed = Mock()
-    collection.subscribe_device_removed(removed)
+    collection.subscribe_device_removed(listener=removed)
     collection.close()
     assert not collection.devices
     assert second.close_count == 1
@@ -203,7 +203,7 @@ def test_added_callback_can_close_collection() -> None:
         seen.append(device)
         collection.close()
 
-    collection.subscribe_device_added(added)
+    collection.subscribe_device_added(listener=added)
     collection.handle_event(inventory())
     assert not collection.devices
     assert seen[0].events == []
@@ -220,7 +220,7 @@ def test_replay_skips_models_removed_by_a_callback() -> None:
         seen.append(device)
         collection.close()
 
-    collection.subscribe_device_added(added)
+    collection.subscribe_device_added(listener=added)
     assert len(seen) == 1
 
 
@@ -251,18 +251,18 @@ async def test_setup_subscribes_to_registered_vendors() -> None:
     unsubscribe = Mock()
     collection = DeviceCollection(connection, [Sensor])
     added = Mock()
-    collection.subscribe_device_added(added)
+    collection.subscribe_device_added(listener=added)
 
-    async def subscribe(*, brands, callback):
+    async def subscribe(*, brands, listener):
         unsubscribe.side_effect = await original_subscribe(
-            brands=brands, callback=callback
+            brands=brands, listener=listener
         )
         return unsubscribe
 
     connection.async_subscribe = AsyncMock(side_effect=subscribe)
     await collection.async_setup()
     connection.async_subscribe.assert_awaited_once_with(
-        brands=frozenset({("chirpstack", 744)}), callback=collection.handle_event
+        brands=frozenset({("chirpstack", 744)}), listener=collection.handle_event
     )
     device = collection.devices[DESCRIPTOR.dev_eui]
     added.assert_called_once_with(device)
@@ -284,7 +284,7 @@ async def test_setup_failure_closes_created_models(error: BaseException) -> None
     collection.subscribe_device_added(device)
 
     async def subscribe(**kwargs):
-        kwargs["callback"](inventory())
+        kwargs["listener"](inventory())
         raise error
 
     connection.async_subscribe = AsyncMock(side_effect=subscribe)

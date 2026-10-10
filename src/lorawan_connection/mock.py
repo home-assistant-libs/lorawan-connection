@@ -19,7 +19,7 @@ from .events import (
 @dataclass(eq=False)
 class _Subscriber:
     brands: frozenset[tuple[str, int | str]] | None
-    callback: Callable[[DeviceEvent], None]
+    listener: Callable[[DeviceEvent], None]
 
 
 class MockConnection:
@@ -40,18 +40,18 @@ class MockConnection:
         self,
         *,
         brands: frozenset[tuple[str, int | str]] | None,
-        callback: Callable[[DeviceEvent], None],
+        listener: Callable[[DeviceEvent], None],
     ) -> Unsubscribe:
         """Deliver existing matching devices, then subscribe to future events."""
         self._check_available()
-        subscriber = _Subscriber(brands, callback)
+        subscriber = _Subscriber(brands, listener)
         self._subscribers.append(subscriber)
         for descriptor in tuple(self.devices.values()):
             if subscriber not in self._subscribers:
                 break
             if brands is None or (descriptor.stack, descriptor.brand_id) in brands:
                 notify(
-                    [callback],
+                    [listener],
                     AddedEvent(received_at=datetime.now(UTC), descriptor=descriptor),
                 )
 
@@ -61,10 +61,10 @@ class MockConnection:
 
         return unsubscribe
 
-    def on_disconnect(self, callback: Callable[[], None]) -> Unsubscribe:
+    def on_disconnect(self, listener: Callable[[], None]) -> Unsubscribe:
         """Listen for simulated connection loss."""
         self._check_available()
-        return subscribe(self._disconnect_listeners, lambda _: callback())
+        return subscribe(self._disconnect_listeners, lambda _: listener())
 
     async def async_send_downlink(self, downlink: Downlink) -> str:
         """Record a command under its queue ID; acknowledgements are explicit."""
@@ -100,13 +100,13 @@ class MockConnection:
                 subscriber.brands is None
                 or (descriptor.stack, descriptor.brand_id) in subscriber.brands
             ):
-                notify([subscriber.callback], event)
+                notify([subscriber.listener], event)
             elif (
                 previous is not None
                 and (previous.stack, previous.brand_id) in subscriber.brands
             ):
                 notify(
-                    [subscriber.callback],
+                    [subscriber.listener],
                     RemovedEvent(received_at=event.received_at, descriptor=previous),
                 )
 
