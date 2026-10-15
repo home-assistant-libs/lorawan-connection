@@ -2,6 +2,7 @@
 
 import asyncio
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlsplit
@@ -33,6 +34,12 @@ from ._tts_api import Service, message
 
 class AuthenticationError(Exception):
     """The key lacks required device or application-traffic read access."""
+
+
+@dataclass(eq=False)
+class _Subscriber:
+    brands: frozenset[tuple[str, int | str]] | None
+    listener: Callable[[DeviceEvent], None]
 
 
 def _connection_error(error: Exception) -> Exception:
@@ -102,11 +109,7 @@ class TTSConnection:
         self.poll_interval = poll_interval
         self.devices: dict[str, DeviceDescriptor] = {}
         self._ids: dict[str, Any] = {}
-        self._subscribers: list[
-            tuple[
-                frozenset[tuple[str, int | str]] | None, Callable[[DeviceEvent], None]
-            ]
-        ] = []
+        self._subscribers: list[_Subscriber] = []
         self._disconnect: list[Callable[[None], None]] = []
         self._tasks: list[asyncio.Task[None]] = []
         self._lock = asyncio.Lock()
@@ -183,14 +186,14 @@ class TTSConnection:
         descriptor = event.descriptor or self.devices.get(event.dev_eui)
         if descriptor is None:
             return
-        for item in tuple(self._subscribers):
-            if item not in self._subscribers:
+        for subscriber in tuple(self._subscribers):
+            if subscriber not in self._subscribers:
                 continue
-            brands, listener = item
+            brands = subscriber.brands
             if brands is None or (descriptor.stack, descriptor.brand_id) in brands:
-                notify([listener], event)
+                notify([subscriber.listener], event)
             elif previous and (previous.stack, previous.brand_id) in brands:
-                notify([listener], self._event(EventType.REMOVED, previous))
+                notify([subscriber.listener], self._event(EventType.REMOVED, previous))
 
     def _event(self, kind: EventType, descriptor: DeviceDescriptor) -> DeviceEvent:
         event_classes: dict[
@@ -392,18 +395,17 @@ class TTSConnection:
         listener: Callable[[DeviceEvent], None],
     ) -> Unsubscribe:
         self._check_available()
-        # A unique wrapper makes two subscriptions of the same callback independent.
-        item = (brands, lambda event: listener(event))
-        self._subscribers.append(item)
+        subscriber = _Subscriber(brands, listener)
+        self._subscribers.append(subscriber)
         for descriptor in tuple(self.devices.values()):
-            if item not in self._subscribers:
+            if subscriber not in self._subscribers:
                 break
             if brands is None or (descriptor.stack, descriptor.brand_id) in brands:
                 notify([listener], self._event(EventType.ADDED, descriptor))
 
         def unsubscribe() -> None:
-            if item in self._subscribers:
-                self._subscribers.remove(item)
+            if subscriber in self._subscribers:
+                self._subscribers.remove(subscriber)
 
         return unsubscribe
 
@@ -461,7 +463,7 @@ class TTSConnection:
                 task.cancel()
 
     async def close(self) -> None:
-        """Release streams and both channels; do not trigger reconnect callbacks."""
+        """Release streams and both channels. Do not trigger reconnect callbacks."""
         self._closed = True
         self.available = False
         for task in self._tasks:
