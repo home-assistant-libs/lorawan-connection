@@ -8,7 +8,7 @@ import re
 import sys
 from collections.abc import Sequence
 from dataclasses import asdict, is_dataclass
-from datetime import UTC, date, datetime
+from datetime import date
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -230,9 +230,7 @@ async def _watch(args: argparse.Namespace, models: Sequence[type[Device]]) -> No
         unsubscribe_removed = collection.subscribe_device_removed(removed)
         if args.list:
             for descriptor in await connection.inventory():
-                collection.handle_event(
-                    AddedEvent(received_at=datetime.now(UTC), descriptor=descriptor)
-                )
+                collection.handle_event(AddedEvent(descriptor=descriptor))
             return
         connection.on_disconnect(on_disconnect)
         await connection.async_connect()

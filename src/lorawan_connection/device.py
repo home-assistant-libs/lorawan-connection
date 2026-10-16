@@ -11,7 +11,7 @@ from .events import AckEvent, DeviceDescriptor, DeviceEvent, StatusEvent
 
 
 class Device:
-    """Own identity and listeners; subclasses define data and interpret events."""
+    """Own identity and listeners. Subclasses define data and interpret events."""
 
     identifiers: ClassVar[Mapping[str, tuple[int | str, str]]] = {}
 
@@ -64,7 +64,7 @@ class Device:
         return self._closed
 
     def add_update_listener(self, listener: Callable[[], None]) -> Unsubscribe:
-        """Listen for notify calls; read model attributes for initial values."""
+        """Listen for notify calls. Read model attributes for initial values."""
         if self._closed:
             raise RuntimeError("Device is closed")
         return subscribe(self._listeners, lambda _: listener())
@@ -162,7 +162,7 @@ class Device:
                 self.notify()
 
     def handle_event(self, event: DeviceEvent) -> None:
-        """Override to decode model data and call notify; no super call is needed."""
+        """Override to decode model data and call notify. No super call is needed."""
 
     def _connection_lost(self) -> None:
         """Fail commands on a lost connection without retiring this model."""
@@ -178,7 +178,7 @@ class Device:
         self._early_acks.clear()
 
     def close(self) -> None:
-        """Retire the model and release listeners; repeated calls are harmless."""
+        """Retire the model and release listeners. Repeated calls are harmless."""
         self._closed = True
         self._listeners.clear()
         self._remove_listeners.clear()

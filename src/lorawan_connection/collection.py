@@ -36,7 +36,7 @@ class DeviceCollection[DeviceT: Device]:
         connection: Connection,
         models: Sequence[type[DeviceT]] | None = None,
     ) -> None:
-        """Own one network; use explicit model classes or the subclass's DEVICES."""
+        """Own one network. Use explicit model classes or the subclass's DEVICES."""
         self._connection = connection
         self._generic = models is None and not self.DEVICES
         self._unsubscribe: Unsubscribe | None = None
@@ -161,7 +161,7 @@ class DeviceCollection[DeviceT: Device]:
             device._connection_lost()
 
     def close(self) -> None:
-        """Retire all models and listeners; repeated calls are harmless."""
+        """Retire all models and listeners. Repeated calls are harmless."""
         self._closed = True
         if self._unsubscribe_disconnect is not None:
             self._unsubscribe_disconnect()

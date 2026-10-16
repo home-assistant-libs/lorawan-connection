@@ -3,7 +3,6 @@
 import asyncio
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 from urllib.parse import urlsplit
@@ -21,7 +20,6 @@ from lorawan_connection import (
     DeviceEvent,
     Downlink,
     DownlinkError,
-    EventType,
     JoinEvent,
     LocationEvent,
     LogEvent,
@@ -34,6 +32,7 @@ from lorawan_connection import (
     notify,
     subscribe,
 )
+from lorawan_connection._subscribers import Subscribers
 
 _LOGGER = logging.getLogger(__name__)
 _MESSAGES = {
@@ -81,12 +80,6 @@ class AuthenticationError(Exception):
     """Credentials have been rejected."""
 
 
-@dataclass(eq=False)
-class _Subscriber:
-    brands: frozenset[tuple[str, int | str]] | None
-    listener: Callable[[DeviceEvent], None]
-
-
 def connection_error(error: Exception) -> Exception:
     """Classify authentication/access rejection separately from connection loss."""
     if isinstance(error, (ConnectionUnavailable, AuthenticationError)):
@@ -126,7 +119,7 @@ class ChirpStackConnection:
         poll_interval: float = 30,
         channel: grpc.aio.Channel | None = None,
     ) -> None:
-        """Use TLS for https; omit tenant_id to discover all accessible tenants."""
+        """Use TLS for https. Omit tenant_id to discover all accessible tenants."""
         url = urlsplit(endpoint)
         if (
             url.scheme not in ("http", "https")
@@ -152,7 +145,7 @@ class ChirpStackConnection:
         self.devices: dict[str, DeviceDescriptor] = {}
         self.available = False
         self.error: Exception | None = None
-        self._subscribers: list[_Subscriber] = []
+        self._subscribers = Subscribers()
         self._disconnect_listeners: list[Callable[[None], None]] = []
         self._connecting = False
         self._streams: dict[str, asyncio.Task[None]] = {}
@@ -194,7 +187,7 @@ class ChirpStackConnection:
         raise ConnectionUnavailable("Inventory changed during pagination")
 
     async def tenants(self) -> dict[str, str]:
-        """Discover tenants with a global key; scoped keys require a tenant ID."""
+        """Discover tenants with a global key. Scoped keys require a tenant ID."""
         return {
             item.id: item.name
             for item in await self._list(self._tenant_api.List, api.ListTenantsRequest)
@@ -341,34 +334,9 @@ class ChirpStackConnection:
     def _emit(
         self, event: DeviceEvent, previous: DeviceDescriptor | None = None
     ) -> None:
-        descriptor = event.descriptor or self.devices.get(event.dev_eui)
-        if descriptor is None:
-            return
-        for subscriber in tuple(self._subscribers):
-            if subscriber not in self._subscribers:
-                continue
-            vendors = subscriber.brands
-            if vendors is None or (descriptor.stack, descriptor.brand_id) in vendors:
-                notify([subscriber.listener], event)
-            elif (
-                previous is not None and (previous.stack, previous.brand_id) in vendors
-            ):
-                notify(
-                    [subscriber.listener],
-                    self._inventory_event(EventType.REMOVED, previous),
-                )
-
-    def _inventory_event(
-        self, kind: EventType, descriptor: DeviceDescriptor
-    ) -> DeviceEvent:
-        event_classes: dict[
-            EventType, type[AddedEvent | UpdatedEvent | RemovedEvent]
-        ] = {
-            EventType.ADDED: AddedEvent,
-            EventType.UPDATED: UpdatedEvent,
-            EventType.REMOVED: RemovedEvent,
-        }
-        return event_classes[kind](received_at=datetime.now(UTC), descriptor=descriptor)
+        self._subscribers.deliver(
+            event, event.descriptor or self.devices.get(event.dev_eui), previous
+        )
 
     async def refresh(self) -> None:
         """Commit complete snapshots without blocking live activity during reads."""
@@ -384,14 +352,12 @@ class ChirpStackConnection:
                         task := self._streams.pop(eui, None)
                     ) is not None and task is not asyncio.current_task():
                         task.cancel()
-                    self._emit(self._inventory_event(EventType.REMOVED, descriptor))
+                    self._emit(RemovedEvent(descriptor=descriptor))
             for eui, descriptor in snapshot.items():
                 if eui not in old:
-                    self._emit(self._inventory_event(EventType.ADDED, descriptor))
+                    self._emit(AddedEvent(descriptor=descriptor))
                 elif old[eui] != descriptor:
-                    self._emit(
-                        self._inventory_event(EventType.UPDATED, descriptor), old[eui]
-                    )
+                    self._emit(UpdatedEvent(descriptor=descriptor), old[eui])
                 if eui not in self._streams:
                     self._streams[eui] = asyncio.create_task(self._stream(eui))
 
@@ -420,25 +386,15 @@ class ChirpStackConnection:
         brands: frozenset[tuple[str, int | str]] | None,
         listener: Callable[[DeviceEvent], None],
     ) -> Unsubscribe:
-        """Deliver matching inventory, then live events; None selects all vendors."""
+        """Deliver matching inventory, then live events. None selects all vendors."""
         if not self.available or self._closed:
             raise ConnectionUnavailable("Connection is not available")
-        subscriber = _Subscriber(brands, listener)
-        self._subscribers.append(subscriber)
-
-        def unsubscribe() -> None:
-            if subscriber in self._subscribers:
-                self._subscribers.remove(subscriber)
-
-        for descriptor in tuple(self.devices.values()):
-            if subscriber not in self._subscribers:
-                break
-            if brands is None or (descriptor.stack, descriptor.brand_id) in brands:
-                notify([listener], self._inventory_event(EventType.ADDED, descriptor))
-        return unsubscribe
+        return self._subscribers.add(
+            brands, listener, replay=tuple(self.devices.values())
+        )
 
     def on_disconnect(self, listener: Callable[[], None]) -> Unsubscribe:
-        """Notify after connection loss or closure; callers own recovery."""
+        """Notify after connection loss or closure. Callers own recovery."""
         if self._closed:
             raise ConnectionUnavailable("Connection is closed")
         return subscribe(self._disconnect_listeners, lambda _: listener())

@@ -73,8 +73,10 @@ Events are typed dataclasses. An `UplinkEvent` exposes `data: bytes` and `f_port
 directly; an `AckEvent` exposes `queue_item_id` and `acknowledged`. Dispatch on
 `event.type` or use `isinstance()` to narrow the event type without a cast.
 
-Inventory events take only `descriptor` and `received_at`. Their network and device
-identifiers are properties derived from the descriptor. The
+`AddedEvent`, `UpdatedEvent`, and `RemovedEvent` require a `descriptor`. Their
+`received_at` defaults to the current UTC time. Pass a timestamp to preserve an
+earlier observation. Their network and device identifiers come from the descriptor.
+Activity events require an explicit `received_at`. The
 [event guide](https://home-assistant-libs.github.io/lorawan-connection/connection/events/)
 lists every field.
 

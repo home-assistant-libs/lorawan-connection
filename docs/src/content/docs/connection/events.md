@@ -18,12 +18,12 @@ Every event exposes these fields:
 | --- | --- | --- |
 | `network_id` | `str` | Application-owned identity of the logical network. |
 | `dev_eui` | `str` | Device identifier, normalized to 16 lowercase hexadecimal characters. |
-| `received_at` | `datetime` | Time the server received the event. Backends supply a timezone-aware timestamp. |
+| `received_at` | `datetime` | Time of the event. Inventory events default to creation time in UTC. Activity events use the server receipt time. |
 | `type` | `EventType` | Fixed by the event class. |
 | `descriptor` | `DeviceDescriptor \| None` | Inventory metadata, when available. |
 
 All constructor arguments are keyword-only. Inventory events take `descriptor`
-and `received_at`. Their `network_id` and `dev_eui` are properties of the descriptor.
+and an optional `received_at`. Their `network_id` and `dev_eui` are properties of the descriptor.
 
 Activity events accept a descriptor or explicit `network_id` and `dev_eui` values.
 With a descriptor, identifiers are derived from it. Conflicting explicit values
@@ -31,7 +31,8 @@ raise `ValueError`. Without one, both identifiers are required.
 
 ## Inventory events
 
-Both constructor fields are required. The
+`descriptor` is required. `received_at` defaults to `datetime.now(UTC)` for each
+new event. Pass an explicit timestamp when replaying an earlier observation. The
 [descriptor reference](/lorawan-connection/connection/reference/#devicedescriptor)
 lists the device's name, server application, profile, and catalog fields.
 
@@ -45,14 +46,12 @@ Fixed type: `EventType.ADDED` (`"added"`).
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `descriptor` | `DeviceDescriptor` | Current device metadata. |
-| `received_at` | `datetime` | Event timestamp. |
+| `received_at` | `datetime` | Event timestamp. Defaults to the current UTC time. |
 
 ```python
-from datetime import UTC, datetime
-
 from lorawan_connection import AddedEvent
 
-added = AddedEvent(descriptor=descriptor, received_at=datetime.now(UTC))
+added = AddedEvent(descriptor=descriptor)
 assert added.dev_eui == descriptor.dev_eui
 ```
 
@@ -65,7 +64,7 @@ Fixed type: `EventType.UPDATED` (`"updated"`).
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `descriptor` | `DeviceDescriptor` | Updated device metadata. |
-| `received_at` | `datetime` | Event timestamp. |
+| `received_at` | `datetime` | Event timestamp. Defaults to the current UTC time. |
 
 ### RemovedEvent
 
@@ -76,7 +75,7 @@ Fixed type: `EventType.REMOVED` (`"removed"`).
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `descriptor` | `DeviceDescriptor` | Last known device metadata. |
-| `received_at` | `datetime` | Event timestamp. |
+| `received_at` | `datetime` | Event timestamp. Defaults to the current UTC time. |
 
 ## Activity events
 

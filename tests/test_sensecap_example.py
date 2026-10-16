@@ -123,7 +123,7 @@ def test_malformed_payload_atomic(payload: bytes) -> None:
 
 
 def test_zero_unknown_fields_and_port() -> None:
-    """Zero is meaningful; unknown record types and FPorts do not erase it."""
+    """Zero is meaningful. Unknown record types and FPorts do not erase it."""
     assert decode_s2101(bytes.fromhex("01011000000000010210000000000000")) == {
         "temperature": 0,
         "humidity": 0,

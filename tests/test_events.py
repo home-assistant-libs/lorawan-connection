@@ -1,6 +1,8 @@
 """Identity validation and fixture payload ownership."""
 
 from dataclasses import FrozenInstanceError, replace
+from datetime import UTC, timedelta
+from unittest.mock import patch
 
 import pytest
 
@@ -118,6 +120,7 @@ def test_inventory_identity_is_derived(event_class) -> None:
         "received_at",
     }
     event = event_class(descriptor=DESCRIPTOR, received_at=NOW)
+    assert event.received_at is NOW
     changed = replace(
         event,
         descriptor=replace(DESCRIPTOR, network_id="other", dev_eui="0000000000000002"),
@@ -129,3 +132,18 @@ def test_inventory_identity_is_derived(event_class) -> None:
 def test_invalid_activity_identity() -> None:
     with pytest.raises(ValueError, match="eight hexadecimal bytes"):
         UplinkEvent(network_id="network", dev_eui="invalid", received_at=NOW, data=b"")
+
+
+@pytest.mark.parametrize("event_class", [AddedEvent, UpdatedEvent, RemovedEvent])
+def test_inventory_timestamp_defaults_to_current_utc(event_class) -> None:
+    """Each event gets its creation time when no timestamp is supplied."""
+    later = NOW + timedelta(seconds=1)
+    with patch("lorawan_connection.events.datetime") as clock:
+        clock.now.side_effect = [NOW, later]
+        first = event_class(descriptor=DESCRIPTOR)
+        second = event_class(descriptor=DESCRIPTOR)
+        clock.now.assert_called_with(UTC)
+    assert first.received_at is NOW
+    assert second.received_at is later
+    assert first.received_at.tzinfo is UTC
+    assert second.received_at.tzinfo is UTC

@@ -1,7 +1,7 @@
 """Immutable typed inventory and activity events."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Literal
 
@@ -77,7 +77,7 @@ class _InventoryEvent:
     """Inventory identity is owned by its descriptor."""
 
     descriptor: DeviceDescriptor
-    received_at: datetime
+    received_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def network_id(self) -> str:

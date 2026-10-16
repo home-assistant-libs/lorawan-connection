@@ -68,6 +68,7 @@ async def test_vendor_filters_and_changes() -> None:
     connection.emit(changed)
     assert original.call_args.args[0].type == EventType.REMOVED
     assert original.call_args.args[0].descriptor is DESCRIPTOR
+    assert original.call_args.args[0].received_at == changed.received_at
     other.assert_called_once_with(changed)
     connection.emit(activity())
     assert original.call_count == 2

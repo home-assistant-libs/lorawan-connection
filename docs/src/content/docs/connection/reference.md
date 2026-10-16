@@ -51,8 +51,9 @@ def handle_event(event: DeviceEvent) -> None:
         print(event.queue_item_id, event.acknowledged)
 ```
 
-Inventory constructors accept only `descriptor` and `received_at`. Their identity
-properties read from the descriptor. Activity constructors accept a descriptor or
+Inventory constructors require `descriptor` and accept an optional `received_at`,
+which defaults to the current UTC time. Their identity properties read from the
+descriptor. Activity constructors require `received_at` and accept a descriptor or
 explicit network and device identifiers. Explicit identifiers must match a supplied
 descriptor. Construction normalizes DevEUIs and rejects invalid ones.
 
@@ -68,7 +69,7 @@ with `UplinkEvent(data=..., f_port=..., ...)`. Other activity events follow the 
 pattern. Location coordinates move directly onto `LocationEvent`.
 
 Replace inventory envelopes with `AddedEvent`, `UpdatedEvent`, or `RemovedEvent`.
-Pass the descriptor and timestamp. Omit identifiers and the `type` argument.
+Pass the descriptor and an optional timestamp. Omit identifiers and the `type` argument.
 Construct a new event to change its type. Use `dataclasses.replace()` only to
 change fields within the same event class.
 

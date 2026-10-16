@@ -11,7 +11,7 @@ class DownlinkError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class Downlink:
-    """Plaintext application bytes for one device; the server handles encryption."""
+    """Plaintext application bytes for one device. The server handles encryption."""
 
     dev_eui: str
     f_port: int

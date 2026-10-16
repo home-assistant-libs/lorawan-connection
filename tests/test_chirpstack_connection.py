@@ -12,6 +12,7 @@ from google.protobuf.json_format import MessageToJson
 from google.protobuf.message import Message
 
 from lorawan_connection import (
+    AddedEvent,
     EventType,
     UplinkEvent,
 )
@@ -144,7 +145,7 @@ async def test_stream_decode_replay_and_disconnect(
     message: Message,
     stream_start_delay: int,
 ) -> None:
-    """Allow five seconds of history at each stream start; drop older records."""
+    """Allow five seconds of history at each stream start. Drop older records."""
     now = datetime.now(UTC).replace(microsecond=0) + timedelta(
         seconds=stream_start_delay
     )
@@ -540,7 +541,9 @@ async def test_multiple_subscriptions(connection: ChirpStackConnection) -> None:
         await connection.async_subscribe(brands=None, listener=second)
         unsubscribe()
         unsubscribe()
-        connection._emit(connection._inventory_event(EventType.ADDED, DESCRIPTOR))
+        connection._emit(
+            AddedEvent(received_at=datetime.now(UTC), descriptor=DESCRIPTOR)
+        )
         first.assert_not_called()
         second.assert_called_once()
         assert connection.available
@@ -626,7 +629,7 @@ async def test_bad_listener_does_not_block_other_consumers(
     await connection.async_subscribe(brands=None, listener=Mock(side_effect=ValueError))
     events = Mock()
     await connection.async_subscribe(brands=None, listener=events)
-    connection._emit(connection._inventory_event(EventType.ADDED, DESCRIPTOR))
+    connection._emit(AddedEvent(received_at=datetime.now(UTC), descriptor=DESCRIPTOR))
     events.assert_called_once()
     await connection.close()
     good.assert_called_once()
@@ -642,7 +645,7 @@ async def test_identical_subscriptions_are_independent(
     second = await connection.async_subscribe(brands=None, listener=listener)
     second()
     second()
-    connection._emit(connection._inventory_event(EventType.ADDED, DESCRIPTOR))
+    connection._emit(AddedEvent(received_at=datetime.now(UTC), descriptor=DESCRIPTOR))
     listener.assert_called_once()
     first()
     await connection.close()

@@ -127,6 +127,23 @@ async def test_scoped_key_cannot_list_tenants(
     connection.close.assert_awaited_once()
 
 
+async def test_tenant_scope_failure_reraises(
+    connection: Mock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A selected tenant surfaces the server error instead of a discovery hint."""
+    monkeypatch.setenv("CHIRPSTACK_API_KEY", "secret")
+    connection.applications.side_effect = RuntimeError("denied")
+    with (
+        patch(
+            "lorawan_connection.backend.chirpstack.ChirpStackConnection",
+            return_value=connection,
+        ),
+        pytest.raises(RuntimeError, match="denied"),
+    ):
+        await connect_from_args(args("--tenant", "tenant"))
+    connection.close.assert_awaited_once()
+
+
 @pytest.mark.parametrize(
     "applications,extra,match",
     [
@@ -160,18 +177,21 @@ async def test_missing_key(monkeypatch: pytest.MonkeyPatch) -> None:
         await connect_from_args(args())
 
 
-async def test_missing_optional_backend() -> None:
+def block_backend_import(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
+    """Make importing the named backend module fail like a missing extra."""
     original_import = builtins.__import__
 
-    def no_backend(name: str, *args: object, **kwargs: object) -> object:
-        if name == "backend.chirpstack":
-            raise ModuleNotFoundError("chirpstack_api")
-        return original_import(name, *args, **kwargs)
+    def no_backend(imported: str, *args: object, **kwargs: object) -> object:
+        if imported == name:
+            raise ModuleNotFoundError(name)
+        return original_import(imported, *args, **kwargs)
 
-    with (
-        patch("builtins.__import__", side_effect=no_backend),
-        pytest.raises(ValueError, match=r"lorawan-connection\[chirpstack\]"),
-    ):
+    monkeypatch.setattr(builtins, "__import__", no_backend)
+
+
+async def test_missing_optional_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    block_backend_import(monkeypatch, "backend.chirpstack")
+    with pytest.raises(ValueError, match=r"lorawan-connection\[chirpstack\]"):
         await connect_from_args(args())
 
 
@@ -439,6 +459,21 @@ def test_connection_error_does_not_print_credentials(
     assert "secret" not in output
 
 
+def test_user_error_exits_with_the_message(capsys: pytest.CaptureFixture[str]) -> None:
+    with (
+        patch(
+            "lorawan_connection.cli_helper.connect_from_args",
+            AsyncMock(
+                side_effect=ValueError("Set CHIRPSTACK_API_KEY or use --api-key-file")
+            ),
+        ),
+        pytest.raises(SystemExit) as result,
+    ):
+        run(SenseCapDeviceCollection.DEVICES, ["--server", "http://localhost:8080"])
+    assert result.value.code == 1
+    assert "Set CHIRPSTACK_API_KEY or use --api-key-file" in capsys.readouterr().err
+
+
 def test_models_can_share_catalog_ids_across_vendors() -> None:
     class OtherVendor(S2101):
         identifiers = {"chirpstack": (123, S2101.identifiers["chirpstack"][1])}
@@ -553,3 +588,35 @@ async def test_tts_backend_selection(monkeypatch: pytest.MonkeyPatch) -> None:
         application_ids=["my-app"],
         network_id="http://localhost:8080",
     )
+
+
+async def test_tts_rejects_tenant() -> None:
+    with pytest.raises(ValueError, match="--tenant is only supported by ChirpStack"):
+        await connect_from_args(
+            args("--backend", "tts", "--tenant", "tenant", "--application", "my-app")
+        )
+
+
+async def test_tts_missing_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TTS_API_KEY", raising=False)
+    with pytest.raises(ValueError, match="Set TTS_API_KEY or use --api-key-file"):
+        await connect_from_args(args("--backend", "tts", "--application", "my-app"))
+
+
+async def test_tts_requires_application(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TTS_API_KEY", "tts-secret")
+    with pytest.raises(ValueError, match="TTS application"):
+        await connect_from_args(args("--backend", "tts"))
+
+
+async def test_tts_missing_optional_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    block_backend_import(monkeypatch, "backend.tts")
+    with pytest.raises(ValueError, match=r"lorawan-connection\[tts\]"):
+        await connect_from_args(args("--backend", "tts", "--application", "my-app"))
+
+
+async def test_chirpstack_rejects_identity_server() -> None:
+    with pytest.raises(ValueError, match="--identity-server is only supported by TTS"):
+        await connect_from_args(
+            args("--identity-server", "https://identity.example.com:8884")
+        )

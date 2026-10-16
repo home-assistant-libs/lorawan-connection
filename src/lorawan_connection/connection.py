@@ -26,11 +26,11 @@ class Connection(Protocol):
         brands: frozenset[tuple[str, int | str]] | None,
         listener: Callable[[DeviceEvent], None],
     ) -> Unsubscribe:
-        """Deliver inventory then live events; brands=None selects all devices."""
+        """Deliver inventory then live events. brands=None selects all devices."""
         ...
 
     def on_disconnect(self, listener: Callable[[], None]) -> Unsubscribe:
-        """Listen for connection loss; return a function to remove the listener."""
+        """Listen for connection loss. Return a function to remove the listener."""
         ...
 
     async def async_send_downlink(self, downlink: Downlink) -> str:

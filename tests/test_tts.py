@@ -133,6 +133,26 @@ async def test_inventory_reconciliation(connection: TTSConnection) -> None:
     unsubscribe()
 
 
+async def test_brand_change_reports_removal(connection: TTSConnection) -> None:
+    changed = message(
+        "EndDevice",
+        ids=IDS,
+        name="Greenhouse",
+        version_ids={"brand_id": "other", "model_id": "sensecaps2101-temp-humid"},
+    )
+    events = []
+    unsubscribe = await connection.async_subscribe(
+        brands=frozenset({("tts", "sensecap")}), listener=events.append
+    )
+    connection._registry.List = AsyncMock(
+        return_value=message("EndDevices", end_devices=[changed])
+    )
+    await connection.refresh()
+    assert [event.type for event in events] == [EventType.ADDED, EventType.REMOVED]
+    assert events[1].descriptor.brand_id == "sensecap"
+    unsubscribe()
+
+
 async def test_unknown_device_refresh_before_uplink(connection: TTSConnection) -> None:
     connection.devices.clear()
     events = []

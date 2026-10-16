@@ -21,7 +21,7 @@ def decode_s2101(data: bytes) -> dict[str, float | None]:
     """Decode channel-one measurements using Seeed's seven-byte records.
 
     The two-byte trailer is retained in the wire format. Seeed's reference
-    decoder does not validate it; this implementation makes no CRC guarantee.
+    decoder does not validate it. This implementation makes no CRC guarantee.
     """
     if len(data) < 9 or (len(data) - 2) % 7:
         raise ValueError("Invalid SenseCAP frame length")

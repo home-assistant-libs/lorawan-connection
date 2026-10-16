@@ -1,9 +1,8 @@
 """In-memory connection for device-library tests and capture replays."""
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
-from datetime import UTC, datetime
 
+from ._subscribers import Subscribers
 from .callbacks import Unsubscribe, notify, subscribe
 from .connection import ConnectionUnavailable
 from .downlink import Downlink, DownlinkError
@@ -12,14 +11,7 @@ from .events import (
     DeviceDescriptor,
     DeviceEvent,
     EventType,
-    RemovedEvent,
 )
-
-
-@dataclass(eq=False)
-class _Subscriber:
-    brands: frozenset[tuple[str, int | str]] | None
-    listener: Callable[[DeviceEvent], None]
 
 
 class MockConnection:
@@ -36,11 +28,11 @@ class MockConnection:
         self.downlinks: dict[str, Downlink] = {}
         self._network_id: str | None = None
         self._available = True
-        self._subscribers: list[_Subscriber] = []
+        self._subscribers = Subscribers()
         self._disconnect_listeners: list[Callable[[None], None]] = []
         self._queue_id = 0
         for descriptor in devices:
-            self.emit(AddedEvent(received_at=datetime.now(UTC), descriptor=descriptor))
+            self.emit(AddedEvent(descriptor=descriptor))
 
     async def async_subscribe(
         self,
@@ -50,22 +42,9 @@ class MockConnection:
     ) -> Unsubscribe:
         """Deliver existing matching devices, then subscribe to future events."""
         self._check_available()
-        subscriber = _Subscriber(brands, listener)
-        self._subscribers.append(subscriber)
-        for descriptor in tuple(self.devices.values()):
-            if subscriber not in self._subscribers:
-                break
-            if brands is None or (descriptor.stack, descriptor.brand_id) in brands:
-                notify(
-                    [listener],
-                    AddedEvent(received_at=datetime.now(UTC), descriptor=descriptor),
-                )
-
-        def unsubscribe() -> None:
-            if subscriber in self._subscribers:
-                self._subscribers.remove(subscriber)
-
-        return unsubscribe
+        return self._subscribers.add(
+            brands, listener, replay=tuple(self.devices.values())
+        )
 
     def on_disconnect(self, listener: Callable[[], None]) -> Unsubscribe:
         """Listen for simulated connection loss."""
@@ -73,7 +52,7 @@ class MockConnection:
         return subscribe(self._disconnect_listeners, lambda _: listener())
 
     async def async_send_downlink(self, downlink: Downlink) -> str:
-        """Record a command under its queue ID; acknowledgements are explicit."""
+        """Record a command under its queue ID. Acknowledgements are explicit."""
         if not self._available:
             raise DownlinkError("Mock connection is disconnected")
         if downlink.dev_eui not in self.devices:
@@ -99,22 +78,12 @@ class MockConnection:
         self._network_id = event.network_id
         if event.type == EventType.REMOVED:
             del self.devices[dev_eui]
-        for subscriber in tuple(self._subscribers):
-            if subscriber not in self._subscribers:
-                continue
-            if (
-                subscriber.brands is None
-                or (descriptor.stack, descriptor.brand_id) in subscriber.brands
-            ):
-                notify([subscriber.listener], event)
-            elif (
-                previous is not None
-                and (previous.stack, previous.brand_id) in subscriber.brands
-            ):
-                notify(
-                    [subscriber.listener],
-                    RemovedEvent(received_at=event.received_at, descriptor=previous),
-                )
+        self._subscribers.deliver(
+            event,
+            descriptor,
+            previous,
+            removed_at=event.received_at,
+        )
 
     def disconnect(self) -> None:
         """Stop event delivery and notify connection-loss listeners once."""
