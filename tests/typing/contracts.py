@@ -9,6 +9,7 @@ from lorawan_connection import (
     DeviceEvent,
     EventType,
     StatusEvent,
+    Unsubscribe,
     UplinkEvent,
 )
 from lorawan_connection.backend.chirpstack import ChirpStackConnection
@@ -50,3 +51,7 @@ assert_type(overview.devices["0201010101010101"].battery_level, float | None)
 assert_type(
     SenseCapDeviceCollection(connection).devices["0201010101010101"], S2101 | S2102
 )
+
+
+async def subscribe_all(connection: Connection) -> None:
+    assert_type(await connection.async_subscribe(listener=narrow), Unsubscribe)

@@ -23,10 +23,10 @@ class Connection(Protocol):
     async def async_subscribe(
         self,
         *,
-        brands: frozenset[tuple[str, int | str]] | None,
+        brands: frozenset[tuple[str, int | str]] | None = None,
         listener: Callable[[DeviceEvent], None],
     ) -> Unsubscribe:
-        """Deliver inventory then live events. brands=None selects all devices."""
+        """Deliver inventory then live events. Select all devices by default."""
         ...
 
     def on_disconnect(self, listener: Callable[[], None]) -> Unsubscribe:

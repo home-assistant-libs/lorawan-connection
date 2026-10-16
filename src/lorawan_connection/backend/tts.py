@@ -412,7 +412,7 @@ class TTSConnection:
     async def async_subscribe(
         self,
         *,
-        brands: frozenset[tuple[str, int | str]] | None,
+        brands: frozenset[tuple[str, int | str]] | None = None,
         listener: Callable[[DeviceEvent], None],
     ) -> Unsubscribe:
         """Deliver matching inventory, then live events. None selects all vendors."""

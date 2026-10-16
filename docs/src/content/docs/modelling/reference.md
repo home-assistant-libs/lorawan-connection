@@ -130,8 +130,9 @@ The backend-neutral `Connection` protocol exposes:
 
 - `stack_type: str` identifies the catalog namespace. Each descriptor uses the same value in `stack`.
 
-- `async_subscribe(*, brands, listener) -> Unsubscribe` takes a `frozenset[tuple[str, int | str]]` or `None` and reports matching existing
-  devices before returning, then live events. `None` selects all devices. An empty set selects none. Arguments are keyword-only.
+- `async_subscribe(*, brands=None, listener) -> Unsubscribe` takes a `frozenset[tuple[str, int | str]]` or `None` and reports matching existing
+  devices before returning, then live events. Omitted `brands` or `None` selects all devices.
+  An empty set selects none. Arguments are keyword-only.
 - `on_disconnect(listener) -> Unsubscribe` registers a notification callback with no arguments.
 - `async_send_downlink(downlink: Downlink) -> str` queues a command and returns its
   queue ID for internal ACK correlation.
