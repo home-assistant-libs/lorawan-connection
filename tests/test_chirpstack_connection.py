@@ -550,6 +550,31 @@ async def test_multiple_subscriptions(connection: ChirpStackConnection) -> None:
     await connection.close()
 
 
+@pytest.mark.parametrize("brand_id", [676, None])
+async def test_subscribe_without_brands(
+    connection: ChirpStackConnection, brand_id: int | None
+) -> None:
+    other = replace(DESCRIPTOR, dev_eui="0201010101010102", brand_id=brand_id)
+    connection.devices = {device.dev_eui: device for device in (DESCRIPTOR, other)}
+    connection.available = True
+    events = []
+    unsubscribe = await connection.async_subscribe(listener=events.append)
+    assert [event.descriptor for event in events] == [DESCRIPTOR, other]
+    assert all(event.type == EventType.ADDED for event in events)
+
+    for descriptor in (DESCRIPTOR, other):
+        event = UplinkEvent(
+            received_at=datetime.now(UTC), descriptor=descriptor, data=b"reading"
+        )
+        await connection.handle_activity(event)
+        assert events[-1] is event
+    assert len(events) == 4
+    unsubscribe()
+    await connection.handle_activity(event)
+    assert len(events) == 4
+    await connection.close()
+
+
 async def test_vendor_filters_and_identity_changes(
     connection: ChirpStackConnection,
 ) -> None:

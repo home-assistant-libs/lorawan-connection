@@ -53,6 +53,25 @@ async def test_replay_live_updates_and_unsubscribe() -> None:
     replacement.close()
 
 
+@pytest.mark.parametrize("brand_id", [42, None])
+async def test_subscribe_without_brands(brand_id: int | None) -> None:
+    other = replace(DESCRIPTOR, dev_eui="0201010101010102", brand_id=brand_id)
+    connection = MockConnection([DESCRIPTOR, other])
+    events = []
+    unsubscribe = await connection.async_subscribe(listener=events.append)
+    assert [event.descriptor for event in events] == [DESCRIPTOR, other]
+    assert all(event.type == EventType.ADDED for event in events)
+
+    for descriptor in (DESCRIPTOR, other):
+        event = UplinkEvent(received_at=NOW, descriptor=descriptor, data=b"reading")
+        connection.emit(event)
+        assert events[-1] is event
+    assert len(events) == 4
+    unsubscribe()
+    connection.emit(activity())
+    assert len(events) == 4
+
+
 async def test_vendor_filters_and_changes() -> None:
     connection = MockConnection([DESCRIPTOR])
     original, other = Mock(), Mock()

@@ -113,17 +113,19 @@ Connections expose `stack_type`: `"chirpstack"` or `"tts"` for the included adap
 Every device descriptor uses that value as its `stack`. Custom backends must expose
 their stack type before connecting or delivering inventory.
 
-Use `listener` to subscribe directly to connection events:
+Use `listener` to subscribe directly to connection events for all devices:
 
 ```python
 unsubscribe = await connection.async_subscribe(
-    brands=None,
     listener=lambda event: print(event.type, event.dev_eui),
 )
 unsubscribe_disconnect = connection.on_disconnect(
     listener=lambda: print("Disconnected")
 )
 ```
+
+Omit `brands` or pass `None` to select all devices. Pass a set of `(stack, brand_id)`
+pairs to filter devices. Custom backends must default `brands` to `None`.
 
 Version 0.13 renames subscription parameters from `callback` to `listener`.
 Update keyword arguments and custom backend implementations to match.

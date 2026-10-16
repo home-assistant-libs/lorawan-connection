@@ -29,7 +29,7 @@ backend registration API is required. Its transport dependencies belong to that 
 ## Implement the connection contract
 
 Expose `stack_type` before connecting, and implement these methods.
-Use `brands=None` to select inventory across all brands:
+Select inventory across all brands when the caller omits `brands` or passes `None`:
 
 ```python
 from collections.abc import Callable
@@ -47,7 +47,7 @@ class BackendContract(Protocol):
     async def async_subscribe(
         self,
         *,
-        brands: frozenset[tuple[str, int | str]] | None,
+        brands: frozenset[tuple[str, int | str]] | None = None,
         listener: Callable[[DeviceEvent], None],
     ) -> Unsubscribe:
         """Deliver matching inventory before returning, then deliver live events."""
@@ -62,8 +62,8 @@ class BackendContract(Protocol):
         ...
 ```
 
-The shared `Connection` protocol requires a set of `(stack, brand_id)` pairs.
-The included server adapters also accept `brands=None`, meaning every device in
+The shared `Connection` protocol accepts an optional set of `(stack, brand_id)` pairs.
+Custom backends must default `brands` to `None`, which selects every device in
 the selected scope. An empty set matches no devices. A subscription includes all
 event types and FPorts for its matching devices.
 
@@ -200,7 +200,7 @@ Check that CLI help and shared imports still work with no optional extras instal
 Test the adapter against fake SDK responses and a disposable server. Cover:
 
 - Complete, paginated inventory and failures partway through a snapshot.
-- Brand filtering, `brands=None`, descriptor changes, and device removals.
+- Brand filtering, omitted `brands`, `brands=None`, descriptor changes, and device removals.
 - Inventory-before-uplink ordering and independent unsubscribe callbacks.
 - Raw payload conversion and matching queue IDs across enqueue, ACK, and NACK.
 - Read-only credentials, unsupported expiry, and uncertain enqueue failures.

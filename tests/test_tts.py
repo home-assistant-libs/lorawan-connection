@@ -140,6 +140,42 @@ async def test_inventory_reconciliation(connection: TTSConnection) -> None:
     unsubscribe()
 
 
+@pytest.mark.parametrize("brand_id", ["other", None])
+async def test_subscribe_without_brands(
+    connection: TTSConnection, brand_id: str | None
+) -> None:
+    other_device = device()
+    other_device.ids.dev_eui = bytes.fromhex("0201010101010102")
+    other_device.ids.device_id = "other-sensor"
+    other_device.version_ids.brand_id = brand_id or ""
+    connection._registry.List = AsyncMock(
+        return_value=message("EndDevices", end_devices=[device(), other_device])
+    )
+    await connection.refresh()
+    original, other = connection.devices.values()
+    events = []
+    unsubscribe = await connection.async_subscribe(listener=events.append)
+    assert [event.descriptor for event in events] == [original, other]
+    assert all(event.type == EventType.ADDED for event in events)
+
+    for descriptor in (original, other):
+        await connection.handle_message(
+            message(
+                "ApplicationUp",
+                end_device_ids=connection._ids[descriptor.dev_eui],
+                uplink_message={"frm_payload": b"reading", "f_port": 1},
+            )
+        )
+        assert events[-1].type == EventType.UPLINK
+        assert events[-1].dev_eui == descriptor.dev_eui
+    assert len(events) == 4
+    unsubscribe()
+    await connection.handle_message(
+        message("ApplicationUp", end_device_ids=IDS, join_accept={})
+    )
+    assert len(events) == 4
+
+
 async def test_brand_change_reports_removal(connection: TTSConnection) -> None:
     changed = message(
         "EndDevice",
