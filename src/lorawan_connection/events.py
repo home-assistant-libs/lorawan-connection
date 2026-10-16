@@ -109,6 +109,15 @@ class RemovedEvent(_InventoryEvent):
     type: Literal[EventType.REMOVED] = field(default=EventType.REMOVED, init=False)
 
 
+@dataclass(frozen=True, slots=True)
+class GatewayReception:
+    """Signal measurements for one gateway reception of an uplink."""
+
+    gateway_id: str
+    rssi: float | None = None
+    snr: float | None = None
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class UplinkEvent(_Event):
     """Raw application bytes received from a device."""
@@ -116,6 +125,7 @@ class UplinkEvent(_Event):
     type: Literal[EventType.UPLINK] = field(default=EventType.UPLINK, init=False)
     data: bytes
     f_port: int = 1
+    receptions: tuple[GatewayReception, ...] = ()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

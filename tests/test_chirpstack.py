@@ -8,7 +8,7 @@ import pytest
 from chirpstack_api import api, common, integration
 from google.protobuf.json_format import MessageToJson
 
-from lorawan_connection import EventType
+from lorawan_connection import EventType, GatewayReception
 from lorawan_connection.backend.chirpstack import ChirpStackConnection
 
 from .conftest import DESCRIPTOR
@@ -20,7 +20,23 @@ from .conftest import DESCRIPTOR
         (
             "up",
             integration.UplinkEvent(data=b"\x00\xff", f_port=42),
-            {"data": b"\x00\xff", "f_port": 42},
+            {"data": b"\x00\xff", "f_port": 42, "receptions": ()},
+        ),
+        (
+            "up",
+            integration.UplinkEvent(
+                data=b"payload",
+                rx_info=[
+                    {"gateway_id": "nearby", "rssi": -45, "snr": -1.5},
+                    {"gateway_id": "rooftop", "rssi": -85, "snr": 4.0},
+                ],
+            ),
+            {
+                "receptions": (
+                    GatewayReception("nearby", -45, -1.5),
+                    GatewayReception("rooftop", -85, 4.0),
+                )
+            },
         ),
         ("join", integration.JoinEvent(dev_addr="abcdef01"), {"dev_addr": "abcdef01"}),
         (

@@ -98,6 +98,11 @@ Fixed type: `EventType.UPLINK` (`"up"`).
 | --- | --- | --- |
 | `data` | `bytes` | Required |
 | `f_port` | `int` | `1` |
+| `receptions` | `tuple[GatewayReception, ...]` | `()` |
+
+Each reception contains measurements from one gateway. An empty tuple means no
+receptions were provided. RSSI is in dBm; SNR is in dB. Keep each RSSI and SNR pair
+together when selecting a reception for display.
 
 ```python
 from datetime import UTC, datetime
@@ -112,6 +117,17 @@ event = UplinkEvent(
     f_port=1,
 )
 ```
+
+### GatewayReception
+
+| Field | Type | Default |
+| --- | --- | --- |
+| `gateway_id` | `str` | Required |
+| `rssi` | `float \| None` | `None` |
+| `snr` | `float \| None` | `None` |
+
+`None` indicates an unknown measurement. Adapters use the gateway identifier and
+measurements reported by the backend.
 
 ### JoinEvent
 
