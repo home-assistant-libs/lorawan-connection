@@ -69,6 +69,30 @@ Device `version_ids.brand_id` and `version_ids.model_id` select models in the
 `tts` catalog namespace. Devices without a DevEUI are skipped. Devices without
 catalog identity remain in inventory but do not select a vendor model.
 
+## Find applications
+
+Call `applications()` to validate the API key and fetch application IDs and names.
+An application-scoped key returns its application ID as both the key and label.
+User and organization keys list their applications and require the corresponding
+application-list permission. An empty result means no applications are available.
+
+```python
+connection = TTSConnection(
+    "https://eu1.cloud.thethings.network:8884",
+    api_key,
+    application_ids=[],
+    network_id="discovery",
+)
+try:
+    applications = await connection.applications()
+finally:
+    await connection.close()
+```
+
+Pass the selected IDs to a new connection. An empty `application_ids` list is
+allowed for discovery; `inventory()` and `async_connect()` require a selection.
+Connecting verifies device and traffic read permissions for the selected applications.
+
 ## Lifecycle and recovery
 
 The adapter reads complete inventory snapshots and starts application and device

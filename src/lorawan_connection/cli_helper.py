@@ -74,6 +74,8 @@ async def connect_from_args(
         )
         if not key:
             raise ValueError("Set TTS_API_KEY or use --api-key-file")
+        if not args.application:
+            raise ValueError("Select at least one TTS application")
         return TTSConnection(
             args.server,
             key,

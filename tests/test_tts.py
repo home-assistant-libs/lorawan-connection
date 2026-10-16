@@ -614,7 +614,6 @@ async def test_poll_failure_disconnects(connection: TTSConnection) -> None:
 @pytest.mark.parametrize(
     "options",
     [
-        {"application_ids": []},
         {"application_ids": [" "]},
         {"application_ids": ["app", "app"]},
         {"poll_interval": 0},
@@ -679,3 +678,104 @@ async def test_unknown_device_stays_absent(connection: TTSConnection) -> None:
     )
     with pytest.raises(DownlinkError, match="no longer exists"):
         await connection.async_send_downlink(Downlink(EUI, 1, b"x"))
+
+
+async def test_application_scoped_discovery(monkeypatch) -> None:
+    auth = Mock(
+        AuthInfo=AsyncMock(
+            return_value=message(
+                "AuthInfoResponse",
+                api_key={
+                    "entity_ids": {"application_ids": {"application_id": "scoped"}}
+                },
+            )
+        )
+    )
+    registry = Mock(List=AsyncMock())
+    connection = TTSConnection(
+        "http://localhost:1", "key", application_ids=[], network_id="discovery"
+    )
+    monkeypatch.setattr(
+        "lorawan_connection.backend.tts.Service", Mock(side_effect=[auth, registry])
+    )
+    try:
+        assert await connection.applications() == {"scoped": "scoped"}
+        registry.List.assert_not_awaited()
+        with pytest.raises(ValueError, match="Select at least one"):
+            await connection.inventory()
+    finally:
+        await connection.close()
+
+
+@pytest.mark.parametrize(
+    "entity",
+    [
+        {"user_ids": {"user_id": "owner"}},
+        {"organization_ids": {"organization_id": "team"}},
+    ],
+)
+async def test_application_discovery_pagination(
+    connection: TTSConnection, monkeypatch, entity
+) -> None:
+    auth = Mock(
+        AuthInfo=AsyncMock(
+            return_value=message("AuthInfoResponse", api_key={"entity_ids": entity})
+        )
+    )
+    first = [
+        {"ids": {"application_id": f"app-{i}"}, "name": f"Application {i}"}
+        for i in range(100)
+    ]
+    registry = Mock(
+        List=AsyncMock(
+            side_effect=[
+                message("Applications", applications=first),
+                message(
+                    "Applications", applications=[{"ids": {"application_id": "last"}}]
+                ),
+            ]
+        )
+    )
+    monkeypatch.setattr(
+        "lorawan_connection.backend.tts.Service", Mock(side_effect=[auth, registry])
+    )
+    apps = await connection.applications()
+    assert len(apps) == 101
+    assert apps["app-0"] == "Application 0"
+    assert apps["last"] == "last"
+    assert [call.args[0].page for call in registry.List.await_args_list] == [1, 2]
+    assert all(call.args[0].limit == 100 for call in registry.List.await_args_list)
+
+
+async def test_no_applications(connection: TTSConnection, monkeypatch) -> None:
+    auth = Mock(AuthInfo=AsyncMock(return_value=message("AuthInfoResponse")))
+    registry = Mock(List=AsyncMock(return_value=message("Applications")))
+    monkeypatch.setattr(
+        "lorawan_connection.backend.tts.Service", Mock(side_effect=[auth, registry])
+    )
+    assert await connection.applications() == {}
+
+
+@pytest.mark.parametrize("method", ["AuthInfo", "List"])
+@pytest.mark.parametrize(
+    ("code", "exception"),
+    [
+        (grpc.StatusCode.UNAUTHENTICATED, AuthenticationError),
+        (grpc.StatusCode.PERMISSION_DENIED, AuthenticationError),
+        (grpc.StatusCode.UNAVAILABLE, ConnectionUnavailable),
+    ],
+)
+async def test_application_discovery_errors(
+    connection: TTSConnection, monkeypatch, method, code, exception
+) -> None:
+    service = Mock(
+        AuthInfo=AsyncMock(return_value=message("AuthInfoResponse")), List=AsyncMock()
+    )
+    getattr(service, method).side_effect = grpc.aio.AioRpcError(
+        code, (), (), "private detail"
+    )
+    monkeypatch.setattr(
+        "lorawan_connection.backend.tts.Service", Mock(return_value=service)
+    )
+    with pytest.raises(exception):
+        await connection.applications()

@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 import grpc
+from google.protobuf.empty_pb2 import Empty
 
 from lorawan_connection import (
     AckEvent,
@@ -80,7 +81,7 @@ class TTSConnection:
         poll_interval: float = 30,
     ) -> None:
         targets = [_target(endpoint), _target(identity_server or endpoint)]
-        if not application_ids or any(not app.strip() for app in application_ids):
+        if any(not app.strip() for app in application_ids):
             raise ValueError("Select at least one TTS application")
         if len(set(application_ids)) != len(application_ids):
             raise ValueError("Application IDs must be unique")
@@ -118,8 +119,42 @@ class TTSConnection:
         self._application = Service(self.channel, "AppAs")
         self._events = Service(self._identity_channel, "Events")
 
+    async def applications(self) -> dict[str, str]:
+        """Validate the key and return accessible application IDs and names."""
+        access = Service(self._identity_channel, "EntityAccess")
+        registry = Service(self._identity_channel, "ApplicationRegistry")
+        try:
+            auth = await access.AuthInfo(Empty(), metadata=self.metadata, timeout=15)
+            application_id = auth.api_key.entity_ids.application_ids.application_id
+            if application_id:
+                return {application_id: application_id}
+            applications: dict[str, str] = {}
+            page = 1
+            while True:
+                response = await registry.List(
+                    message(
+                        "ListApplicationsRequest",
+                        field_mask={"paths": ["name"]},
+                        limit=100,
+                        page=page,
+                    ),
+                    metadata=self.metadata,
+                    timeout=15,
+                )
+                applications.update(
+                    (app.ids.application_id, app.name or app.ids.application_id)
+                    for app in response.applications
+                )
+                if len(response.applications) < 100:
+                    return applications
+                page += 1
+        except grpc.RpcError as error:
+            raise _connection_error(error) from error
+
     async def inventory(self) -> list[DeviceDescriptor]:
         """Read a complete inventory and validate the key's traffic-read right."""
+        if not self.application_ids:
+            raise ValueError("Select at least one TTS application")
         try:
             for app in self.application_ids:
                 rights = await self._access.ListRights(

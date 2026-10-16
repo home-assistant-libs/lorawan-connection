@@ -57,6 +57,7 @@ def main() -> None:
                 "ttn/lorawan/v3/applicationserver.proto",
                 "ttn/lorawan/v3/end_device_services.proto",
                 "ttn/lorawan/v3/events.proto",
+                "ttn/lorawan/v3/identityserver.proto",
             ],
             check=True,
         )
