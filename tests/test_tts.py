@@ -10,7 +10,14 @@ import grpc
 import pytest
 
 from dragino_lorawan import LT22222, DraginoDevices
-from lorawan_connection import ConnectionUnavailable, Downlink, DownlinkError, EventType
+from lorawan_connection import (
+    ConnectionUnavailable,
+    Downlink,
+    DownlinkError,
+    EventType,
+    GatewayReception,
+    UplinkEvent,
+)
 from lorawan_connection.backend._tts_api import message
 from lorawan_connection.backend.tts import AuthenticationError, TTSConnection
 from sensecap_lorawan import SenseCapDeviceCollection
@@ -779,3 +786,41 @@ async def test_application_discovery_errors(
     )
     with pytest.raises(exception):
         await connection.applications()
+
+
+@pytest.mark.parametrize(
+    "metadata,expected",
+    [
+        ([], ()),
+        (
+            [
+                {"gateway_ids": {"gateway_id": "nearby"}, "rssi": -45, "snr": -1.5},
+                {
+                    "gateway_ids": {"eui": bytes.fromhex("0201010101010101")},
+                    "rssi": -85,
+                    "snr": 4,
+                },
+            ],
+            (
+                GatewayReception("nearby", -45, -1.5),
+                GatewayReception("0201010101010101", -85, 4),
+            ),
+        ),
+    ],
+)
+async def test_gateway_receptions(
+    connection: TTSConnection, metadata, expected
+) -> None:
+    """Keep every gateway's measurements together, including EUI-only identities."""
+    events = []
+    await connection.async_subscribe(brands=None, listener=events.append)
+    await connection.handle_message(
+        message(
+            "ApplicationUp",
+            end_device_ids=IDS,
+            uplink_message={"frm_payload": b"payload", "rx_metadata": metadata},
+        )
+    )
+    event = events[-1]
+    assert isinstance(event, UplinkEvent)
+    assert event.receptions == expected

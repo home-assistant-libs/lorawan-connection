@@ -20,6 +20,7 @@ from lorawan_connection import (
     DeviceEvent,
     Downlink,
     DownlinkError,
+    GatewayReception,
     JoinEvent,
     LocationEvent,
     LogEvent,
@@ -505,11 +506,17 @@ class ChirpStackConnection:
                 continue
             event_class, fields = _EVENTS[item.description]
             payload = message.location if item.description == "location" else message
+            values = {name: getattr(payload, name) for name in fields}
+            if item.description == "up":
+                values["receptions"] = tuple(
+                    GatewayReception(rx.gateway_id, rx.rssi, rx.snr)
+                    for rx in message.rx_info
+                )
             yield event_class(
                 network_id=self.network_id,
                 dev_eui=dev_eui,
                 received_at=recorded_at,
-                **{name: getattr(payload, name) for name in fields},
+                **values,
             )
         if dev_eui in self.devices:
             raise ConnectionUnavailable("ChirpStack event stream closed")

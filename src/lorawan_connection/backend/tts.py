@@ -18,6 +18,7 @@ from lorawan_connection import (
     DeviceEvent,
     Downlink,
     DownlinkError,
+    GatewayReception,
     JoinEvent,
     LocationEvent,
     RemovedEvent,
@@ -347,7 +348,18 @@ class TTSConnection:
                     "TTS supplied an encrypted application payload"
                 )
             event_class = UplinkEvent
-            fields = {"data": bytes(uplink.frm_payload), "f_port": uplink.f_port}
+            fields = {
+                "data": bytes(uplink.frm_payload),
+                "f_port": uplink.f_port,
+                "receptions": tuple(
+                    GatewayReception(
+                        rx.gateway_ids.gateway_id or rx.gateway_ids.eui.hex(),
+                        rx.rssi,
+                        rx.snr,
+                    )
+                    for rx in uplink.rx_metadata
+                ),
+            }
         elif up.HasField("join_accept"):
             event_class = JoinEvent
             fields = {"dev_addr": up.end_device_ids.dev_addr.hex()}
