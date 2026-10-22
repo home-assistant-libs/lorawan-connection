@@ -106,7 +106,8 @@ activity. Collections select models by catalog identity. Provision devices on th
 server before connecting. The application owns connection startup, recovery, and shutdown;
 missed telemetry is not replayed.
 
-The Things Stack adapter provides `applications()` to discover application IDs before
+The Things Stack adapter exports `TTN_REGIONS` with the available The Things Network
+region IDs. It provides `applications()` to discover application IDs before
 connecting. Application-scoped keys work without user or administrator access.
 
 Connections expose `stack_type`: `"chirpstack"` or `"tts"` for the included adapters.

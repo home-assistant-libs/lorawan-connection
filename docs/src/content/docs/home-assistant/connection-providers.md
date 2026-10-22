@@ -27,7 +27,7 @@ A TTS integration needs these manifest fields:
   "dependencies": ["lorawan"],
   "integration_type": "hub",
   "iot_class": "cloud_push",
-  "requirements": ["lorawan-connection[tts]==0.14.0"]
+  "requirements": ["lorawan-connection[tts]==1.3.0"]
 }
 ```
 

@@ -32,6 +32,8 @@ from lorawan_connection._subscribers import Subscribers
 
 from ._tts_api import Service, message
 
+TTN_REGIONS = ("eu1", "nam1", "au1")
+
 
 class AuthenticationError(Exception):
     """The key lacks required device or application-traffic read access."""

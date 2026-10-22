@@ -12,6 +12,22 @@ Install its optional dependencies:
 pip install "lorawan-connection[tts]"
 ```
 
+## The Things Network regions
+
+`TTN_REGIONS` lists the hosted [The Things Network regions](https://www.thethingsindustries.com/docs/concepts/ttn/):
+`eu1`, `nam1`, and `au1`.
+
+```python
+from lorawan_connection.backend.tts import TTN_REGIONS
+
+endpoints = {
+    region: f"https://{region}.cloud.thethings.network:8884" for region in TTN_REGIONS
+}
+```
+
+The Identity Server endpoint is `https://eu1.cloud.thethings.network:8884` for all
+three regions. Self-hosted deployments use their own endpoints.
+
 ## Connect a device library
 
 Use the [SenseCAP example library](/lorawan-connection/getting-started/quickstart/#example-library)
