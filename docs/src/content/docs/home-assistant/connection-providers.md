@@ -1,15 +1,9 @@
 ---
-title: Connection providers
+title: Connection integrations
 description: Configure a backend, register its connection with LoRaWAN, and own recovery and shutdown in Home Assistant.
 ---
 
-:::note[Proposal]
-The shared `lorawan` integration and registration API described here are proposed
-Home Assistant APIs. They are implemented in the PoC and are not released in
-Home Assistant.
-:::
-
-A connection provider configures a server backend and registers it with `lorawan`.
+A connection integration configures a server backend and registers it with `lorawan`.
 [Device integrations](/lorawan-connection/home-assistant/device-implementations/)
 use the registered connections through `DeviceManager`.
 
@@ -33,7 +27,7 @@ A TTS integration needs these manifest fields:
 
 Pin the same `lorawan-connection` version as the shared `lorawan` integration.
 For a separately published adapter, use its package name and version in `requirements`.
-Import the adapter in the server integration. Keep its SDK calls in the backend.
+Import the adapter in the connection integration. Keep its SDK calls in the backend.
 
 ## Configure and validate the server
 
@@ -75,18 +69,21 @@ async def async_validate_server(
     return None
 ```
 
-Require a nonempty application selection before calling the helper. Accept read-only
+Require an application selection before calling the helper. Accept read-only
 credentials for monitoring. Reauthentication updates and reloads the existing
 entry, preserving its ID and scope.
 
 ## Connect, register, and close
 
 Subscriptions use `async_subscribe(brands=..., listener=...)`. The initial
-inventory must include all devices matching the requested brands.
+replay must include all devices matching the requested brands.
 
 Set `network_id=entry.entry_id` to distinguish identical DevEUIs on different servers.
-The returned unsubscribe callback withdraws the connection. The server integration
-owns transport cleanup.
+Pass a known management-console URL as `configuration_url` when registering.
+Use a browser URL, such as `https://eu1.cloud.thethings.network/console/`.
+Omit it when the console address is unknown. Never include credentials.
+The unsubscribe callback withdraws the connection. The connection integration owns
+transport cleanup.
 
 In `__init__.py`, use the config-flow fields and `DOMAIN` from `const.py`:
 
@@ -109,16 +106,19 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 @dataclass
-class ServerData:
+class ConnectionData:
+    """Connection and cleanup callbacks."""
+
     connection: TTSConnection
     unsubscribe: Unsubscribe
     unsubscribe_disconnect: Unsubscribe
 
 
-type ServerConfigEntry = ConfigEntry[ServerData]
+type ConnectionConfigEntry = ConfigEntry[ConnectionData]
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ServerConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: ConnectionConfigEntry) -> None:
+    """Set up the connection integration."""
     connection = TTSConnection(
         entry.data["endpoint"],
         entry.data["api_key"],
@@ -140,7 +140,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ServerConfigEntry) -> bo
     except BaseException:
         await connection.close()
         raise
-    entry.async_on_unload(unsubscribe)
 
     @callback
     def disconnected() -> None:
@@ -148,32 +147,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ServerConfigEntry) -> bo
             hass.config_entries.async_schedule_reload(entry.entry_id)
 
     unsubscribe_disconnect = connection.on_disconnect(disconnected)
-    entry.async_on_unload(unsubscribe_disconnect)
-    entry.runtime_data = ServerData(connection, unsubscribe, unsubscribe_disconnect)
+    entry.runtime_data = ConnectionData(connection, unsubscribe, unsubscribe_disconnect)
 
     async def async_stop(_: Event) -> None:
-        unsubscribe_disconnect()
-        unsubscribe()
-        await connection.close()
+        await async_unload_entry(hass, entry)
 
     entry.async_on_unload(
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, async_stop)
     )
-    return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ServerConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: ConnectionConfigEntry) -> None:
+    """Unregister and close the connection."""
     entry.runtime_data.unsubscribe_disconnect()
     entry.runtime_data.unsubscribe()
     await entry.runtime_data.connection.close()
-    return True
 ```
 
 Remove the recovery listener before intentional closure to avoid scheduling a reload.
 Then unregister the connection and close the transport. The setup exception handlers
 also close the backend if registration fails or is cancelled.
 
-On disconnect, `lorawan` withdraws the connection and the server integration
+On disconnect, `lorawan` withdraws the connection and the connection integration
 schedules a reload. `ConfigEntryAuthFailed` starts reauthentication.
 `ConfigEntryNotReady` lets HA retry setup. Keep the entry ID on reconnect so
 `DeviceManager` can reuse models and coordinators with the replacement transport.
@@ -187,6 +182,13 @@ The vendor library uses the model ID to select a device implementation.
 Add new stack identities to the vendor library and the device integration's
 [discovery manifest](/lorawan-connection/home-assistant/device-implementations/#dependencies-and-discovery).
 
+## Shared integration conventions
+
+Use the [device-integration guide](/lorawan-connection/home-assistant/device-implementations/#brand-images-and-custom-integration-packaging)
+for custom brand images, the README's HACS installation badge, minimum versions,
+and release packaging. Connection integrations own endpoint and credential
+validation; device integrations own entity mappings and battery defaults.
+
 ## Tests
 
 Alongside config-flow and setup tests, cover:
@@ -194,7 +196,7 @@ Alongside config-flow and setup tests, cover:
 - Setup failure and cancellation closing all transports.
 - Unload and HA shutdown without scheduling recovery.
 - Two servers with the same DevEUI. Disconnecting or deleting one leaves the other available.
-- Reconnection preserving models and coordinators, reconciling inventory, and routing commands to the replacement connection.
+- Reconnection preserving models and coordinators, reconciling the device list, and routing commands to the replacement connection.
 - Read-only credentials and device removal.
 
 Use a disposable server to test discovery, uplinks, downlinks, and recovery from

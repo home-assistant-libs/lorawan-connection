@@ -57,7 +57,7 @@ export default defineConfig({
           { label: "Testing", slug: "patterns/testing" },
         ] },
         { label: "Home Assistant", items: [
-          { label: "Connection providers", slug: "home-assistant/connection-providers" },
+          { label: "Connection integrations", slug: "home-assistant/connection-providers" },
           { label: "Device implementations", slug: "home-assistant/device-implementations" },
         ] },
       ],
