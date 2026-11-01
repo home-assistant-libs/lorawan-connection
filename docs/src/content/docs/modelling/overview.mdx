@@ -5,6 +5,7 @@ description: Model a device's values and commands, then manage devices in a coll
 
 import { Code } from '@astrojs/starlight/components';
 import source from '../../../../../examples/dragino_lorawan/__init__.py?raw';
+import lht65 from '../../../../../examples/dragino_lorawan/lht65.py?raw';
 
 A device model holds reported values and exposes command methods for one physical
 device. This example implements a Dragino LT-22222-L.
@@ -14,9 +15,12 @@ device. This example implements a Dragino LT-22222-L.
 Subclass `Device` and implement `handle_event()` to decode incoming events.
 The base class provides identity, LoRaWAN status, update subscriptions, and command delivery.
 
-Save this as `dragino_lorawan.py`. It includes the `DraginoDevices` collection used below.
+Create a `dragino_lorawan` directory and save these two files in it. The collection
+includes the LT-22222-L controller and LHT65 sensor.
 
-<Code code={source} lang="python" title="dragino_lorawan.py" />
+<Code code={source} lang="python" title="dragino_lorawan/__init__.py" />
+
+<Code code={lht65} lang="python" title="dragino_lorawan/lht65.py" />
 
 Values start as `None` until a report arrives. The model uses channel dictionaries.
 Other models can use individual attributes, nested objects, or dataclasses.
@@ -153,7 +157,7 @@ stack raises `ValueError`. Matching IDs in different stacks are independent.
 This function creates a collection and prints each model update:
 
 ```python
-from dragino_lorawan import DraginoDevices, LT22222
+from dragino_lorawan import LT22222
 from lorawan_connection import Connection, DeviceCollection
 
 
@@ -166,7 +170,7 @@ def device_added(device: LT22222) -> None:
 
 
 def create_collection(connection: Connection) -> DeviceCollection[LT22222]:
-    collection = DraginoDevices(connection)
+    collection = DeviceCollection(connection, [LT22222])
     collection.subscribe_device_added(device_added)
     return collection
 ```
@@ -177,14 +181,9 @@ Create it with `create_collection(connection)`, then call `await collection.asyn
 The collection subscribes to its registered vendors and attaches the command sender
 before announcing each device.
 
-You can also construct a collection directly from model classes. Inside
-`create_collection`, the equivalent construction is:
-
-```python
-from lorawan_connection import DeviceCollection
-
-collection = DeviceCollection(connection, [LT22222])
-```
+This callback reads LT-22222-L attributes, so the collection selects only that model.
+To include LHT65 sensors, use `DraginoDevices(connection)` and handle each model
+class in the callback.
 
 Backends and test doubles implement the same `Connection` protocol. Several
 collections can share a connection. Closing one leaves the others and the transport open.

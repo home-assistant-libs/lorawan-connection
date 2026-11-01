@@ -634,7 +634,12 @@ async def test_disconnect_listeners_and_stale_connections(
     await connection.close()
     assert not connection.available
     removed.assert_not_called()
-    active.assert_called_once_with()
+    if failure:
+        active.assert_called_once_with()
+    else:
+        active.assert_not_called()
+    await connection.close()
+    assert active.call_count == int(failure)
     with pytest.raises(ConnectionUnavailable):
         await connection.async_subscribe(
             brands=frozenset({("chirpstack", 744)}), listener=Mock()
@@ -656,6 +661,7 @@ async def test_bad_listener_does_not_block_other_consumers(
     await connection.async_subscribe(brands=None, listener=events)
     connection._emit(AddedEvent(received_at=datetime.now(UTC), descriptor=DESCRIPTOR))
     events.assert_called_once()
+    connection._failed(ConnectionUnavailable())
     await connection.close()
     good.assert_called_once()
 

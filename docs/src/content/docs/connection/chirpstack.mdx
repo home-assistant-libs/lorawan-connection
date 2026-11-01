@@ -88,8 +88,9 @@ leeway does not guarantee initial readings.
 Omit `brands` to discover all devices. Pass a set of stack and brand pairs to
 filter devices. These options also apply to the `Connection` protocol and `MockConnection`.
 
-Callbacks run synchronously. Callbacks registered with `on_disconnect()` run after `available` becomes
-false. Create a new connection to recover. `AuthenticationError` reports rejected
+Callbacks run synchronously. Connection loss sets `available` to false before
+notifying disconnect listeners. Calling `close()` does not notify them.
+Create a new connection to recover. `AuthenticationError` reports rejected
 credentials or access scope. `ConnectionUnavailable` reports other subscription failures.
 ChirpStack can return the same authentication error for an invalid key and missing
 permission. Discovery methods retain gRPC errors so callers can offer a tenant-ID fallback.

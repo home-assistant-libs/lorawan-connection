@@ -177,8 +177,8 @@ Collections use this notification to fail pending commands while keeping models.
 The owner can create a replacement backend and reconcile inventory.
 
 `close()` cancels and awaits owned tasks, removes callbacks, and closes clients.
-Make repeated calls harmless. A deliberate close must not request reconnection.
-Do not embed an application's retry loop or configuration storage in the adapter.
+Make repeated calls harmless. Deliberate closure must not notify disconnect listeners.
+Keep retry policy in the application.
 
 ## Add CLI selection
 

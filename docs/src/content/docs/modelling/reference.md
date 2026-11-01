@@ -114,8 +114,8 @@ subscribes to their vendors and creates only matching models. An explicit empty
 sequence selects no devices, including when it overrides a subclass's `DEVICES`.
 
 - `DEVICES` is a sequence of supported model classes, usually declared as a tuple.
-- `connection` implements the `Connection` protocol. The collection uses it to
-  subscribe to events and send commands.
+- The constructor's `connection` argument implements the `Connection` protocol.
+  The collection keeps it internally to subscribe to events and send commands.
 - `devices: dict[str, DeviceT]` contains current models, keyed by canonical DevEUI.
   Treat it as a read-only view. Only the collection changes its contents.
 

@@ -37,8 +37,9 @@ as `sensecap_lorawan.py`. Set `TTS_API_KEY` and `TTS_APPLICATION_ID`, then run:
 import asyncio
 import os
 
+from lorawan_connection import DeviceCollection
 from lorawan_connection.backend.tts import TTSConnection
-from sensecap_lorawan import SenseCapDeviceCollection
+from sensecap_lorawan import S2101
 
 
 async def main() -> None:
@@ -49,11 +50,11 @@ async def main() -> None:
         application_ids=[os.environ["TTS_APPLICATION_ID"]],
         network_id="my-tts-network",
     )
-    devices = SenseCapDeviceCollection(connection)
+    devices = DeviceCollection(connection, [S2101])
     disconnected = asyncio.Event()
     unsubscribe = connection.on_disconnect(disconnected.set)
 
-    def added(device):
+    def added(device: S2101) -> None:
         device.add_update_listener(lambda: print(device.temperature, device.humidity))
 
     unsubscribe_added = devices.subscribe_device_added(added)
@@ -126,7 +127,7 @@ A failed stream withdraws availability and notifies disconnect listeners once.
 The application owns reconnection: close the failed adapter and create a replacement.
 `AuthenticationError` reports rejected credentials or missing read permissions.
 `ConnectionUnavailable` reports connection failures. Closing the adapter cancels
-its tasks and closes both gRPC channels.
+its tasks and closes both gRPC channels without notifying disconnect listeners.
 
 The TTS application stream has no readiness acknowledgement before its first
 message. Setup checks application read rights and the lifecycle stream. Device

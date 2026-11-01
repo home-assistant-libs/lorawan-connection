@@ -9,8 +9,8 @@ export default defineConfig({
   base: "/lorawan-connection",
   redirects: {
     "/patterns/decoding/": "/lorawan-connection/modelling/overview/#decode-events-and-update-state",
-    "/home-assistant/provider/": "/lorawan-connection/home-assistant/connection-providers/",
-    "/home-assistant/server-integration/": "/lorawan-connection/home-assistant/connection-providers/",
+    "/home-assistant/provider/": "/lorawan-connection/home-assistant/connection-integrations/",
+    "/home-assistant/server-integration/": "/lorawan-connection/home-assistant/connection-integrations/",
     "/home-assistant/integration/": "/lorawan-connection/home-assistant/device-implementations/",
     "/patterns/commands/": "/lorawan-connection/modelling/overview/#send-commands",
   },
@@ -27,7 +27,7 @@ export default defineConfig({
             "- Requires Python 3.12 or later. Install with `pip install lorawan-connection`.",
             "- The application owns the connection and subscribes its DeviceCollection to inventory and live events.",
             "- The collection creates supported models and routes their events automatically. Applications observe model attributes and update notifications.",
-            "- Payload Protocols accept matching generated messages by reference. Dispatch on EventType, not runtime Protocol checks.",
+            "- Events are frozen dataclasses with payload fields directly on each event. Dispatch on EventType or narrow with isinstance().",
           ].join("\n"),
         }),
       ],
@@ -57,7 +57,7 @@ export default defineConfig({
           { label: "Testing", slug: "patterns/testing" },
         ] },
         { label: "Home Assistant", items: [
-          { label: "Connection providers", slug: "home-assistant/connection-providers" },
+          { label: "Connection integrations", slug: "home-assistant/connection-integrations" },
           { label: "Device implementations", slug: "home-assistant/device-implementations" },
         ] },
       ],

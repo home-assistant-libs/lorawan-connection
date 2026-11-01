@@ -32,7 +32,7 @@ A draft release does not trigger publication. The workflow also supports manual 
 existing tag to retry a release that failed before uploading artifacts to PyPI.
 
 The Home Assistant manifest example in
-`docs/src/content/docs/home-assistant/connection-providers.md` pins a
+`docs/src/content/docs/home-assistant/connection-integrations.md` pins a
 `lorawan-connection` version. Update that pin when the shared `lorawan`
 integration adopts the release.
 

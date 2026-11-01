@@ -104,7 +104,8 @@ replays a SenseCAP S2101 capture and prints 21.4 °C and 31.4% humidity.
 Adapters load only when explicitly imported. Both supply inventory before live
 activity. Collections select models by catalog identity. Provision devices on the
 server before connecting. The application owns connection startup, recovery, and shutdown;
-missed telemetry is not replayed.
+missed telemetry is not replayed. Calling `close()` on either backend releases
+resources without notifying disconnect listeners.
 
 The Things Stack adapter exports `TTN_REGIONS` with the available The Things Network
 region IDs. It provides `applications()` to discover application IDs before
@@ -192,12 +193,13 @@ Adapters implement the connection protocol without importing an application fram
 
 ## Home Assistant
 
-These APIs are proposed and are not yet part of Home Assistant:
+Home Assistant provides a shared `lorawan` integration:
 
-- [Connection providers](https://home-assistant-libs.github.io/lorawan-connection/home-assistant/connection-providers/)
+- [Connection integrations](https://home-assistant-libs.github.io/lorawan-connection/home-assistant/connection-integrations/)
   configure backends and register them with `lorawan.async_register_connection()`.
 - [Device implementations](https://home-assistant-libs.github.io/lorawan-connection/home-assistant/device-implementations/)
-  use `DeviceManager` to access matching devices on all available connections.
+  cover `DeviceManager`, entity and battery defaults, branding, custom installation,
+  and tests for integrations using all available connections.
 
 ## Development
 
