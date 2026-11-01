@@ -2,6 +2,8 @@
 
 Astro/Starlight documentation, following the modbus-connection site structure.
 
+Use Node.js 24, matching the documentation workflow.
+
 ```sh
 cd docs
 npm ci

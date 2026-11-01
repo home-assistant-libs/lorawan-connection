@@ -3,9 +3,6 @@ title: Understanding events
 description: Typed LoRaWAN events, their fields, and how they reach device models.
 ---
 
-Version 0.11 introduces these event classes in place of the envelope API from 0.10.
-See the [migration notes](/lorawan-connection/connection/reference/#changes-from-010).
-
 Backends deliver inventory and activity as frozen, slotted dataclasses.
 `DeviceEvent` is the union of these classes. Import them from `lorawan_connection`.
 Each class fixes its own `type`. Callers do not pass it to the constructor.
@@ -230,10 +227,10 @@ changes arrive through the same feed. `REMOVED` closes and removes the model.
 The [quickstart](/lorawan-connection/getting-started/quickstart/) shows this sequence
 with a descriptor and a captured uplink.
 
-The descriptor must arrive before activity for an unknown device. If the backend
-first learns about a device through activity, it refreshes its device list before
-forwarding that activity. Collections ignore activity for devices they have not
-created. A backend only reports removals after a complete successful device-list
+The descriptor must arrive before activity for an unknown device. TTS refreshes
+its device list when activity identifies an unknown device. ChirpStack polls for
+new devices before opening their event streams. Collections ignore activity for
+devices they have not created. A backend only reports removals after a complete successful device-list
 refresh. An incomplete read must not make devices disappear.
 
 ## Connection ownership

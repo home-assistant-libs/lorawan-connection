@@ -27,7 +27,7 @@ export default defineConfig({
             "- Requires Python 3.12 or later. Install with `pip install lorawan-connection`.",
             "- The application owns the connection and subscribes its DeviceCollection to inventory and live events.",
             "- The collection creates supported models and routes their events automatically. Applications observe model attributes and update notifications.",
-            "- Payload Protocols accept matching generated messages by reference. Dispatch on EventType, not runtime Protocol checks.",
+            "- Events are frozen dataclasses with payload fields directly on each event. Dispatch on EventType or narrow with isinstance().",
           ].join("\n"),
         }),
       ],
