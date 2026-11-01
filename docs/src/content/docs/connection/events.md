@@ -227,11 +227,11 @@ changes arrive through the same feed. `REMOVED` closes and removes the model.
 The [quickstart](/lorawan-connection/getting-started/quickstart/) shows this sequence
 with a descriptor and a captured uplink.
 
-The descriptor must arrive before activity for an unknown device. TTS refreshes
-its device list when activity identifies an unknown device. ChirpStack polls for
-new devices before opening their event streams. Collections ignore activity for
-devices they have not created. A backend only reports removals after a complete successful device-list
-refresh. An incomplete read must not make devices disappear.
+Backends deliver an `AddedEvent` with the device descriptor before forwarding
+activity for that device. The collection uses the descriptor to create its model,
+then routes activity to it. Collections ignore activity for devices without a model.
+
+A backend only reports removals after a complete successful device-list refresh. An incomplete read must not make devices disappear.
 
 ## Connection ownership
 
