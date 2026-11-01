@@ -22,9 +22,8 @@ Use the official catalog's brand and model identities on each supported stack.
 A local device-profile UUID or display name does not identify a catalog model.
 Test each advertised stack with its actual identifiers.
 
-Use a domain such as `yourbrand_lorawan`. A custom integration must not reuse
-`lorawan` or another Core integration's domain. The `sensecap_lorawan` domain below
-belongs to Core; replace it when adapting these examples for another vendor.
+Use a domain such as `yourbrand_lorawan`. Replace `sensecap_lorawan` when adapting
+these examples for another vendor.
 
 ## Dependencies and discovery
 
@@ -49,10 +48,6 @@ These are the relevant SenseCAP fields:
 Pin a published device library in `requirements`. Let Home Assistant's `lorawan`
 integration select the shared `lorawan-connection` version. Avoid an upper bound
 in the device library that prevents it from using Core's version.
-
-A custom integration can bundle its device library under `_vendor` instead.
-Adjust its imports and use `requirements: []` when it needs no additional packages.
-It still declares the `lorawan` dependency and uses Core's shared library.
 
 The manifest discovers the vendor integration. The library selects device models.
 Platform descriptions select the models and datapoints represented by entities.
@@ -163,12 +158,6 @@ Core integrations reuse shared abort translations in `strings.json`:
   }
 }
 ```
-
-For custom integrations, supply literal translated text in `translations/en.json`
-and matching source text in `strings.json`. Core's translation build resolves
-`[%key:...%]` references; installing a custom integration does not run that build.
-Use “Set up a LoRaWAN connection first” and “No supported devices were found on
-your LoRaWAN connections” for the two validation errors.
 
 ## Set up the device manager
 
@@ -534,70 +523,11 @@ command. Queue expiry is a separate, optional command setting.
 Accept monitoring with read-only credentials. A rejected write reports a service
 error without making the whole connection unavailable.
 
-## Brand images and custom-integration packaging
+## Brand images
 
 Core integrations use the [Home Assistant brands repository](https://github.com/home-assistant/brands).
-Custom integrations include images in their own `brand` directory:
-
-```text
-custom_components/yourbrand_lorawan/
-├── __init__.py
-├── manifest.json
-├── config_flow.py
-├── const.py
-├── coordinator.py
-├── sensor.py
-├── strings.json
-├── translations/en.json
-└── brand/
-    ├── icon.png
-    ├── logo.png
-    ├── dark_icon.png       # Optional
-    └── dark_logo.png       # Optional
-```
-
-Use the manufacturer's existing artwork and record its source. Keep icons square.
-Include dark variants when the regular artwork is hard to read in dark mode.
-The `@2x` variants are optional. Home Assistant serves these files through its
-brand-image API; do not inject a frontend resource or add a manifest logo URL.
-See the [brand image rules](https://contributors.home-assistant.io/core/integrations/brands/).
-
-Custom manifests also need a `version`, `documentation`, `issue_tracker`, and
-`codeowners`. Use the same integration version in the manifest and release tag.
-Test the oldest supported Home Assistant release and current Core `dev`.
-
-For HACS, put `hacs.json` at the repository root. This minimum includes 2026.11
-betas; use it only if you test those versions:
-
-```json title="hacs.json"
-{
-  "name": "Your Brand LoRaWAN",
-  "homeassistant": "2026.11.0b0",
-  "render_readme": true
-}
-```
-
-Put the My Home Assistant HACS badge on the first line of the README, before the
-title. Replace `OWNER` and `REPOSITORY` with the repository's actual names:
-
-```markdown title="README.md opening"
-[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=OWNER&repository=REPOSITORY&category=integration)
-
-# Your Brand LoRaWAN
-
-Use Your Brand devices with Home Assistant's LoRaWAN connections.
-```
-
-Follow the badge with the minimum Home Assistant version and installation steps:
-download through HACS, restart, configure a LoRaWAN connection, register a device
-with its official catalog identity, then confirm the discovered vendor integration.
-Include manual installation under `config/custom_components` as an alternative.
-
-List supported models, entities, and backends. Explain disabled diagnostics,
-unknown initial values, and whether a physical device has been tested. Describe
-capabilities directly; avoid claims such as “all devices supported” without model
-and backend coverage. Keep payload and test-environment details in a development
-section.
+Use the manufacturer’s existing artwork and follow the
+[brand image rules](https://contributors.home-assistant.io/core/integrations/brands/).
 
 ## Tests and CI
 
@@ -652,7 +582,7 @@ updates in the library's decoder tests.
 Cover these integration behaviors:
 
 - User setup and discovery, duplicate prevention, no connection, and no supported device.
-- Supported catalog identities on every advertised backend, including custom manifests.
+- Supported catalog identities on every advertised backend.
 - Unknown initial state, decoded values, units, default names, and stable unique IDs.
 - Status battery before any uplink, zero percent, unavailable status, and external power.
 - Diagnostic categories and disabled defaults, plus state updates after enabling an entity.
@@ -660,13 +590,12 @@ Cover these integration behaviors:
 - Two connections sharing a DevEUI; one connection failing leaves the other available.
 - Reconnection, setup retry, unload, and shutdown without leaked subscriptions.
 - Commands, acknowledgement failure, timeout, and read-only access where controls exist.
-- LoRaWAN metadata linked to the registry device and locally served brand images.
+- LoRaWAN metadata linked to the registry device.
 
-Use the current `pytest-home-assistant` helpers from Core. A custom-integration CI
-matrix should test a pinned Core revision and current `dev`. Pin Core and its test
-helpers to the same revision. Ensure Core's generated translations are available
-when asserting default entity names. Test disabled defaults separately from tests
-that use the `entity_registry_enabled_by_default` fixture.
+Use the current `pytest-home-assistant` helpers from Core. Ensure Core's generated
+translations are available when asserting default entity names. Test disabled
+defaults separately from tests that use the `entity_registry_enabled_by_default`
+fixture.
 
 Run the integration tests, formatting and lint checks, and hassfest before release.
 Build the release from the tested commit. Record physical-radio tests separately
@@ -684,3 +613,94 @@ Leave configurable bridges unsupported until their attached sensors and uplink
 formats can be identified. Do not guess a decoder from a device name or packet
 length. Subentry flows currently support user setup and reconfiguration, but
 [not discovery](https://contributors.home-assistant.io/core/integrations/subentries/).
+
+## Custom integrations
+
+### Domain and dependencies
+
+A custom integration must not reuse `lorawan` or another Core integration's domain.
+The `sensecap_lorawan` domain in these examples belongs to Core.
+
+A custom integration can bundle its device library under `_vendor` instead.
+Adjust its imports and use `requirements: []` when it needs no additional packages.
+It still declares the `lorawan` dependency and uses Core's shared library.
+
+### Translations
+
+For custom integrations, supply literal translated text in `translations/en.json`
+and matching source text in `strings.json`. Core's translation build resolves
+`[%key:...%]` references; installing a custom integration does not run that build.
+Use “Set up a LoRaWAN connection first” and “No supported devices were found on
+your LoRaWAN connections” for the two validation errors.
+
+### Brand images
+
+Custom integrations include images in their own `brand` directory:
+
+```text
+custom_components/yourbrand_lorawan/
+├── __init__.py
+├── manifest.json
+├── config_flow.py
+├── const.py
+├── coordinator.py
+├── sensor.py
+├── strings.json
+├── translations/en.json
+└── brand/
+    ├── icon.png
+    ├── logo.png
+    ├── dark_icon.png       # Optional
+    └── dark_logo.png       # Optional
+```
+
+Use the manufacturer's existing artwork and record its source. Keep icons square.
+Include dark variants when the regular artwork is hard to read in dark mode.
+The `@2x` variants are optional. Home Assistant serves these files through its
+brand-image API; do not inject a frontend resource or add a manifest logo URL.
+See the [brand image rules](https://contributors.home-assistant.io/core/integrations/brands/).
+
+### Manifest and HACS
+
+Custom manifests also need a `version`, `documentation`, `issue_tracker`, and
+`codeowners`. Use the same integration version in the manifest and release tag.
+Test the oldest supported Home Assistant release and current Core `dev`.
+
+For HACS, put `hacs.json` at the repository root. This minimum includes 2026.11
+betas; use it only if you test those versions:
+
+```json title="hacs.json"
+{
+  "name": "Your Brand LoRaWAN",
+  "homeassistant": "2026.11.0b0",
+  "render_readme": true
+}
+```
+
+Put the My Home Assistant HACS badge on the first line of the README, before the
+title. Replace `OWNER` and `REPOSITORY` with the repository's actual names:
+
+```markdown title="README.md opening"
+[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=OWNER&repository=REPOSITORY&category=integration)
+
+# Your Brand LoRaWAN
+
+Use Your Brand devices with Home Assistant's LoRaWAN connections.
+```
+
+Follow the badge with the minimum Home Assistant version and installation steps:
+download through HACS, restart, configure a LoRaWAN connection, register a device
+with its official catalog identity, then confirm the discovered vendor integration.
+Include manual installation under `config/custom_components` as an alternative.
+
+List supported models, entities, and backends. Explain disabled diagnostics,
+unknown initial values, and whether a physical device has been tested. Describe
+capabilities directly; avoid claims such as “all devices supported” without model
+and backend coverage. Keep payload and test-environment details in a development
+section.
+
+### Tests and CI
+
+Test a pinned Core revision and current `dev`. Pin Core and its test helpers to
+the same revision. Include discovery through the custom manifest and locally
+served brand images in the integration tests.

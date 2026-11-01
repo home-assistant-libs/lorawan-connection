@@ -184,7 +184,7 @@ Add new stack identities to the vendor library and the device integration's
 
 ## Shared integration conventions
 
-Use the [device-integration guide](/lorawan-connection/home-assistant/device-implementations/#brand-images-and-custom-integration-packaging)
+Use the [device-integration guide](/lorawan-connection/home-assistant/device-implementations/#custom-integrations)
 for custom brand images, the README's HACS installation badge, minimum versions,
 and release packaging. Connection integrations own endpoint and credential
 validation; device integrations own entity mappings and battery defaults.
