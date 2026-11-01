@@ -1,6 +1,6 @@
 ---
 title: Device implementations
-description: Build a Home Assistant device integration with discovery, typed entities, battery status, branding, and tests.
+description: Build a Home Assistant integration for LoRaWAN devices.
 ---
 
 A `DeviceManager` gives an integration access to matching devices on all available
