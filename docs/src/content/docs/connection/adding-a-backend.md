@@ -177,9 +177,8 @@ Collections use this notification to fail pending commands while keeping models.
 The owner can create a replacement backend and reconcile inventory.
 
 `close()` cancels and awaits owned tasks, removes callbacks, and closes clients.
-Make repeated calls harmless. Document whether deliberate closure notifies disconnect
-listeners. ChirpStack does; TTS does not. Applications unsubscribe recovery listeners
-before deliberately closing a connection. Keep retry policy in the application.
+Make repeated calls harmless. Deliberate closure must not notify disconnect listeners.
+Keep retry policy in the application.
 
 ## Add CLI selection
 

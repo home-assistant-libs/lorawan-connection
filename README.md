@@ -104,7 +104,8 @@ replays a SenseCAP S2101 capture and prints 21.4 °C and 31.4% humidity.
 Adapters load only when explicitly imported. Both supply inventory before live
 activity. Collections select models by catalog identity. Provision devices on the
 server before connecting. The application owns connection startup, recovery, and shutdown;
-missed telemetry is not replayed.
+missed telemetry is not replayed. Calling `close()` on either backend releases
+resources without notifying disconnect listeners.
 
 The Things Stack adapter exports `TTN_REGIONS` with the available The Things Network
 region IDs. It provides `applications()` to discover application IDs before

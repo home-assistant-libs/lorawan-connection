@@ -395,7 +395,7 @@ class ChirpStackConnection:
         )
 
     def on_disconnect(self, listener: Callable[[], None]) -> Unsubscribe:
-        """Notify after connection loss or closure. Callers own recovery."""
+        """Notify after connection loss. Callers own recovery."""
         if self._closed:
             raise ConnectionUnavailable("Connection is closed")
         return subscribe(self._disconnect_listeners, lambda _: listener())
@@ -532,11 +532,8 @@ class ChirpStackConnection:
 
     async def close(self) -> None:
         """Cancel streams and polls, await cleanup, and close the channel."""
-        was_available = self.available
         self.available = False
         self._closed = True
-        if was_available:
-            self._notify_disconnect()
         self._subscribers.clear()
         self._disconnect_listeners.clear()
         tasks = [

@@ -164,9 +164,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConnectionConfigEntry) 
     await entry.runtime_data.connection.close()
 ```
 
-Remove the recovery listener before intentional closure to avoid scheduling a reload.
-Then unregister the connection and close the transport. The setup exception handlers
-also close the backend if registration fails or is cancelled.
+Unload removes subscriptions, unregisters the connection, and closes the transport.
+The setup exception handlers also close the backend if registration fails or is
+cancelled.
 
 On disconnect, `lorawan` withdraws the connection and the connection integration
 schedules a reload. `ConfigEntryAuthFailed` starts reauthentication.
