@@ -20,8 +20,7 @@ its typed state. They do not parse packets or call a backend SDK.
 
 Use the official catalog's brand and model identities on each supported stack.
 A local device-profile UUID or display name does not identify a catalog model.
-Test each advertised stack with its actual identifiers. Do not ship temporary
-profile mappings from a test server.
+Test each advertised stack with its actual identifiers.
 
 Use a domain such as `yourbrand_lorawan`. A custom integration must not reuse
 `lorawan` or another Core integration's domain. The `sensecap_lorawan` domain below
