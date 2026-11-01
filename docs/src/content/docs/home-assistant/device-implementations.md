@@ -11,7 +11,6 @@ and expose them as Home Assistant entities.
 This guide follows the [SenseCAP integration in Core](https://github.com/home-assistant/core/tree/dev/homeassistant/components/sensecap_lorawan).
 The examples use the published `sensecap-lorawan==1.0.0` package and current Core
 setup and unload APIs. The sensor example includes three models to keep it short.
-Check the APIs against the oldest Home Assistant version your integration supports.
 
 ## Choose the library and device identities
 
