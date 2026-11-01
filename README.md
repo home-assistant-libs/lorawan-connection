@@ -194,7 +194,7 @@ Adapters implement the connection protocol without importing an application fram
 
 Home Assistant provides a shared `lorawan` integration:
 
-- [Connection integrations](https://home-assistant-libs.github.io/lorawan-connection/home-assistant/connection-providers/)
+- [Connection integrations](https://home-assistant-libs.github.io/lorawan-connection/home-assistant/connection-integrations/)
   configure backends and register them with `lorawan.async_register_connection()`.
 - [Device implementations](https://home-assistant-libs.github.io/lorawan-connection/home-assistant/device-implementations/)
   cover `DeviceManager`, entity and battery defaults, branding, custom installation,

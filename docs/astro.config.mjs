@@ -9,8 +9,8 @@ export default defineConfig({
   base: "/lorawan-connection",
   redirects: {
     "/patterns/decoding/": "/lorawan-connection/modelling/overview/#decode-events-and-update-state",
-    "/home-assistant/provider/": "/lorawan-connection/home-assistant/connection-providers/",
-    "/home-assistant/server-integration/": "/lorawan-connection/home-assistant/connection-providers/",
+    "/home-assistant/provider/": "/lorawan-connection/home-assistant/connection-integrations/",
+    "/home-assistant/server-integration/": "/lorawan-connection/home-assistant/connection-integrations/",
     "/home-assistant/integration/": "/lorawan-connection/home-assistant/device-implementations/",
     "/patterns/commands/": "/lorawan-connection/modelling/overview/#send-commands",
   },
@@ -57,7 +57,7 @@ export default defineConfig({
           { label: "Testing", slug: "patterns/testing" },
         ] },
         { label: "Home Assistant", items: [
-          { label: "Connection integrations", slug: "home-assistant/connection-providers" },
+          { label: "Connection integrations", slug: "home-assistant/connection-integrations" },
           { label: "Device implementations", slug: "home-assistant/device-implementations" },
         ] },
       ],

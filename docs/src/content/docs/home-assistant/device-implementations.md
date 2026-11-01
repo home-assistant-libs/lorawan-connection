@@ -4,7 +4,7 @@ description: Build a Home Assistant device integration with discovery, typed ent
 ---
 
 A `DeviceManager` gives an integration access to matching devices on all available
-LoRaWAN connections. [Connection integrations](/lorawan-connection/home-assistant/connection-providers/)
+LoRaWAN connections. [Connection integrations](/lorawan-connection/home-assistant/connection-integrations/)
 configure the backends. Device integrations decode readings through a device library
 and expose them as Home Assistant entities.
 
