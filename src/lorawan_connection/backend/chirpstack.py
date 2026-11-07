@@ -81,18 +81,40 @@ class AuthenticationError(Exception):
     """Credentials have been rejected."""
 
 
+class HTTP2Error(ConnectionUnavailable):
+    """The endpoint did not establish a valid HTTP/2 connection."""
+
+
+class TLSCertificateError(ConnectionUnavailable):
+    """The endpoint's TLS certificate could not be verified."""
+
+
 def connection_error(error: Exception) -> Exception:
-    """Classify authentication/access rejection separately from connection loss."""
+    """Classify ChirpStack authentication and connection errors."""
     if isinstance(error, (ConnectionUnavailable, AuthenticationError)):
         return error
     if isinstance(error, grpc.RpcError):
         message = f"ChirpStack RPC {error.code().name}: {error.details()}"
-        failure: Exception = (
-            AuthenticationError(message)
-            if error.code()
-            in (grpc.StatusCode.UNAUTHENTICATED, grpc.StatusCode.PERMISSION_DENIED)
-            else ConnectionUnavailable(message)
-        )
+        failure_type: type[Exception] = ConnectionUnavailable
+        if error.code() in (
+            grpc.StatusCode.UNAUTHENTICATED,
+            grpc.StatusCode.PERMISSION_DENIED,
+        ):
+            failure_type = AuthenticationError
+        elif error.code() == grpc.StatusCode.UNAVAILABLE:
+            details = (error.details() or "").lower()
+            if (
+                "certificate_verify_failed" in details
+                or "is not in peer certificate" in details
+                or "hostname verification check failed" in details
+            ):
+                failure_type = TLSCertificateError
+            elif (
+                "missing selected alpn property" in details
+                or "failed parsing http/2" in details
+            ):
+                failure_type = HTTP2Error
+        failure = failure_type(message)
     else:
         failure = ConnectionUnavailable(f"{type(error).__name__}: {error}")
     failure.__cause__ = error
