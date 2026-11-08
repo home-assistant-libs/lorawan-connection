@@ -91,9 +91,15 @@ filter devices. These options also apply to the `Connection` protocol and `MockC
 Callbacks run synchronously. Connection loss sets `available` to false before
 notifying disconnect listeners. Calling `close()` does not notify them.
 Create a new connection to recover. `AuthenticationError` reports rejected
-credentials or access scope. `ConnectionUnavailable` reports other subscription failures.
+credentials or access scope. `tenants()`, `applications()`, `inventory()`, `refresh()`,
+and `async_connect()` raise these library errors rather than raw gRPC errors.
+`HTTP2Error` and `TLSCertificateError` are subclasses of `ConnectionUnavailable`.
+Other connection failures raise `ConnectionUnavailable`. The original gRPC error
+is available as `__cause__`.
+
 ChirpStack can return the same authentication error for an invalid key and missing
-permission. Discovery methods retain gRPC errors so callers can offer a tenant-ID fallback.
+permission. If `tenants()` raises `AuthenticationError`, ask for a tenant UUID
+and use `applications()` to check access to that tenant.
 
 ## Write access
 
