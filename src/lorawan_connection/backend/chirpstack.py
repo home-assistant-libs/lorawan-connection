@@ -4,6 +4,7 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from datetime import UTC, datetime, timedelta
+from functools import wraps
 from typing import Protocol
 from urllib.parse import urlsplit
 
@@ -121,6 +122,21 @@ def connection_error(error: Exception) -> Exception:
     return failure
 
 
+def _translate_rpc_errors[**P, T](
+    method: Callable[P, Awaitable[T]],
+) -> Callable[P, Awaitable[T]]:
+    """Translate gRPC errors at the public inventory boundary."""
+
+    @wraps(method)
+    async def wrapped(*args: P.args, **kwargs: P.kwargs) -> T:
+        try:
+            return await method(*args, **kwargs)
+        except grpc.RpcError as error:
+            raise connection_error(error) from error
+
+    return wrapped
+
+
 class ChirpStackConnection:
     """Own one channel and one scoped inventory/event subscription.
 
@@ -209,6 +225,7 @@ class ChirpStackConnection:
                     raise ConnectionUnavailable("Incomplete inventory page")
         raise ConnectionUnavailable("Inventory changed during pagination")
 
+    @_translate_rpc_errors
     async def tenants(self) -> dict[str, str]:
         """Discover tenants with a global key. Scoped keys require a tenant ID."""
         return {
@@ -216,6 +233,7 @@ class ChirpStackConnection:
             for item in await self._list(self._tenant_api.List, api.ListTenantsRequest)
         }
 
+    @_translate_rpc_errors
     async def applications(self) -> dict[str, str]:
         """List applications in the selected tenant, or all accessible tenants."""
         if self.tenant_id:
@@ -272,6 +290,7 @@ class ChirpStackConnection:
             raise DownlinkError("ChirpStack could not queue the command") from error
         return str(response.id)
 
+    @_translate_rpc_errors
     async def inventory(self) -> tuple[DeviceDescriptor, ...]:
         """Read current inventory without starting polls or event streams."""
         return tuple((await self._snapshot()).values())
@@ -361,6 +380,7 @@ class ChirpStackConnection:
             event, event.descriptor or self.devices.get(event.dev_eui), previous
         )
 
+    @_translate_rpc_errors
     async def refresh(self) -> None:
         """Commit complete snapshots without blocking live activity during reads."""
         async with self._lock:
@@ -391,10 +411,8 @@ class ChirpStackConnection:
         self._connecting = True
         try:
             await self.refresh()
-        except BaseException as error:
+        except BaseException:
             await self.close()
-            if isinstance(error, (grpc.RpcError, ConnectionUnavailable)):
-                raise connection_error(error) from error
             raise
         finally:
             self._connecting = False

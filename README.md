@@ -107,6 +107,9 @@ server before connecting. The application owns connection startup, recovery, and
 missed telemetry is not replayed. Calling `close()` on either backend releases
 resources without notifying disconnect listeners.
 
+ChirpStack inventory and discovery methods raise library authentication and
+connection errors. Callers do not need to classify gRPC errors.
+
 The Things Stack adapter exports `TTN_REGIONS` with the available The Things Network
 region IDs. It provides `applications()` to discover application IDs before
 connecting. Application-scoped keys work without user or administrator access.
